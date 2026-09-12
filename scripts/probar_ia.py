@@ -69,6 +69,22 @@ def dato(etiqueta: str, valor: object) -> None:
     print(f"  {etiqueta:<34} {valor}")
 
 
+def _hay_clave() -> bool:
+    """¿Hay credencial de Anthropic?
+
+    Se pregunta a la configuración de la aplicación, no a las variables de
+    entorno: la clave vive en el `.env` de la raíz, que es de donde la lee el
+    worker. El valor nunca se imprime.
+    """
+    sys.path.insert(0, str(BACKEND))
+    try:
+        from app.core.config import Settings  # noqa: PLC0415
+
+        return bool((Settings().anthropic_api_key or "").strip())
+    except Exception:
+        return bool(os.environ.get("ANTHROPIC_API_KEY"))
+
+
 def _esperar_api() -> bool:
     try:
         r = httpx.get(f"{BASE}/health", timeout=10)
@@ -153,8 +169,9 @@ def main(argv: list[str] | None = None) -> int:
     dato("objetivo", args.objetivo[:60] + "…")
     dato("conocimiento", args.conocimiento)
     dato("proveedor de IA", proveedor)
-    if proveedor == "claude" and not os.environ.get("ANTHROPIC_API_KEY"):
-        print(f"\n{ROJO}Falta ANTHROPIC_API_KEY: ponla en el .env de la raíz.{FIN}")
+    if proveedor == "claude" and not _hay_clave():
+        print()
+        print(f"{ROJO}Falta ANTHROPIC_API_KEY: ponla en el .env de la raíz.{FIN}")
         return 1
 
     cliente = httpx.Client(base_url=BASE, timeout=120.0)

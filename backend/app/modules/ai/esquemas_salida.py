@@ -13,11 +13,14 @@ modelo el error concreto; agotados los intentos se lanza `SalidaInvalida`
 
 from __future__ import annotations
 
+import json
+
 import copy
 from typing import Annotated, Any, Final, Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ValidationError, field_validator
 
+from app.core.logging import get_logger
 from app.core.errors import ExternalServiceError
 from app.models.enums import (
     CoverageLevel,
@@ -27,6 +30,8 @@ from app.models.enums import (
     QuestionType,
 )
 from app.modules.ai.proveedor import ProveedorIA, RespuestaIA, SolicitudIA, UsoIA, uso_vacio
+
+logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Errores
@@ -42,6 +47,33 @@ class SalidaInvalida(ExternalServiceError):
 # ---------------------------------------------------------------------------
 # Base común
 # ---------------------------------------------------------------------------
+
+
+def _objeto_desde_texto(valor: Any) -> Any:
+    """Acepta un objeto libre tal cual, o el texto JSON con el que viaja.
+
+    Las salidas estructuradas del proveedor no admiten objetos abiertos: exigen
+    que todo objeto declare `additionalProperties: false`, lo que en un campo
+    libre equivale a prohibir cualquier contenido. Por eso estos campos se le
+    piden al modelo como texto JSON (ver `esquema_para_proveedor`) y se
+    convierten aquí, en la frontera, una sola vez y en un solo sitio.
+    """
+    if isinstance(valor, str):
+        texto = valor.strip()
+        if not texto:
+            return {}
+        try:
+            cargado = json.loads(texto)
+        except json.JSONDecodeError:
+            # Un campo ilegible no debe tumbar la generación entera: se conserva
+            # el texto para poder revisarlo.
+            return {"texto": texto}
+        return cargado if isinstance(cargado, dict) else {"valor": cargado}
+    return valor
+
+
+#: Objeto JSON de forma libre: llega como diccionario o como texto JSON.
+ObjetoLibre = Annotated[dict[str, Any], BeforeValidator(_objeto_desde_texto)]
 
 
 class EsquemaSalida(BaseModel):
@@ -136,7 +168,15 @@ class SalidaBloque(EsquemaSalida):
     position: int = Field(ge=1, le=40)
     block_type: LessonBlockType
     body: str = Field(min_length=1, max_length=12000)
-    payload: dict[str, Any] = Field(default_factory=dict)
+    payload: ObjetoLibre = Field(default_factory=dict)
+    """Datos propios del tipo de bloque (código, pie de imagen, referencias…).
+
+    Es libre por diseño, y las salidas estructuradas del proveedor no admiten
+    objetos abiertos: exigen que todo objeto declare `additionalProperties:
+    false`, lo que dejaría este campo inservible. Por eso al proveedor se le
+    pide como **texto JSON** y aquí se convierte de vuelta.
+    """
+
     origin: ProvenanceOrigin = ProvenanceOrigin.SOURCE
     source_chunk_ids: list[str] = Field(default_factory=list, max_length=20)
 
@@ -172,8 +212,8 @@ class SalidaPregunta(EsquemaSalida):
     question_type: QuestionType
     difficulty: DifficultyLevel = DifficultyLevel.EASY
     stem: str = Field(min_length=5, max_length=2000)
-    body: dict[str, Any] = Field(default_factory=dict)
-    answer_key: dict[str, Any] = Field(default_factory=dict)
+    body: ObjetoLibre = Field(default_factory=dict)
+    answer_key: ObjetoLibre = Field(default_factory=dict)
     explanation: str = Field(default="", max_length=4000)
     learning_objective: str = Field(default="", max_length=240)
     estimated_seconds: int = Field(default=45, ge=5, le=900)
@@ -329,6 +369,73 @@ def esquema_estricto(modelo: type[EsquemaSalida]) -> dict[str, Any]:
     return duro
 
 
+#: Palabras clave de JSON Schema que las salidas estructuradas del proveedor no
+#: aceptan. Son restricciones de valor, no de forma: quitarlas no cambia la
+#: estructura que se le pide al modelo, y la validación sigue siendo estricta
+#: porque el Pydantic de este módulo las aplica igual al leer la respuesta.
+#:
+#: `maxItems` fue la que rompió la primera llamada real ("For 'array' type,
+#: property 'maxItems' is not supported"); las demás se quitan por prevención,
+#: al ser de la misma familia.
+CLAVES_NO_SOPORTADAS: frozenset[str] = frozenset(
+    {
+        "maxItems",
+        "minItems",
+        "uniqueItems",
+        "maxLength",
+        "minLength",
+        "pattern",
+        "minimum",
+        "maximum",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "multipleOf",
+        "format",
+        "default",
+        "examples",
+    }
+)
+
+
+def esquema_para_proveedor(esquema: dict[str, Any]) -> dict[str, Any]:
+    """Versión del esquema apta para enviar al proveedor.
+
+    Conserva lo estructural (tipos, propiedades, obligatorios, enumeraciones,
+    descripciones) y descarta las restricciones de valor que la API rechaza. La
+    validación fuerte no se pierde: ocurre aquí, al convertir la respuesta en el
+    modelo Pydantic, que sí aplica longitudes, rangos y tamaños.
+    """
+
+    def limpiar(nodo: Any) -> Any:
+        if isinstance(nodo, dict):
+            resultado = {
+                clave: limpiar(valor)
+                for clave, valor in nodo.items()
+                if clave not in CLAVES_NO_SOPORTADAS
+            }
+            if resultado.get("type") == "object" and "properties" not in resultado:
+                # Objeto libre: el proveedor exige `additionalProperties: false`
+                # en todo objeto, lo que aquí equivaldría a prohibir cualquier
+                # contenido. Se pide como texto JSON y se convierte al leerlo.
+                descripcion = resultado.get("description") or resultado.get("title") or ""
+                return {
+                    "type": "string",
+                    "description": (
+                        f"{descripcion} Devuélvelo como un objeto JSON "
+                        "serializado en una sola cadena de texto."
+                    ).strip(),
+                }
+            if "properties" in resultado:
+                resultado["type"] = "object"
+                resultado["additionalProperties"] = False
+            return resultado
+        if isinstance(nodo, list):
+            return [limpiar(elemento) for elemento in nodo]
+        return nodo
+
+    return limpiar(esquema)
+
+
 def esquema_de_tarea(tarea: str) -> dict[str, Any] | None:
     """Esquema JSON estricto de una tarea, o `None` si la tarea devuelve texto libre."""
     modelo = ESQUEMAS.get(tarea)
@@ -408,6 +515,17 @@ def generar_validado(
     detalles: dict[str, Any] = {"task": solicitud.tarea, "attempts": max_intentos}
     if ultimo_error is not None:
         detalles["errors"] = _resumen_errores(ultimo_error)
+
+    # Al registro va el detalle; al usuario, el mensaje amable. Sin esta línea,
+    # un contenido que no valida es indistinguible de una caída del proveedor, y
+    # se acaba buscando el fallo donde no está.
+    logger.warning(
+        "ai.salida_invalida",
+        task=solicitud.tarea,
+        attempts=max_intentos,
+        errors=detalles.get("errors"),
+        muestra=str(respuesta.contenido)[:400] if respuesta else "",
+    )
     raise SalidaInvalida(
         "No pudimos generar el contenido. Inténtalo de nuevo.",
         details=detalles,
@@ -415,6 +533,8 @@ def generar_validado(
 
 
 __all__ = [
+    "CLAVES_NO_SOPORTADAS",
+    "esquema_para_proveedor",
     "ESQUEMAS",
     "TIPOS_BLOQUE_GENERABLES",
     "TIPOS_PREGUNTA_MVP",

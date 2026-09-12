@@ -33,6 +33,7 @@ from tenacity import (
 from app.core.config import settings
 from app.core.errors import ExternalServiceError
 from app.core.logging import get_logger
+from app.modules.ai.esquemas_salida import esquema_para_proveedor
 from app.modules.ai.proveedor import (
     ProveedorIA,
     RespuestaIA,
@@ -144,7 +145,13 @@ class ProveedorClaude(ProveedorIA):
         }
         salida: dict[str, Any] = {}
         if esquema is not None:
-            salida["format"] = {"type": "json_schema", "schema": esquema}
+            # El proveedor rechaza las restricciones de valor (`maxItems` y
+            # compañía): se le manda solo la forma. La validación estricta
+            # ocurre después, al convertir la respuesta en el modelo Pydantic.
+            salida["format"] = {
+                "type": "json_schema",
+                "schema": esquema_para_proveedor(esquema),
+            }
         if solicitud.esfuerzo:
             salida["effort"] = solicitud.esfuerzo
         if salida:
@@ -180,6 +187,28 @@ class ProveedorClaude(ProveedorIA):
             raise self._traducir(error, solicitud) from error
         except anthropic.APIError as error:
             raise self._traducir(error, solicitud) from error
+
+        if getattr(mensaje, "stop_reason", None) == "max_tokens":
+            # La respuesta se cortó a mitad del JSON. Sin este aviso el fallo
+            # aparece como un error de validación de esquema, que manda a buscar
+            # el problema donde no está.
+            uso_parcial = self._uso_de(mensaje, parametros["model"])
+            logger.warning(
+                "ai.respuesta_truncada",
+                task=solicitud.tarea,
+                model=uso_parcial.model_id,
+                max_tokens=parametros["max_tokens"],
+                output_tokens=uso_parcial.output_tokens,
+            )
+            raise ExternalServiceError(
+                "La respuesta del modelo se cortó antes de terminar.",
+                details={
+                    "reason": "max_tokens",
+                    "task": solicitud.tarea,
+                    "max_tokens": parametros["max_tokens"],
+                    "output_tokens": uso_parcial.output_tokens,
+                },
+            )
 
         if getattr(mensaje, "stop_reason", None) == "refusal":
             detalle = getattr(mensaje, "stop_details", None)
@@ -264,7 +293,14 @@ class ProveedorClaude(ProveedorIA):
             detalles["reason"] = "auth"
         else:
             detalles["reason"] = "upstream_error"
-        logger.warning("ai.error_proveedor", **detalles)
+
+        # El mensaje del proveedor va al registro, nunca al usuario: sin él, un
+        # 400 es indistinguible de otro y no hay forma de saber qué parámetro
+        # sobra. Se recorta para no volcar la petición entera en los logs.
+        upstream = getattr(error, "message", None) or str(error)
+        detalles_log = dict(detalles)
+        detalles_log["upstream_message"] = str(upstream)[:400]
+        logger.warning("ai.error_proveedor", **detalles_log)
         return ExternalServiceError(
             "No pudimos generar el contenido. Inténtalo de nuevo.", details=detalles
         )

@@ -188,6 +188,30 @@ def _limitar_abiertas(preguntas: list[SalidaPregunta], maximo: int) -> list[Sali
 # ---------------------------------------------------------------------------
 
 
+def _borrar_leccion_previa(db: Session, topic_id: uuid.UUID) -> int:
+    """Borra la lección que ya hubiera en el tema, con sus bloques y preguntas.
+
+    Escribir un módulo no es atómico: la llamada al modelo puede caerse a mitad
+    y dejar unos temas escritos y otros no. Sin esta limpieza, el reintento
+    chocaba contra `uq_lessons_topic_id_position` y el módulo quedaba imposible
+    de terminar: cada intento fallaba por culpa del anterior.
+
+    Devuelve cuántas lecciones se borraron, que en la práctica es 0 o 1.
+    """
+    previas = list(
+        db.execute(sa.select(Lesson).where(Lesson.topic_id == topic_id)).scalars().all()
+    )
+    if not previas:
+        return 0
+
+    ids = [leccion.id for leccion in previas]
+    db.execute(sa.delete(LessonBlock).where(LessonBlock.lesson_id.in_(ids)))
+    db.execute(sa.delete(Question).where(Question.lesson_id.in_(ids)))
+    db.execute(sa.delete(Lesson).where(Lesson.id.in_(ids)))
+    db.flush()
+    return len(ids)
+
+
 def generar_modulo(
     db: Session,
     cfg: ServicioConfig,
@@ -442,11 +466,18 @@ def _generar_leccion(
         },
         esquema=esquema_estricto(SalidaLeccion),
         modelo=modelo,
-        max_tokens=8_000,
+        # Una lección con sus bloques y su procedencia no cabe en 8.000 tokens:
+        # la primera prueba real con Claude se cortó exactamente en ese tope y
+        # el JSON truncado no validaba. Por encima del umbral de streaming la
+        # llamada se hace en flujo, así que subirlo no arriesga un tiempo de
+        # espera.
+        max_tokens=24_000,
         plantilla_id=getattr(plantilla, "id", None),
         semilla=str(tema.id),
     )
     salida, respuesta = generar_validado(proveedor, solicitud, SalidaLeccion)
+
+    _borrar_leccion_previa(db, tema.id)
 
     sin_respaldo = not fragmentos or tema.coverage is CoverageLevel.INSUFFICIENT
     leccion = Lesson(
