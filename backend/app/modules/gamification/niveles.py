@@ -149,8 +149,12 @@ def titulo_de_conocimiento(nivel: int, mastery: Decimal | float | int, cfg: Serv
 # ---------------------------------------------------------------------------
 
 
-def _definiciones(db: Session, scope: LevelScope) -> list[LevelDefinition]:
-    """Filas de `level_definitions` de la curva pedida, ordenadas por nivel."""
+def definiciones_de(db: Session, scope: LevelScope) -> list[LevelDefinition]:
+    """Filas de `level_definitions` de la curva pedida, ordenadas por nivel.
+
+    Es pública porque `GET /config/public` entrega la curva entera a la app:
+    títulos de rango y desbloqueos incluidos, no solo los umbrales de XP.
+    """
     return list(
         db.execute(
             sa.select(LevelDefinition)
@@ -169,7 +173,7 @@ def tabla_niveles(
 
     Si la tabla aún no está sembrada, se calcula con las constantes de §5.2.
     """
-    filas = _definiciones(db, scope)
+    filas = definiciones_de(db, scope)
     if filas:
         return [(f.level, int(f.xp_required), int(f.xp_delta)) for f in filas]
     return curva_completa(parametros_curva(cfg, scope))
@@ -247,6 +251,7 @@ __all__ = [
     "EstadoNivel",
     "ParametrosCurva",
     "curva_completa",
+    "definiciones_de",
     "desbloqueos_de_nivel",
     "es_inicio_de_rango",
     "estado_nivel",

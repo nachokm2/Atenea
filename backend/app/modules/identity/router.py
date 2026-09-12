@@ -50,6 +50,7 @@ from app.modules.identity.schemas import (
     LogoutIn,
     MeOut,
     PasswordChangeIn,
+    PushTokenIn,
     RefreshIn,
     RegisterIn,
     SettingsIn,
@@ -326,6 +327,26 @@ def actualizar_equipamiento(cuerpo: AvatarEquipmentIn, user: CurrentUser, db: Db
     return AvatarOut.model_validate(
         servicio_avatar.actualizar_equipamiento(db, user, cuerpo.equipment)
     )
+
+
+@router.post(
+    "/devices/push-token",
+    status_code=204,
+    tags=["notificaciones"],
+    summary="Registrar o actualizar el token de notificaciones del dispositivo",
+)
+def registrar_token_push(cuerpo: PushTokenIn, user: CurrentUser, db: DbSession) -> Response:
+    """Guarda el token de push del dispositivo (§7.9).
+
+    El contrato agrupa esta ruta con las notificaciones porque es ahí donde el
+    usuario la percibe, pero el dato vive en `users.push_token` y §1.3 reserva
+    esa tabla a este módulo, así que el endpoint se sirve desde aquí.
+
+    El token nunca se devuelve: es una credencial del dispositivo y §8.7 prohíbe
+    serializarla. Enviar `null` da de baja las notificaciones de ese aparato.
+    """
+    servicio_usuario.actualizar_ajustes(db, user, {"push_token": cuerpo.push_token})
+    return Response(status_code=204)
 
 
 __all__ = ["router"]

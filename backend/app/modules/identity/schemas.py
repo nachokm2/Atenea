@@ -170,6 +170,16 @@ class SettingsOut(EsquemaBase):
     daily_goal: DailyGoalPreferenceOut | None = None
 
 
+class PushTokenIn(EntradaBase):
+    """Cuerpo de `POST /devices/push-token`.
+
+    `null` da de baja el dispositivo: es la forma de decir "ya no me avises
+    aquí" sin tener que borrar la cuenta.
+    """
+
+    push_token: str | None = Field(default=None, max_length=255)
+
+
 class SettingsIn(EntradaBase):
     """Actualización parcial de las preferencias: solo se aplica lo enviado."""
 

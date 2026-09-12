@@ -28,10 +28,21 @@ from typing import Annotated
 from fastapi import APIRouter, Query, Response, status
 
 from app.core.deps import CurrentUser, DbSession, IdempotencyDep
-from app.core.errors import AteneaError, NotFound
+import sqlalchemy as sa
+from sqlalchemy.orm import Session
+
+from app.core.errors import AteneaError, NotFound, ValidationFailed
 from app.core.time import utcnow
-from app.models.content import LessonBlock, Question
-from app.models.enums import ContentStatus, EventType, ModuleStatus, ProvenanceContentType
+from app.models.content import LessonBlock, PathModule, Question
+from app.models.enums import (
+    ContentStatus,
+    EventType,
+    JobType,
+    ModuleStatus,
+    ProvenanceContentType,
+)
+from app.models.ingestion import Document, KnowledgeBase
+from app.worker import cola
 from app.modules.content import (
     areas as servicio_areas,
     evaluaciones as servicio_evaluaciones,
@@ -55,6 +66,7 @@ from app.modules.content.schemas import (
     ExplanationOut,
     HeartbeatIn,
     HeartbeatOut,
+    JobOut,
     KnowledgeAreaDetailOut,
     KnowledgeAreaOut,
     LessonBlockOut,
@@ -65,8 +77,8 @@ from app.modules.content.schemas import (
     Page,
     PageMeta,
     PathConfirmIn,
-    PathCreatedOut,
     PathCreateIn,
+    PathCreatedOut,
     PathDetailOut,
     PathSummaryOut,
     PathUpdateIn,
@@ -336,6 +348,45 @@ def listar_rutas(
     return _pagina([_ruta_out(f) for f in filas], limit)
 
 
+def _biblioteca_de_documentos(
+    db: Session, usuario_id: uuid.UUID, documentos: list[uuid.UUID]
+) -> uuid.UUID | None:
+    """Biblioteca a la que pertenecen los documentos elegidos para la ruta.
+
+    Comprueba de paso que sean del usuario: pedir una ruta sobre el material de
+    otra persona sería leer sus apuntes. Si vienen de bibliotecas distintas se
+    rechaza, porque una ruta se alimenta de una sola.
+    """
+    if not documentos:
+        return None
+    filas = (
+        db.execute(
+            sa.select(Document.id, Document.knowledge_base_id)
+            .join(KnowledgeBase, KnowledgeBase.id == Document.knowledge_base_id)
+            .where(
+                Document.id.in_(documentos),
+                Document.deleted_at.is_(None),
+                KnowledgeBase.user_id == usuario_id,
+            )
+        )
+        .all()
+    )
+    encontrados = {fila[0] for fila in filas}
+    faltan = [str(d) for d in documentos if d not in encontrados]
+    if faltan:
+        raise NotFound(
+            "No encontramos ese material entre tus documentos.",
+            details={"document_ids": faltan},
+        )
+    bibliotecas = {fila[1] for fila in filas}
+    if len(bibliotecas) > 1:
+        raise ValidationFailed(
+            "Elige material de una sola biblioteca para esta ruta.",
+            details={"knowledge_base_ids": [str(b) for b in bibliotecas]},
+        )
+    return bibliotecas.pop()
+
+
 @router.post(
     "/paths",
     response_model=PathCreatedOut,
@@ -349,11 +400,23 @@ def crear_ruta(
     idem: IdempotencyDep,
     response: Response,
 ) -> PathCreatedOut:
-    """Crea la ruta en `DRAFT` y emite `PATH_CREATED` (§7.5 · P05).
+    """Crea la ruta y **encola su diseño** (§7.5 · P05).
 
-    El trabajo de generación lo crea y lo sirve `ingestion`/`ai`: aquí `job` viaja
-    como `null` hasta que ese módulo lo publica en `GET /paths/{id}/generation`.
+    Encolar aquí no es un detalle: sin este trabajo la ruta se queda en borrador
+    para siempre y el usuario ve una pantalla de generación que no avanza. El
+    trabajo lo ejecuta el worker, que llama a la Fase A del módulo `ai`.
+
+    El identificador de la ruta hace de clave de idempotencia del trabajo, así
+    que pulsar dos veces "crear" no diseña la ruta dos veces ni cobra dos veces.
     """
+    # Los documentos elegidos deciden de qué biblioteca se alimenta la ruta. Sin
+    # esto, la Fase A busca material en una biblioteca vacía y el diseño falla
+    # diciendo que no pudo leer el documento, que es justo lo contrario de lo
+    # que pasó: el documento estaba, pero nadie se lo pasó.
+    biblioteca_id = cuerpo.knowledge_base_id or _biblioteca_de_documentos(
+        db, user.id, cuerpo.document_ids or []
+    )
+
     resultado = servicio_rutas.crear_ruta(
         db,
         user.id,
@@ -363,20 +426,83 @@ def crear_ruta(
         source_mode=cuerpo.source_mode,
         knowledge_area_id=cuerpo.knowledge_area_id,
         knowledge_area_hint=cuerpo.knowledge_area_hint,
-        knowledge_base_id=cuerpo.knowledge_base_id,
+        knowledge_base_id=biblioteca_id,
         coverage_policy=cuerpo.coverage_policy,
         title=cuerpo.title,
     )
     if not resultado.creada:
         response.status_code = status.HTTP_200_OK
+
+    trabajo = cola.encolar(
+        db,
+        job_type=JobType.PATH_DESIGN,
+        usuario_id=user.id,
+        target_type="path",
+        target_id=resultado.path.id,
+        learning_path_id=resultado.path.id,
+        payload={
+            "learning_path_id": str(resultado.path.id),
+            "goal_text": resultado.path.goal_text or "",
+        },
+        idempotency_key=f"path-design:{resultado.path.id}",
+        progress_label="Diseñando módulos",
+    )
+
     detalle = servicio_rutas.detalle_ruta(db, user.id, resultado.path.id)
-    return PathCreatedOut(path=_detalle_out(detalle).path, job=None)
+    return PathCreatedOut(
+        path=_detalle_out(detalle).path,
+        job=JobOut(
+            id=trabajo.id,
+            job_type=trabajo.job_type.value,
+            status=trabajo.status.value,
+            progress_pct=float(trabajo.progress_pct or 0),
+            progress_label=trabajo.progress_label,
+            error=trabajo.error_message,
+        ),
+    )
 
 
 @router.get("/paths/{path_id}", response_model=PathDetailOut, summary="Mapa de la ruta")
 def obtener_ruta(path_id: uuid.UUID, db: DbSession, user: CurrentUser) -> PathDetailOut:
     """Módulos, temas, lecciones y estado de bloqueo por usuario (§7.5 · P07)."""
     return _detalle_out(servicio_rutas.detalle_ruta(db, user.id, path_id))
+
+
+def _encolar_primer_modulo(
+    db: Session, usuario_id: uuid.UUID, path_id: uuid.UUID, detalle: object
+) -> None:
+    """Encola la redacción del primer módulo que aún no tenga contenido.
+
+    Es la Fase B de la generación, y es perezosa a propósito: se escribe un
+    módulo, no la ruta entera. Escribirla completa costaría de más y el usuario
+    abandona la mitad de las rutas que empieza.
+
+    La clave de idempotencia lleva el módulo, así que confirmar dos veces no
+    encarga el trabajo dos veces.
+    """
+    modulo = db.execute(
+        sa.select(PathModule)
+        .where(
+            PathModule.learning_path_id == path_id,
+            PathModule.content_status != ContentStatus.READY,
+        )
+        .order_by(PathModule.position)
+        .limit(1)
+    ).scalar_one_or_none()
+    if modulo is None:
+        return
+
+    cola.encolar(
+        db,
+        job_type=JobType.MODULE_GENERATION,
+        usuario_id=usuario_id,
+        target_type="module",
+        target_id=modulo.id,
+        learning_path_id=path_id,
+        payload={"module_id": str(modulo.id), "learning_path_id": str(path_id)},
+        idempotency_key=f"module-generation:{modulo.id}",
+        progress_label="Escribiendo las lecciones",
+    )
 
 
 @router.post(
@@ -401,7 +527,10 @@ def confirmar_ruta(
         ],
         coverage_policy=cuerpo.coverage_policy,
     )
-    return _detalle_out(servicio_rutas.detalle_ruta(db, user.id, path_id))
+
+    detalle = servicio_rutas.detalle_ruta(db, user.id, path_id)
+    _encolar_primer_modulo(db, user.id, path_id, detalle)
+    return _detalle_out(detalle)
 
 
 @router.patch("/paths/{path_id}", response_model=PathDetailOut, summary="Renombra o archiva la ruta")

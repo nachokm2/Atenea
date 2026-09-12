@@ -26,9 +26,15 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.core.deps import CurrentUser, DbSession, IdempotencyDep
 from app.core.errors import Conflict, NotFound, ValidationFailed
 from app.core.time import utcnow
-from app.models.enums import GoalType, MissionScope, MissionStatus, NotificationStatus
+from app.models.enums import (
+    GoalType,
+    LevelScope,
+    MissionScope,
+    MissionStatus,
+    NotificationStatus,
+)
 from app.models.gamification import Notification, UserMission
-from app.modules.gamification import eventos, logros, misiones, rachas
+from app.modules.gamification import eventos, logros, misiones, niveles, rachas
 from app.modules.gamification.recompensas import ReciboRecompensas
 from app.modules.gamification.servicio_config import ServicioConfig
 
@@ -44,6 +50,31 @@ class _Out(BaseModel):
     """Base de los esquemas de salida (se construyen desde el ORM)."""
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class LevelOut(_Out):
+    """Una fila de la curva de niveles tal como la dibuja la app."""
+
+    level: int
+    xp_required: int
+    xp_delta: int
+    rank_title: str
+    is_rank_start: bool = False
+    unlocks: dict[str, Any] = Field(default_factory=dict)
+
+
+class PublicConfigOut(_Out):
+    """Todo lo que la app necesita para dibujar sin preguntar dos veces (§7.9).
+
+    Es la única ruta pública además de la de salud: el cliente la pide antes de
+    iniciar sesión para poder pintar barras, precios y títulos de rango. Solo
+    salen las claves marcadas `is_public`; las reglas anti-abuso nunca.
+    """
+
+    config_version: int
+    values: dict[str, Any] = Field(default_factory=dict)
+    levels: list[LevelOut] = Field(default_factory=list)
+    knowledge_levels: list[LevelOut] = Field(default_factory=list)
 
 
 class MissionOut(_Out):
@@ -547,6 +578,44 @@ def marcar_todas_leidas(db: DbSession, usuario: CurrentUser) -> Response:
     return Response(status_code=204)
 
 
+def _curva(db: DbSession, cfg: ServicioConfig, scope: LevelScope) -> list[LevelOut]:
+    """Curva materializada de `level_definitions` para un ámbito."""
+    return [
+        LevelOut(
+            level=fila.level,
+            xp_required=int(fila.xp_required),
+            xp_delta=int(fila.xp_delta),
+            rank_title=fila.rank_title,
+            is_rank_start=bool(fila.is_rank_start),
+            unlocks=dict(fila.unlocks or {}),
+        )
+        for fila in niveles.definiciones_de(db, scope)
+    ]
+
+
+@router.get(
+    "/config/public",
+    response_model=PublicConfigOut,
+    summary="Parámetros públicos del juego, curva de niveles y colores de rareza",
+)
+def configuracion_publica(db: DbSession, respuesta: Response) -> PublicConfigOut:
+    """Devuelve lo que la app necesita para dibujar, sin exigir sesión (§7.9).
+
+    La app la pide al arrancar y la guarda. La cabecera `X-Config-Version` viaja
+    en todas las respuestas: cuando el cliente ve una versión mayor que la suya,
+    vuelve aquí en vez de quedarse con precios o umbrales viejos.
+    """
+    cfg = ServicioConfig(db)
+    version = cfg.config_version()
+    respuesta.headers["X-Config-Version"] = str(version)
+    return PublicConfigOut(
+        config_version=version,
+        values=cfg.publicas(),
+        levels=_curva(db, cfg, LevelScope.GLOBAL),
+        knowledge_levels=_curva(db, cfg, LevelScope.KNOWLEDGE_AREA),
+    )
+
+
 __all__ = [
     "AchievementOut",
     "DailyGoalIn",
@@ -557,6 +626,7 @@ __all__ = [
     "PageAchievements",
     "PageInfo",
     "PageNotifications",
+    "PublicConfigOut",
     "StreakCalendarOut",
     "StreakDayOut",
     "StreakOut",
