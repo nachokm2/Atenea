@@ -1,0 +1,89 @@
+# Entorno de desarrollo de Atenea: PostgreSQL 16 con pgvector + API (+ worker).
+#
+#   docker compose up -d db          # solo la base de datos (lo habitual en local)
+#   docker compose up -d --build     # base de datos + API + worker
+#   docker compose down              # parar; anade -v para borrar tambien los datos
+#
+# La base de datos publica el puerto 55432 en la maquina anfitriona para no chocar
+# con un PostgreSQL local en el 5432. Esa es la URL que usa `settings.database_url`.
+
+name: atenea
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: atenea-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: atenea
+      POSTGRES_PASSWORD: atenea_dev
+      POSTGRES_DB: atenea
+      # Colacion estable para el FTS en espanol.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+      TZ: UTC
+    ports:
+      - "55432:5432"
+    volumes:
+      - atenea_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atenea -d atenea"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: atenea-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Dentro de la red de compose el host es `db` y el puerto interno el 5432.
+      DATABASE_URL: postgresql+psycopg://atenea:atenea_dev@db:5432/atenea
+      ENVIRONMENT: development
+      LOG_LEVEL: INFO
+      STORAGE_DIR: /app/storage
+      PORT: "8000"
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - atenea_storage:/app/storage
+    # Migra y arranca: en desarrollo es comodo; en produccion la migracion es un paso
+    # propio del despliegue (ver railway.toml).
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers"
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: atenea-worker
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql+psycopg://atenea:atenea_dev@db:5432/atenea
+      ENVIRONMENT: development
+      LOG_LEVEL: INFO
+      STORAGE_DIR: /app/storage
+    env_file:
+      - .env
+    volumes:
+      - atenea_storage:/app/storage
+    # Bucle de `generation_jobs` y tareas periodicas (paquete app/worker, agente A4).
+    command: ["python", "-m", "app.worker"]
+    profiles: ["full"]
+
+volumes:
+  atenea_pgdata:
+  atenea_storage:

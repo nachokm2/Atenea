@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Entorno
+.env
+.env.local
+*.log
+
+# Datos locales
+storage/
+uploads/
+*.db
+*.sqlite3
+
+# Flutter / Dart
+app/.dart_tool/
+app/build/
+app/.flutter-plugins*
+app/ios/Pods/
+app/android/.gradle/
+app/web/main.dart.js*
+.packages
+
+# Editores / SO
+.idea/
+.vscode/*
+!.vscode/settings.json
+.DS_Store
+Thumbs.db
+.atenea/

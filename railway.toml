@@ -1,0 +1,71 @@
+# Despliegue de Atenea en Railway (contrato §1.2: API + worker + Postgres/pgvector + bucket).
+#
+# Este archivo configura el servicio **api**. El servicio **worker** comparte la misma
+# imagen y solo cambia el comando de arranque (ver "Notas de despliegue" al final).
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "backend/Dockerfile"
+# El Dockerfile espera el contexto en `backend/`.
+watchPatterns = ["backend/**"]
+
+[deploy]
+# Railway inyecta $PORT: el Dockerfile lo expande en su CMD.
+startCommand = "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips='*'"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+numReplicas = 1
+
+# ---------------------------------------------------------------------------
+# NOTAS DE DESPLIEGUE (Railway)
+# ---------------------------------------------------------------------------
+#
+# 1. Base de datos. Aprovisiona el template **PostgreSQL con pgvector** (imagen
+#    `pgvector/pgvector:pg16` o el plugin de Postgres 16 con la extension activada).
+#    La migracion `0001_esquema_inicial` ejecuta `CREATE EXTENSION IF NOT EXISTS vector`,
+#    asi que basta con que el rol de la aplicacion pueda crear extensiones la primera vez.
+#
+# 2. Variable DATABASE_URL. Railway publica `DATABASE_URL` con el esquema
+#    `postgresql://`. El backend usa **psycopg3 sincrono**, asi que hay que
+#    referenciarla convertida al driver correcto:
+#
+#        DATABASE_URL = "${{Postgres.DATABASE_URL}}"        <- no sirve tal cual
+#        DATABASE_URL = postgresql+psycopg://USER:PASS@HOST:PORT/DB
+#
+#    Lo practico es definir en el servicio `api` y en el `worker`:
+#
+#        DATABASE_URL = "postgresql+psycopg://${{Postgres.PGUSER}}:${{Postgres.PGPASSWORD}}@${{Postgres.RAILWAY_PRIVATE_DOMAIN}}:5432/${{Postgres.PGDATABASE}}"
+#
+#    Usa el dominio **privado** para no pagar egreso ni exponer la base.
+#
+# 3. Variables obligatorias en produccion (ver `.env.example`):
+#
+#        ENVIRONMENT=production
+#        LOG_LEVEL=INFO
+#        JWT_SECRET=<secreto largo y aleatorio, distinto del de desarrollo>
+#        AI_PROVIDER=claude
+#        ANTHROPIC_API_KEY=<clave>
+#        EMBEDDINGS_PROVIDER=voyage
+#        VOYAGE_API_KEY=<clave>
+#        STORAGE_DIR=/data/storage        (si se monta un volumen)
+#
+# 4. Servicio worker. Crea un segundo servicio sobre el mismo repositorio con este
+#    mismo Dockerfile, sin dominio publico y con:
+#
+#        startCommand   = "python -m app.worker"
+#        healthcheckPath = (ninguno: no expone HTTP)
+#
+#    El worker NO debe ejecutar `alembic upgrade head`: la migracion la corre solo
+#    el servicio `api` para que no compitan dos procesos por el mismo bloqueo.
+#
+# 5. Material del usuario. En el MVP los documentos se guardan en `STORAGE_DIR`.
+#    Monta un **volumen** de Railway en esa ruta (por ejemplo `/data/storage`) y
+#    comparte el mismo volumen entre `api` y `worker`, o cambia a un bucket cuando
+#    se active el almacenamiento de objetos.
+#
+# 6. Migraciones. `alembic upgrade head` es idempotente y va en el `startCommand`
+#    de la API. Para una reversion controlada:
+#
+#        railway run --service api alembic downgrade -1
