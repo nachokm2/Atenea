@@ -34,6 +34,11 @@ from app.models.gamification import GameConfig
 from app.models.identity import Character, User
 from app.models.progress import UserAreaProgress
 
+#: Versión de `game_configs` propia de esta suite. La tabla es única por
+#: (key, version): con una versión distinta por módulo, dos suites pueden
+#: sembrar la misma clave a la vez sin esperarse una a otra.
+VERSION_SEMILLA = 6
+
 URL_PRUEBAS = os.environ.get(
     "DATABASE_URL", "postgresql+psycopg://atenea:atenea_dev@localhost:55432/atenea_test"
 )
@@ -117,17 +122,12 @@ def db(engine: Any) -> Session:
 @pytest.fixture
 def configuracion(db: Session) -> dict[str, Any]:
     """Carga la semilla de `game_configs` que necesita la economía."""
-    # ATENEA_LIMPIEZA_CONFIG: varias suites siembran las mismas claves de
-    # `game_configs`, que es única por (key, version). Se borran antes de
-    # insertarlas para que el orden de ejecución no importe.
-    db.execute(sa.delete(GameConfig).where(GameConfig.key.in_(list(CONFIGURACION_SEMILLA))))
-    db.flush()
 
     for indice, (clave, valor) in enumerate(CONFIGURACION_SEMILLA.items(), start=1):
         db.add(
             GameConfig(
                 key=clave,
-                version=1,
+                version=VERSION_SEMILLA,
                 config_version=indice,
                 value=valor,
                 value_type="map" if isinstance(valor, dict) else "list" if isinstance(valor, list) else "int",

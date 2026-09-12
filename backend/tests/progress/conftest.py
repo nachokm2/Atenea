@@ -44,6 +44,11 @@ from app.modules.progress.dominio import ConfigDominio, Evidencia
 from app.modules.progress.sesiones import ConfigTiempo
 
 URL_BASE_DE_PRUEBAS = "postgresql+psycopg://atenea:atenea_dev@localhost:55432/atenea_test"
+
+#: Versión de `game_configs` propia de esta suite. La tabla es única por
+#: (key, version): con una versión distinta por módulo, dos suites pueden
+#: sembrar la misma clave a la vez sin esperarse una a otra.
+VERSION_SEMILLA = 7
 ZONA = "America/Santiago"
 UTC = timezone.utc
 
@@ -230,17 +235,6 @@ def db(engine) -> Session:
 @pytest.fixture
 def config_sembrada(db: Session) -> None:
     """Inserta las claves de `game_configs` que necesita el módulo (§5)."""
-    # ATENEA_LIMPIEZA_CONFIG: varias suites siembran las mismas claves de
-    # `game_configs`, que es única por (key, version). Se borran antes de
-    # insertarlas para que el orden de ejecución no importe.
-    db.execute(sa.delete(GameConfig))
-    db.flush()
-
-    # Base: la configuración canónica completa del juego. Estas pruebas ejercitan
-    # el motor de gamificación (los latidos alimentan el objetivo diario), y el
-    # motor consulta muchas más claves de las que este módulo declara. Sembrar
-    # solo un subconjunto obligaría a perseguir claves una a una cada vez que el
-    # motor consulte una nueva.
     from app.seeds.config_juego import PARAMETROS
 
     claves_propias = set(CONFIG_SEMILLA)
@@ -252,7 +246,7 @@ def config_sembrada(db: Session) -> None:
         db.add(
             GameConfig(
                 key=parametro.key,
-                version=1,
+                version=VERSION_SEMILLA,
                 config_version=version_config,
                 value=parametro.value,
                 value_type=parametro.value_type,
@@ -266,7 +260,7 @@ def config_sembrada(db: Session) -> None:
         db.add(
             GameConfig(
                 key=clave,
-                version=1,
+                version=VERSION_SEMILLA,
                 config_version=version_config,
                 value=valor,
                 value_type=_tipo_de_valor(valor),
@@ -274,7 +268,6 @@ def config_sembrada(db: Session) -> None:
             )
         )
     db.flush()
-    _sembrar_niveles_minimos(db)
     # La caché del servicio de configuración es de proceso: si otra suite la
     # llenó antes, estas claves recién sembradas serían invisibles.
     from app.modules.gamification import servicio_config
@@ -282,42 +275,6 @@ def config_sembrada(db: Session) -> None:
     servicio_config.invalidar_cache()
 
 
-def _sembrar_niveles_minimos(db: Session) -> None:
-    """Tabla de niveles mínima para que el motor pueda resolver un nivel.
-
-    Los latidos de tiempo pasan por el motor de gamificación (alimentan el
-    objetivo diario y la racha), y el motor resuelve el nivel del usuario desde
-    `level_definitions`. Sin estas filas, cualquier prueba que registre tiempo
-    fallaría por una tabla vacía, no por lo que quiere comprobar.
-    """
-    from app.models.enums import LevelScope
-    from app.models.gamification import LevelDefinition
-
-    existe = db.execute(
-        sa.select(sa.literal(1))
-        .select_from(LevelDefinition)
-        .where(LevelDefinition.scope == LevelScope.GLOBAL)
-        .limit(1)
-    ).scalar_one_or_none()
-    if existe:
-        return
-
-    acumulado = 0
-    for nivel in range(1, 21):
-        delta = 0 if nivel == 1 else 100 * nivel
-        acumulado += delta
-        db.add(
-            LevelDefinition(
-                scope=LevelScope.GLOBAL,
-                level=nivel,
-                xp_required=acumulado,
-                xp_delta=delta,
-                rank_title="Aprendiz" if nivel < 5 else "Escudero",
-                is_rank_start=nivel in (1, 5),
-                unlocks={},
-            )
-        )
-    db.flush()
 
 
 def _tipo_de_valor(valor: object) -> str:

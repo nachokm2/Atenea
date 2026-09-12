@@ -25,6 +25,11 @@ from app.modules.gamification.servicio_config import ServicioConfig
 
 URL_BASE_PRUEBAS = "postgresql+psycopg://atenea:atenea_dev@localhost:55432/atenea_test"
 
+#: Versión de `game_configs` propia de esta suite. La tabla es única por
+#: (key, version): con una versión distinta por módulo, dos suites pueden
+#: sembrar la misma clave a la vez sin esperarse una a otra.
+VERSION_SEMILLA = 4
+
 #: Semilla de `game_configs` con los valores canónicos de CONTRACT.md §5.
 SEMILLAS_CONFIG: dict[str, tuple[Any, str, bool]] = {
     # §5.1 XP
@@ -170,9 +175,15 @@ SEMILLAS_CONFIG: dict[str, tuple[Any, str, bool]] = {
 }
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def conexion() -> Iterator[sa.Connection]:
-    """Conexión única con una transacción externa que se revierte al terminar."""
+    """Conexión con una transacción externa que se revierte al terminar el módulo.
+
+    El alcance es de **módulo**, no de sesión: una transacción abierta durante
+    toda la ejecución mantendría bloqueadas las filas que esta suite siembra
+    en `game_configs` y `level_definitions`, y cualquier otra suite que tocara
+    esas mismas claves se quedaría esperando hasta el final.
+    """
     motor_bd = sa.create_engine(URL_BASE_PRUEBAS, future=True)
     conn = motor_bd.connect()
     transaccion = conn.begin()
@@ -184,7 +195,7 @@ def conexion() -> Iterator[sa.Connection]:
         motor_bd.dispose()
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="module", autouse=True)
 def semillas(conexion: sa.Connection) -> Iterator[None]:
     """Siembra `game_configs` y `level_definitions` dentro de la transacción de prueba."""
     servicio_config.invalidar_cache()
@@ -195,7 +206,7 @@ def semillas(conexion: sa.Connection) -> Iterator[None]:
         sesion.add(
             GameConfig(
                 key=clave,
-                version=1,
+                version=VERSION_SEMILLA,
                 config_version=int(version or 1),
                 value=valor,
                 value_type=tipo,

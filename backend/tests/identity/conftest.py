@@ -32,6 +32,11 @@ from app.models.gamification import GameConfig, RewardRule
 from app.modules.gamification.servicio_config import ServicioConfig, invalidar_cache
 from app.modules.identity.router import router
 
+#: Versión de `game_configs` propia de esta suite. La tabla es única por
+#: (key, version): con una versión distinta por módulo, dos suites pueden
+#: sembrar la misma clave a la vez sin esperarse una a otra.
+VERSION_SEMILLA = 3
+
 URL_PRUEBAS = os.environ.get(
     "DATABASE_URL", "postgresql+psycopg://atenea:atenea_dev@localhost:55432/atenea_test"
 )
@@ -164,7 +169,7 @@ def configuracion(db: Session) -> dict[str, Any]:
         db.add(
             GameConfig(
                 key=clave,
-                version=1,
+                version=VERSION_SEMILLA,
                 config_version=int(version or 1),
                 value=valor,
                 value_type=_tipo_de(valor),

@@ -42,6 +42,11 @@ from app.modules.gamification.servicio_config import ServicioConfig
 
 URL_BASE_PRUEBAS = "postgresql+psycopg://atenea:atenea_dev@localhost:55432/atenea_test"
 
+#: Versión de `game_configs` propia de esta suite. La tabla es única por
+#: (key, version): con una versión distinta por módulo, dos suites pueden
+#: sembrar la misma clave a la vez sin esperarse una a otra.
+VERSION_SEMILLA = 5
+
 #: Semillas de `game_configs` que consume la capa de IA (CONTRACT.md §5.5 y §5.8).
 SEMILLAS_CONFIG: dict[str, tuple[Any, str, bool]] = {
     # §5.8 contenido
@@ -236,7 +241,7 @@ def semillas(conexion: sa.Connection) -> Iterator[None]:
         sesion.add(
             GameConfig(
                 key=clave,
-                version=1,
+                version=VERSION_SEMILLA,
                 config_version=int(version or 1),
                 value=valor,
                 value_type=tipo,
