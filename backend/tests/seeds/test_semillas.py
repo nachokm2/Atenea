@@ -1,0 +1,165 @@
+"""Idempotencia de la siembra y conformidad de los catálogos con el contrato.
+
+Lo que se comprueba aquí:
+
+- Sembrar dos veces deja **el mismo número de filas** y no crea ni actualiza nada.
+- `game_configs` tiene los 177 parámetros de §5, con su tipo y su `is_public`.
+- `level_definitions` reproduce **exactamente** los valores de control de §6.1.
+- Los catálogos tienen el tamaño que fija §9: 46 ítems, 32 logros, 23 misiones.
+"""
+
+from __future__ import annotations
+
+import pytest
+import sqlalchemy as sa
+from sqlalchemy.orm import Session
+
+from app.models.enums import LevelScope
+from app.models.gamification import GameConfig, LevelDefinition
+from app.modules.gamification.servicio_config import ServicioConfig
+from app.seeds.config_juego import PARAMETROS, por_clave
+from app.seeds.ejecutar import Resumen, sembrar
+from app.seeds.niveles import CONTROL_GLOBAL, CONTROL_KNOWLEDGE
+
+pytestmark = pytest.mark.db
+
+#: Tablas que llena la siembra, con el número de filas que debe dejar.
+TOTALES_ESPERADOS: dict[str, int] = {
+    "game_configs": 177,
+    "level_definitions": 100,
+    "knowledge_areas": 7,
+    "territories": 7,
+    "items": 46,
+    "item_requirements": 18,
+    "shop_listings": 21,
+    "achievements": 32,
+    "mission_templates": 23,
+    "learning_paths": 1,
+    "path_modules": 3,
+    "topics": 6,
+    "lessons": 6,
+    "lesson_blocks": 30,
+    "questions": 24,
+    "assessments": 3,
+    "assessment_questions": 22,
+}
+
+
+def _conteos(db: Session) -> dict[str, int]:
+    """Filas actuales de cada tabla de catálogo."""
+    return {
+        tabla: int(db.execute(sa.text(f"SELECT count(*) FROM {tabla}")).scalar_one())
+        for tabla in TOTALES_ESPERADOS
+    }
+
+
+def test_la_siembra_deja_el_catalogo_completo(sembrado: Resumen) -> None:
+    """La primera pasada escribe exactamente las filas que fija el contrato §9."""
+    for tabla, esperado in TOTALES_ESPERADOS.items():
+        assert sembrado.total(tabla) == esperado, tabla
+
+
+def test_sembrar_dos_veces_no_duplica_ninguna_fila(db: Session) -> None:
+    """Ejecutar la siembra otra vez deja el mismo número de filas: es idempotente."""
+    antes = _conteos(db)
+    segunda = sembrar(db)
+    despues = _conteos(db)
+
+    assert despues == antes
+    assert despues == TOTALES_ESPERADOS
+    assert sum(segunda.creadas.values()) == 0
+    assert sum(segunda.actualizadas.values()) == 0
+
+
+def test_game_configs_tiene_los_177_parametros(db: Session) -> None:
+    """Los 177 parámetros de §5 están sembrados, vigentes y con su tipo."""
+    assert len(PARAMETROS) == 177
+    assert len({parametro.key for parametro in PARAMETROS}) == 177
+
+    vigentes = db.execute(
+        sa.select(GameConfig.key, GameConfig.value, GameConfig.value_type, GameConfig.is_public).where(
+            GameConfig.valid_to.is_(None)
+        )
+    ).all()
+    por_clave_bd = {fila[0]: fila for fila in vigentes}
+
+    assert set(por_clave_bd) == {parametro.key for parametro in PARAMETROS}
+    for parametro in PARAMETROS:
+        _, valor, tipo, publico = por_clave_bd[parametro.key]
+        assert valor == parametro.value, parametro.key
+        assert tipo == parametro.value_type, parametro.key
+        assert publico is parametro.is_public, parametro.key
+
+
+def test_las_reglas_anti_abuso_nunca_son_publicas() -> None:
+    """§5: los topes y tiempos mínimos no se exponen en `/config/public`."""
+    catalogo = por_clave()
+    for clave in (
+        "xp.daily_softcap",
+        "xp.min_time.lesson",
+        "xp.min_time.answer_ms",
+        "xp.repeat_multipliers",
+        "gold.daily_softcap",
+        "mastery.weakness_rules",
+        "shop.purchase_rate_limit_per_minute",
+    ):
+        assert catalogo[clave].is_public is False, clave
+
+
+def test_la_curva_global_reproduce_los_valores_de_control(db: Session) -> None:
+    """Los XP acumulados de §6.1 deben salir clavados de `level_definitions`."""
+    filas = {
+        fila.level: int(fila.xp_required)
+        for fila in db.execute(
+            sa.select(LevelDefinition).where(LevelDefinition.scope == LevelScope.GLOBAL)
+        ).scalars()
+    }
+    assert len(filas) == 50
+    assert filas[1] == 0
+    for nivel, esperado in CONTROL_GLOBAL.items():
+        assert filas[nivel] == esperado, f"nivel {nivel}"
+
+
+def test_la_curva_por_conocimiento_reproduce_los_valores_de_control(db: Session) -> None:
+    """La segunda curva usa `knowledge.level.base` y también está materializada."""
+    filas = {
+        fila.level: int(fila.xp_required)
+        for fila in db.execute(
+            sa.select(LevelDefinition).where(LevelDefinition.scope == LevelScope.KNOWLEDGE_AREA)
+        ).scalars()
+    }
+    assert len(filas) == 50
+    for nivel, esperado in CONTROL_KNOWLEDGE.items():
+        assert filas[nivel] == esperado, f"nivel {nivel}"
+
+
+def test_los_rangos_se_estrenan_donde_dice_la_configuracion(db: Session, cfg: ServicioConfig) -> None:
+    """`is_rank_start` marca justo los niveles de `level.rank_titles`."""
+    titulos = {int(k) for k in cfg.obtener_json("level.rank_titles")}
+    inicios = {
+        fila.level
+        for fila in db.execute(
+            sa.select(LevelDefinition).where(
+                LevelDefinition.scope == LevelScope.GLOBAL,
+                LevelDefinition.is_rank_start.is_(True),
+            )
+        ).scalars()
+    }
+    assert inicios == titulos
+
+
+def test_el_xp_delta_es_coherente_con_el_acumulado(db: Session) -> None:
+    """`xp_delta` es siempre la diferencia con el nivel anterior, y nunca negativo."""
+    for scope in (LevelScope.GLOBAL, LevelScope.KNOWLEDGE_AREA):
+        filas = list(
+            db.execute(
+                sa.select(LevelDefinition)
+                .where(LevelDefinition.scope == scope)
+                .order_by(LevelDefinition.level)
+            ).scalars()
+        )
+        anterior = 0
+        for fila in filas:
+            assert int(fila.xp_delta) == int(fila.xp_required) - anterior
+            assert int(fila.xp_delta) >= 0
+            anterior = int(fila.xp_required)
