@@ -1,0 +1,564 @@
+"""Endpoints de gamificación del contrato §7.8 y §7.9.
+
+Este router se monta bajo `/api/v1` (lo ensambla el agente de integración):
+
+- `GET  /missions` · `POST /missions/{user_mission_id}/claim`
+- `GET  /achievements`
+- `GET  /streak` · `GET /streak/calendar`
+- `GET  /daily-goal` · `PUT /daily-goal` · recomendación adaptativa
+- `GET  /notifications` · `POST /notifications/{id}/read` · `POST /notifications/read-all`
+
+Los esquemas de respuesta viven aquí porque `app/schemas/gamification.py` es de
+otro agente; los nombres de campo son los del contrato, sin traducir.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import date as date_type
+from datetime import datetime
+from typing import Annotated, Any
+
+import sqlalchemy as sa
+from fastapi import APIRouter, Query, Response
+from pydantic import BaseModel, ConfigDict, Field
+
+from app.core.deps import CurrentUser, DbSession, IdempotencyDep
+from app.core.errors import Conflict, NotFound, ValidationFailed
+from app.core.time import utcnow
+from app.models.enums import GoalType, MissionScope, MissionStatus, NotificationStatus
+from app.models.gamification import Notification, UserMission
+from app.modules.gamification import eventos, logros, misiones, rachas
+from app.modules.gamification.recompensas import ReciboRecompensas
+from app.modules.gamification.servicio_config import ServicioConfig
+
+router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# Esquemas de salida
+# ---------------------------------------------------------------------------
+
+
+class _Out(BaseModel):
+    """Base de los esquemas de salida (se construyen desde el ORM)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MissionOut(_Out):
+    """Una misión asignada tal como la ve la app (P19)."""
+
+    user_mission_id: uuid.UUID
+    template_code: str
+    scope: str
+    tier: str | None = None
+    title: str
+    target: int
+    progress: int
+    status: str
+    expires_at: datetime | None = None
+    reward: dict[str, Any] = Field(default_factory=dict)
+
+
+class MissionsOut(_Out):
+    """Respuesta de `GET /missions`."""
+
+    daily: list[MissionOut] = Field(default_factory=list)
+    special: list[MissionOut] = Field(default_factory=list)
+    weekly: list[MissionOut] = Field(default_factory=list)
+    resets_in_seconds: int = 0
+
+
+class AchievementOut(_Out):
+    """Entrada de la sala de trofeos (P20)."""
+
+    code: str
+    name: str
+    category: str
+    visibility: str
+    highest_tier: str | None = None
+    tiers: list[dict[str, Any]] = Field(default_factory=list)
+    progress_pct: float = 0.0
+    unlocked_at: datetime | None = None
+
+
+class PageInfo(_Out):
+    """Sobre de paginación del contrato §8.2."""
+
+    limit: int
+    next_cursor: str | None = None
+    has_more: bool = False
+    total: int | None = None
+
+
+class PageAchievements(_Out):
+    """Página de logros."""
+
+    items: list[AchievementOut] = Field(default_factory=list)
+    page: PageInfo
+
+
+class StreakOut(_Out):
+    """Respuesta de `GET /streak` (P18)."""
+
+    current: int
+    best: int
+    status: str
+    total_active_days: int
+    grace_available: bool
+    next_milestone: dict[str, Any] | None = None
+
+
+class StreakDayOut(_Out):
+    """Día del calendario mensual."""
+
+    date: date_type
+    day_status: str
+    goal_met: bool
+    educational_xp: int
+    minutes: int
+    activities: int
+
+
+class StreakCalendarOut(_Out):
+    """Respuesta de `GET /streak/calendar`."""
+
+    month: str
+    days: list[StreakDayOut] = Field(default_factory=list)
+    active_days: int = 0
+    best_length: int = 0
+
+
+class DailyGoalOut(_Out):
+    """Respuesta de `GET /daily-goal` y `PUT /daily-goal`."""
+
+    type: str
+    target: int
+    progress: int
+    met: bool
+    effective_from: date_type
+    pending_type: str | None = None
+    pending_target: int | None = None
+    pending_from: date_type | None = None
+    recommendation: dict[str, Any] = Field(default_factory=dict)
+
+
+class DailyGoalIn(BaseModel):
+    """Cuerpo de `PUT /daily-goal`."""
+
+    type: GoalType
+    target: int
+
+
+class NotificationOut(_Out):
+    """Entrada de la bandeja in-app."""
+
+    id: uuid.UUID
+    notification_type: str
+    channel: str
+    status: str
+    title: str
+    body: str
+    deep_link: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    scheduled_for: datetime | None = None
+    sent_at: datetime | None = None
+    read_at: datetime | None = None
+    created_at: datetime
+
+
+class PageNotifications(_Out):
+    """Página de notificaciones."""
+
+    items: list[NotificationOut] = Field(default_factory=list)
+    page: PageInfo
+
+
+# ---------------------------------------------------------------------------
+# Utilidades comunes
+# ---------------------------------------------------------------------------
+
+
+def _contexto(db: DbSession, usuario: Any) -> tuple[ServicioConfig, str, date_type]:
+    """Configuración, zona horaria y fecha local del usuario autenticado."""
+    cfg = ServicioConfig(db)
+    zona = str(getattr(usuario, "timezone", None) or "America/Santiago")
+    return cfg, zona, rachas.fecha_local_de(zona)
+
+
+def _mision_out(mision: UserMission) -> MissionOut:
+    """Proyecta una instancia de misión al esquema de salida."""
+    return MissionOut(
+        user_mission_id=mision.id,
+        template_code=mision.template_code,
+        scope=mision.scope.value,
+        tier=mision.tier.value if mision.tier else None,
+        title=mision.title,
+        target=int(mision.target),
+        progress=int(mision.progress),
+        status=mision.status.value,
+        expires_at=mision.expires_at,
+        reward={"xp": int(mision.reward_xp), "gold": int(mision.reward_gold)},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Misiones (§7.9)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/missions", response_model=MissionsOut, summary="Misiones del día y de ruta")
+def listar_misiones(db: DbSession, usuario: CurrentUser) -> MissionsOut:
+    """Devuelve las misiones diarias (generadas de forma perezosa) y las especiales."""
+    cfg, zona, hoy = _contexto(db, usuario)
+    misiones.expirar_vencidas(db, cfg, usuario.id)
+    objetivo = rachas.obtener_o_crear_objetivo(db, cfg, usuario.id, hoy)
+    diarias = misiones.asignar_misiones_diarias(
+        db,
+        cfg,
+        usuario_id=usuario.id,
+        fecha_local=hoy,
+        timezone=zona,
+        goal_type=objetivo.goal_type,
+    )
+    especiales = list(
+        db.execute(
+            sa.select(UserMission)
+            .where(
+                UserMission.user_id == usuario.id,
+                UserMission.scope == MissionScope.SPECIAL,
+                UserMission.status.in_([MissionStatus.ACTIVE, MissionStatus.COMPLETED]),
+            )
+            .order_by(UserMission.created_at)
+        )
+        .scalars()
+        .all()
+    )
+    semanales = list(
+        db.execute(
+            sa.select(UserMission)
+            .where(
+                UserMission.user_id == usuario.id,
+                UserMission.scope == MissionScope.WEEKLY,
+                UserMission.status.in_([MissionStatus.ACTIVE, MissionStatus.COMPLETED]),
+            )
+            .order_by(UserMission.created_at)
+        )
+        .scalars()
+        .all()
+    )
+    return MissionsOut(
+        daily=[_mision_out(m) for m in diarias],
+        special=[_mision_out(m) for m in especiales],
+        weekly=[_mision_out(m) for m in semanales],
+        resets_in_seconds=misiones.segundos_hasta_reinicio(hoy, zona),
+    )
+
+
+@router.post(
+    "/missions/{user_mission_id}/claim",
+    response_model=ReciboRecompensas,
+    summary="Reclama la recompensa de una misión completada",
+)
+def reclamar_mision(
+    user_mission_id: uuid.UUID,
+    db: DbSession,
+    usuario: CurrentUser,
+    idem: IdempotencyDep,
+) -> ReciboRecompensas:
+    """Reclama una misión completada y devuelve el `RewardsReceipt` (§7.9)."""
+    clave = idem.require()
+    cfg, _zona, _hoy = _contexto(db, usuario)
+
+    previo = eventos.buscar_por_clave(db, clave)
+    if previo is not None:
+        return eventos.reconstruir_recibo(db, previo, cfg)
+
+    mision = db.execute(
+        sa.select(UserMission).where(
+            UserMission.id == user_mission_id, UserMission.user_id == usuario.id
+        )
+    ).scalar_one_or_none()
+    if mision is None:
+        raise NotFound()
+    if mision.status != MissionStatus.COMPLETED or mision.claimed_at is not None:
+        raise Conflict("Esta misión todavía no se puede reclamar.")
+
+    misiones.marcar_reclamada(db, mision)
+    return eventos.registrar_evento(
+        db,
+        usuario_id=usuario.id,
+        tipo=eventos.TipoEvento.MISSION_CLAIMED,
+        payload={
+            "user_mission_id": str(mision.id),
+            "auto": False,
+            "reward": {"xp": int(mision.reward_xp), "gold": int(mision.reward_gold)},
+        },
+        idempotency_key=clave,
+        source_module="gamification",
+        cfg=cfg,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Logros (§7.9)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/achievements", response_model=PageAchievements, summary="Sala de trofeos")
+def listar_logros(
+    db: DbSession,
+    usuario: CurrentUser,
+    state: Annotated[str, Query(pattern="^(all|unlocked|in_progress)$")] = "all",
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> PageAchievements:
+    """Catálogo de logros con el progreso del usuario y filtro por estado."""
+    filas = logros.progreso_de_usuario(db, usuario.id)
+    salida: list[AchievementOut] = []
+    for logro, progreso in filas:
+        desbloqueado = progreso is not None and progreso.highest_tier is not None
+        if state == "unlocked" and not desbloqueado:
+            continue
+        if state == "in_progress" and desbloqueado:
+            continue
+        salida.append(
+            AchievementOut(
+                code=logro.code,
+                name=logro.name,
+                category=logro.category.value,
+                visibility=logro.visibility.value,
+                highest_tier=progreso.highest_tier.value if desbloqueado else None,
+                tiers=list(logro.tiers or []),
+                progress_pct=float(progreso.progress_pct) if progreso else 0.0,
+                unlocked_at=progreso.first_unlocked_at if progreso else None,
+            )
+        )
+    total = len(salida)
+    return PageAchievements(
+        items=salida[:limit],
+        page=PageInfo(limit=limit, next_cursor=None, has_more=total > limit, total=total),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Racha y calendario (§7.8)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/streak", response_model=StreakOut, summary="Estado de la racha")
+def obtener_racha(db: DbSession, usuario: CurrentUser) -> StreakOut:
+    """Racha actual, mejor racha, estado visible y próximo hito con su recompensa."""
+    cfg, _zona, hoy = _contexto(db, usuario)
+    racha = rachas.obtener_o_crear_racha(db, usuario.id)
+    return StreakOut(
+        current=int(racha.current_length),
+        best=int(racha.best_length),
+        status=rachas.estado_visible(racha, hoy, cfg),
+        total_active_days=int(racha.total_active_days),
+        grace_available=rachas.gracia_disponible(cfg, racha, f"{hoy.year:04d}-{hoy.month:02d}"),
+        next_milestone=rachas.proximo_hito(cfg, int(racha.current_length)),
+    )
+
+
+@router.get("/streak/calendar", response_model=StreakCalendarOut, summary="Calendario mensual")
+def obtener_calendario(
+    db: DbSession,
+    usuario: CurrentUser,
+    month: Annotated[str | None, Query(pattern=r"^\d{4}-\d{2}$")] = None,
+) -> StreakCalendarOut:
+    """Calendario del mes local pedido (`month=2026-09`; por defecto, el mes en curso)."""
+    cfg, _zona, hoy = _contexto(db, usuario)
+    if month:
+        anio, mes = int(month[:4]), int(month[5:7])
+        if not 1 <= mes <= 12:
+            raise ValidationFailed(
+                "El mes debe tener el formato AAAA-MM.",
+                field_errors=[{"field": "month", "message": "Formato esperado: AAAA-MM."}],
+            )
+    else:
+        anio, mes = hoy.year, hoy.month
+
+    dias = rachas.calendario_mensual(db, usuario.id, anio, mes)
+    racha = rachas.obtener_o_crear_racha(db, usuario.id)
+    return StreakCalendarOut(
+        month=f"{anio:04d}-{mes:02d}",
+        days=[
+            StreakDayOut(
+                date=dia.local_date,
+                day_status=dia.day_status.value,
+                goal_met=dia.goal_met_at is not None,
+                educational_xp=int(dia.educational_xp),
+                minutes=int(dia.effective_seconds // 60),
+                activities=int(dia.activity_units),
+            )
+            for dia in dias
+        ],
+        active_days=sum(1 for dia in dias if rachas.dia_activo(cfg, dia)),
+        best_length=int(racha.best_length),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Objetivo diario (§7.8)
+# ---------------------------------------------------------------------------
+
+
+def _objetivo_out(db: DbSession, cfg: ServicioConfig, usuario_id: uuid.UUID, hoy: date_type) -> DailyGoalOut:
+    """Proyecta el objetivo diario vigente y el progreso de hoy."""
+    objetivo = rachas.obtener_o_crear_objetivo(db, cfg, usuario_id, hoy)
+    dia = rachas.obtener_o_crear_dia(db, cfg, usuario_id, hoy)
+    return DailyGoalOut(
+        type=objetivo.goal_type.value,
+        target=int(objetivo.target),
+        progress=rachas.progreso_objetivo(dia),
+        met=dia.goal_met_at is not None,
+        effective_from=objetivo.effective_from,
+        pending_type=objetivo.pending_type.value if objetivo.pending_type else None,
+        pending_target=objetivo.pending_target,
+        pending_from=objetivo.pending_from,
+        recommendation=dict(objetivo.recommendation or {}),
+    )
+
+
+@router.get("/daily-goal", response_model=DailyGoalOut, summary="Objetivo diario vigente")
+def obtener_objetivo(db: DbSession, usuario: CurrentUser) -> DailyGoalOut:
+    """Objetivo vigente, progreso de hoy y recomendación pendiente."""
+    cfg, _zona, hoy = _contexto(db, usuario)
+    return _objetivo_out(db, cfg, usuario.id, hoy)
+
+
+@router.put("/daily-goal", response_model=DailyGoalOut, summary="Cambia el objetivo diario")
+def cambiar_objetivo(cuerpo: DailyGoalIn, db: DbSession, usuario: CurrentUser) -> DailyGoalOut:
+    """Cambia tipo y meta: las subidas rigen ya; las bajadas, al día siguiente."""
+    cfg, _zona, hoy = _contexto(db, usuario)
+    opciones = {
+        GoalType.MINUTES: "goal.minutes.options",
+        GoalType.ACTIVITIES: "goal.activities.options",
+        GoalType.XP: "goal.xp.options",
+    }[cuerpo.type]
+    permitidos = [int(v) for v in cfg.obtener_lista(opciones)]
+    if permitidos and int(cuerpo.target) not in permitidos:
+        raise ValidationFailed(
+            "Ese objetivo no está entre las opciones disponibles.",
+            field_errors=[{"field": "target", "message": f"Valores permitidos: {permitidos}."}],
+        )
+    rachas.cambiar_objetivo(db, cfg, usuario.id, hoy, goal_type=cuerpo.type, target=int(cuerpo.target))
+    return _objetivo_out(db, cfg, usuario.id, hoy)
+
+
+@router.post(
+    "/daily-goal/recommendation/accept",
+    response_model=DailyGoalOut,
+    summary="Acepta la recomendación adaptativa",
+)
+def aceptar_recomendacion(db: DbSession, usuario: CurrentUser) -> DailyGoalOut:
+    """Aplica la recomendación adaptativa calculada por el sistema (§6.11)."""
+    cfg, _zona, hoy = _contexto(db, usuario)
+    objetivo = rachas.obtener_o_crear_objetivo(db, cfg, usuario.id, hoy)
+    recomendacion = dict(objetivo.recommendation or {})
+    if not recomendacion.get("suggested_target"):
+        raise Conflict("No hay ninguna recomendación pendiente.")
+    rachas.cambiar_objetivo(
+        db,
+        cfg,
+        usuario.id,
+        hoy,
+        goal_type=GoalType(recomendacion.get("suggested_type", objetivo.goal_type.value)),
+        target=int(recomendacion["suggested_target"]),
+    )
+    objetivo.recommendation = {}
+    objetivo.recommendation_shown_at = utcnow()
+    db.flush()
+    return _objetivo_out(db, cfg, usuario.id, hoy)
+
+
+@router.post(
+    "/daily-goal/recommendation/dismiss",
+    status_code=204,
+    summary="Rechaza la recomendación adaptativa",
+)
+def rechazar_recomendacion(db: DbSession, usuario: CurrentUser) -> Response:
+    """Rechaza la recomendación: no se repite en `goal.adapt.rejected_cooldown_days`."""
+    cfg, _zona, hoy = _contexto(db, usuario)
+    objetivo = rachas.obtener_o_crear_objetivo(db, cfg, usuario.id, hoy)
+    objetivo.recommendation_rejected_at = utcnow()
+    objetivo.recommendation = {}
+    db.flush()
+    return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------------
+# Notificaciones (§7.9)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/notifications", response_model=PageNotifications, summary="Bandeja in-app")
+def listar_notificaciones(
+    db: DbSession,
+    usuario: CurrentUser,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> PageNotifications:
+    """Notificaciones del usuario, de la más reciente a la más antigua."""
+    filas = list(
+        db.execute(
+            sa.select(Notification)
+            .where(Notification.user_id == usuario.id)
+            .order_by(Notification.created_at.desc(), Notification.id)
+            .limit(limit + 1)
+        )
+        .scalars()
+        .all()
+    )
+    hay_mas = len(filas) > limit
+    return PageNotifications(
+        items=[NotificationOut.model_validate(fila) for fila in filas[:limit]],
+        page=PageInfo(limit=limit, next_cursor=None, has_more=hay_mas, total=None),
+    )
+
+
+@router.post("/notifications/{notification_id}/read", status_code=204, summary="Marca como leída")
+def marcar_leida(notification_id: uuid.UUID, db: DbSession, usuario: CurrentUser) -> Response:
+    """Marca una notificación como leída."""
+    notificacion = db.execute(
+        sa.select(Notification).where(
+            Notification.id == notification_id, Notification.user_id == usuario.id
+        )
+    ).scalar_one_or_none()
+    if notificacion is None:
+        raise NotFound()
+    if notificacion.read_at is None:
+        notificacion.read_at = utcnow()
+        notificacion.status = NotificationStatus.READ
+        db.flush()
+    return Response(status_code=204)
+
+
+@router.post("/notifications/read-all", status_code=204, summary="Marca todas como leídas")
+def marcar_todas_leidas(db: DbSession, usuario: CurrentUser) -> Response:
+    """Marca como leídas todas las notificaciones pendientes del usuario."""
+    ahora = utcnow()
+    db.execute(
+        sa.update(Notification)
+        .where(Notification.user_id == usuario.id, Notification.read_at.is_(None))
+        .values(read_at=ahora, status=NotificationStatus.READ)
+    )
+    db.flush()
+    return Response(status_code=204)
+
+
+__all__ = [
+    "AchievementOut",
+    "DailyGoalIn",
+    "DailyGoalOut",
+    "MissionOut",
+    "MissionsOut",
+    "NotificationOut",
+    "PageAchievements",
+    "PageInfo",
+    "PageNotifications",
+    "StreakCalendarOut",
+    "StreakDayOut",
+    "StreakOut",
+    "router",
+]
