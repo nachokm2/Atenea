@@ -1,0 +1,13 @@
+# Dependencias de desarrollo y pruebas del backend de Atenea.
+# Instalación: pip install -r requirements.txt -r requirements-dev.txt
+-r requirements.txt
+
+# --- Pruebas --------------------------------------------------------------
+pytest==9.1.1
+pytest-asyncio==1.4.0
+
+# --- Calidad de código ----------------------------------------------------
+ruff==0.14.4
+
+# --- Tipado estático (opcional; no bloquea la CI del MVP) -----------------
+mypy==1.18.2

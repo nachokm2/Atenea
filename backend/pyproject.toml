@@ -1,0 +1,127 @@
+[project]
+name = "atenea-backend"
+version = "1.0.0"
+description = "Backend de Atenea: RPG medieval de aprendizaje (FastAPI + PostgreSQL 16 + pgvector)."
+readme = "CONTRACT.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "Proprietary" }
+authors = [{ name = "Equipo Atenea" }]
+keywords = ["atenea", "aprendizaje", "gamificacion", "fastapi", "pgvector"]
+
+# Las dependencias reales se fijan en requirements.txt / requirements-dev.txt:
+# el proyecto se despliega con pip install -r, no como paquete distribuible.
+dependencies = []
+
+[project.optional-dependencies]
+dev = []
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["app"]
+
+# ---------------------------------------------------------------------------
+# ruff — linter y formateador
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+src = ["app", "tests"]
+extend-exclude = ["alembic/versions", ".venv", "__pycache__"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle: errores
+    "W",    # pycodestyle: avisos
+    "F",    # pyflakes
+    "I",    # isort: orden de imports
+    "UP",   # pyupgrade: sintaxis moderna de Python 3.12
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "SIM",  # flake8-simplify
+    "RUF",  # reglas propias de ruff
+    "N",    # pep8-naming
+    "ASYNC",# flake8-async
+    "DTZ",  # flake8-datetimez: fechas siempre con zona horaria
+    "T20",  # flake8-print: prohibido print() en la app
+    "PTH",  # flake8-use-pathlib
+    "ARG",  # argumentos sin usar
+]
+ignore = [
+    "E501",    # la longitud la controla el formateador (line-length = 110)
+    "B008",    # Depends()/Query() en valores por defecto: idioma de FastAPI
+    "RUF001",  # caracteres unicode ambiguos: los textos de usuario van en español
+    "RUF002",
+    "RUF003",
+    "RUF012",  # atributos mutables de clase sin ClassVar: chocan con SQLAlchemy
+    "N818",    # el sufijo Error basta para nuestras excepciones (AppError)
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Las migraciones las genera Alembic: no se reordenan sus imports ni se acortan.
+"alembic/**" = ["I001", "E402", "F401", "ARG001", "T20"]
+# Los __init__.py reexportan a propósito.
+"app/models/__init__.py" = ["F401"]
+"app/**/__init__.py" = ["F401"]
+# Las semillas y los scripts sí pueden imprimir por consola.
+"app/seeds/**" = ["T20"]
+"tests/**" = ["T20", "ARG001", "ARG002", "S101"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+combine-as-imports = true
+
+[tool.ruff.lint.pep8-naming]
+# `XPTransaction`, `SQLExercise`… conservan las siglas en mayúsculas.
+classmethod-decorators = ["classmethod", "pydantic.field_validator", "pydantic.model_validator"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+docstring-code-format = true
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-q --strict-markers --strict-config --tb=short --import-mode=importlib"
+markers = [
+    "slow: pruebas lentas (generación de contenido, ingesta completa)",
+    "db: requiere la base de datos PostgreSQL de desarrollo en marcha",
+    "contract: comprueba la conformidad con CONTRACT.md",
+]
+filterwarnings = [
+    "error",
+    # `passlib` inspecciona `bcrypt.__about__`, retirado en bcrypt 4.x.
+    "ignore::DeprecationWarning:passlib.*",
+    "ignore:.*'crypt' is deprecated.*:DeprecationWarning",
+    # Ciclo conocido y gestionado a mano: learning_paths <-> generation_jobs.
+    # La migración 0001 lo resuelve difiriendo una clave foránea con
+    # `op.create_foreign_key`; `create_all()` en pruebas solo emite el aviso.
+    "ignore:Cannot correctly sort tables:sqlalchemy.exc.SAWarning",
+    # Ruido de librerías de terceros que no controlamos.
+    "ignore::DeprecationWarning:pkg_resources.*",
+    "ignore::PendingDeprecationWarning",
+]
+asyncio_mode = "strict"
+
+# ---------------------------------------------------------------------------
+# mypy (opcional: no bloquea la CI del MVP)
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+files = ["app"]
+plugins = ["pydantic.mypy"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+exclude = ["alembic/versions/.*"]
