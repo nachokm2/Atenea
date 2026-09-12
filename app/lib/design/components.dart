@@ -426,18 +426,27 @@ class Pildora extends StatelessWidget {
         borderRadius: Redondeo.rPildora,
         border: Border.all(color: c.withValues(alpha: 0.35)),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          if (icono != null) ...<Widget>[
-            Icon(icono, size: 14, color: c),
-            const SizedBox(width: 4),
+      // Un solo `Text` con el icono incrustado, en vez de un `Row`: dentro de
+      // una fila, los hijos sin `Expanded` reciben anchura infinita y el texto
+      // nunca se parte, así que una etiqueta larga en un ancho estrecho —o con
+      // la fuente del sistema al 200 %— desbordaba. Así el texto hereda la
+      // anchura real del contenedor y se reparte en dos líneas cuando hace
+      // falta. Sigue encogiendo hasta su tamaño natural donde sobra sitio.
+      child: Text.rich(
+        TextSpan(
+          children: <InlineSpan>[
+            if (icono != null)
+              WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Icon(icono, size: 14, color: c),
+                ),
+              ),
+            TextSpan(text: texto),
           ],
-          Text(
-            texto,
-            style: context.textos.bodySmall?.copyWith(color: c, fontWeight: FontWeight.w700),
-          ),
-        ],
+        ),
+        style: context.textos.bodySmall?.copyWith(color: c, fontWeight: FontWeight.w700),
       ),
     );
   }

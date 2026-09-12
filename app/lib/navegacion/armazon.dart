@@ -141,10 +141,11 @@ class _CapaCelebracionesState extends State<CapaCelebraciones> {
       children: <Widget>[
         widget.hijo,
         if (actual != null)
-          // TODO(pantalla): P13/P14 — pasar `constructor` con
-          // ModalSubidaDeNivel (lib/pantallas/celebraciones/modal_nivel.dart)
-          // y ModalItemDesbloqueado
-          // (lib/pantallas/celebraciones/modal_item.dart).
+          // `app.dart` pasa `constructorDeCelebracion`
+          // (lib/pantallas/celebraciones/overlays.dart), que elige entre
+          // ModalSubidaDeNivel (P13), ModalItemDesbloqueado (P14), ModalRacha
+          // y ModalGenerico. El respaldo de abajo solo se usa en pruebas que
+          // montan la capa suelta.
           widget.constructor?.call(context, actual, cola.descartar) ??
               _OverlayCelebracion(
                 celebracion: actual,

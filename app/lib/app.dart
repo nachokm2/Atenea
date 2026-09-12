@@ -10,6 +10,7 @@ import 'design/theme.dart';
 import 'estado/sesion.dart';
 import 'navegacion/armazon.dart';
 import 'nucleo/controlador_tema.dart';
+import 'pantallas/celebraciones/overlays.dart';
 
 /// Aplicación de Atenea.
 class AplicacionAtenea extends StatelessWidget {
@@ -54,7 +55,12 @@ class AplicacionAtenea extends StatelessWidget {
             disableAnimations: medios.disableAnimations || reducirPorAjuste,
           ),
           // Por encima de cualquier pantalla, incluidos los flujos inmersivos.
-          child: CapaCelebraciones(hijo: hijo ?? const SizedBox.shrink()),
+          // `constructorDeCelebracion` entrega los overlays reales P13 y P14
+          // (subida de nivel e ítem desbloqueado) más el de racha.
+          child: CapaCelebraciones(
+            hijo: hijo ?? const SizedBox.shrink(),
+            constructor: constructorDeCelebracion,
+          ),
         );
       },
     );

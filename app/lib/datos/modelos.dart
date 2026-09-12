@@ -15,8 +15,6 @@
 ///   resuelto desde el servidor (§1.4 regla 11 y §7.10).
 library;
 
-import 'paginacion.dart';
-
 export 'paginacion.dart';
 
 // ---------------------------------------------------------------------------
@@ -72,51 +70,6 @@ T? desdeClaveApiOpcional<T extends ClaveApi>(List<T> valores, Object? bruto) {
   return null;
 }
 
-String _txt(Object? valor, [String porDefecto = '']) {
-  if (valor == null) return porDefecto;
-  if (valor is String) return valor;
-  return valor.toString();
-}
-
-String? _txtN(Object? valor) {
-  if (valor == null) return null;
-  final String texto = valor is String ? valor : valor.toString();
-  return texto.isEmpty ? null : texto;
-}
-
-int _ent(Object? valor, [int porDefecto = 0]) {
-  if (valor is int) return valor;
-  if (valor is num) return valor.round();
-  if (valor is bool) return valor ? 1 : 0;
-  if (valor is String) {
-    final String limpio = valor.trim();
-    return int.tryParse(limpio) ?? double.tryParse(limpio)?.round() ?? porDefecto;
-  }
-  return porDefecto;
-}
-
-int? _entN(Object? valor) => valor == null ? null : _ent(valor);
-
-double _dec(Object? valor, [double porDefecto = 0]) {
-  if (valor is double) return valor;
-  if (valor is num) return valor.toDouble();
-  if (valor is String) return double.tryParse(valor.trim()) ?? porDefecto;
-  return porDefecto;
-}
-
-double? _decN(Object? valor) => valor == null ? null : _dec(valor);
-
-bool _bol(Object? valor, [bool porDefecto = false]) {
-  if (valor is bool) return valor;
-  if (valor is num) return valor != 0;
-  if (valor is String) {
-    final String v = valor.trim().toLowerCase();
-    if (v == 'true' || v == '1' || v == 'si' || v == 'sí') return true;
-    if (v == 'false' || v == '0' || v == 'no' || v.isEmpty) return false;
-  }
-  return porDefecto;
-}
-
 /// Convierte una marca de tiempo ISO-8601 UTC a la hora local del dispositivo.
 DateTime? fechaHora(Object? valor) {
   if (valor == null) return null;
@@ -142,39 +95,6 @@ DateTime? fechaDia(Object? valor) {
       DateTime.tryParse(texto.length > 10 ? texto.substring(0, 10) : texto);
   if (leida == null) return null;
   return DateTime(leida.year, leida.month, leida.day);
-}
-
-Map<String, dynamic> _mapa(Object? valor) =>
-    valor is Map ? Map<String, dynamic>.from(valor) : <String, dynamic>{};
-
-Map<String, dynamic>? _mapaN(Object? valor) =>
-    valor is Map ? Map<String, dynamic>.from(valor) : null;
-
-/// Lee una lista de objetos y la convierte con [desde], ignorando basura.
-List<T> _listaDe<T>(Object? valor, T Function(Map<String, dynamic> json) desde) {
-  if (valor is! List) return const <Never>[];
-  final List<T> salida = <T>[];
-  for (final Object? bruto in valor) {
-    if (bruto is Map) salida.add(desde(Map<String, dynamic>.from(bruto)));
-  }
-  return salida;
-}
-
-List<String> _listaTextos(Object? valor) {
-  if (valor is! List) return const <String>[];
-  return valor
-      .where((Object? e) => e != null)
-      .map((Object? e) => e.toString())
-      .toList(growable: false);
-}
-
-Map<String, String?> _mapaTextos(Object? valor) {
-  if (valor is! Map) return const <String, String?>{};
-  final Map<String, String?> salida = <String, String?>{};
-  valor.forEach((Object? clave, Object? v) {
-    salida[clave.toString()] = v?.toString();
-  });
-  return salida;
 }
 
 // ---------------------------------------------------------------------------

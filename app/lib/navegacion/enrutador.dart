@@ -13,6 +13,7 @@
 /// - Confirmación ligera al abandonar una lección o un desafío a medias.
 library;
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -41,6 +42,7 @@ import '../pantallas/perfil/racha.dart';
 import '../pantallas/personaje/mercado.dart';
 import '../pantallas/personaje/vestidor.dart';
 import '../pantallas/perfil/logros.dart';
+import '../pantallas/galeria_estilo.dart';
 import 'armazon.dart';
 import 'rutas.dart';
 
@@ -182,6 +184,14 @@ GoRouter crearEnrutador(ControladorSesion sesion) {
         builder: (BuildContext context, GoRouterState state) =>
             const PantallaCrearRuta(),
       ),
+
+      // Galería del sistema de diseño: referencia viva, solo en depuración.
+      if (kDebugMode)
+        GoRoute(
+          path: Rutas.galeriaEstilo,
+          builder: (BuildContext context, GoRouterState state) =>
+              const PantallaGaleriaEstilo(),
+        ),
       GoRoute(
         path: Rutas.patronRuta,
         builder: (BuildContext context, GoRouterState state) => PantallaMapaRuta(

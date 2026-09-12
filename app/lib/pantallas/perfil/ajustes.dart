@@ -6,6 +6,7 @@
 /// sitio con un aviso claro.
 library;
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -543,6 +544,21 @@ class _PantallaAjustesState extends State<PantallaAjustes> {
               ),
             ],
           ),
+          // Solo en compilaciones de depuración: la galería del sistema de
+          // diseño, referencia viva de tokens y componentes.
+          if (kDebugMode)
+            _Seccion(
+              titulo: 'Herramientas del Reino',
+              subtitulo: 'Visible solo en compilaciones de desarrollo',
+              hijos: <Widget>[
+                _FilaAccion(
+                  icono: Icons.palette_rounded,
+                  titulo: 'Sistema de diseño',
+                  detalle: 'Tokens, tipografía, componentes y estados',
+                  alTocar: () => context.push(Rutas.galeriaEstilo),
+                ),
+              ],
+            ),
           const SizedBox(height: Espacio.md),
           Text(
             'Tu material y tu progreso son tuyos. El oro solo compra '

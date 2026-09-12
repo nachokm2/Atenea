@@ -216,13 +216,17 @@ class ChipOpcion extends StatelessWidget {
                       padding: const EdgeInsets.only(right: Espacio.xxs + 2),
                       child: Icon(icono, size: 18, color: paleta.textoSecundario),
                     ),
-                  Text(
-                    texto,
-                    style: context.textos.bodyLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: seleccionada
-                          ? paleta.textoPrimario
-                          : paleta.textoSecundario,
+                  Flexible(
+                    child: Text(
+                      texto,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.textos.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: seleccionada
+                            ? paleta.textoPrimario
+                            : paleta.textoSecundario,
+                      ),
                     ),
                   ),
                 ],

@@ -52,6 +52,10 @@ abstract final class Rutas {
   /// P21 · Ajustes.
   static const String ajustes = '/perfil/ajustes';
 
+  /// Galería del sistema de diseño. Solo existe en compilaciones de
+  /// depuración; Ajustes la enlaza bajo "Herramientas del Reino".
+  static const String galeriaEstilo = '/galeria-estilo';
+
   // --- Flujos inmersivos y detalles (sin barra inferior) -------------------
 
   /// P05 · Crear ruta.
