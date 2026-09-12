@@ -9,6 +9,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../datos/repositorios.dart';
+import '../../../design/arte.dart';
 import '../../../design/components.dart';
 import '../../../design/theme.dart';
 import '../../../design/tokens.dart';
@@ -173,13 +174,14 @@ class _Lienzo extends StatelessWidget {
           child: Center(
             child: AnimatedSwitcher(
               duration: Movimiento.corta,
-              child: Icon(
-                iconoDeRanura(item.ranura),
+              child: ImagenItem(
                 key: ValueKey<String>('${item.id}-$bloqueado'),
-                size: 40,
-                color: bloqueado
-                    ? p.textoSecundario.withValues(alpha: 0.35)
-                    : rareza.color,
+                codigo: item.codigo,
+                iconoKey: item.iconoKey,
+                ranura: item.ranura,
+                tamano: 56,
+                color: rareza.color,
+                apagado: bloqueado,
               ),
             ),
           ),

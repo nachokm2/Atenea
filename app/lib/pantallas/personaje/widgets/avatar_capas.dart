@@ -11,6 +11,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../datos/repositorios.dart';
+import '../../../design/arte.dart';
 import '../../../design/tokens.dart';
 
 /// Compone una vista previa: las capas actuales con las de [item] puestas en
@@ -86,16 +87,51 @@ class AvatarCapas extends StatelessWidget {
       child: SizedBox(
         width: tamano,
         height: tamano,
-        child: CustomPaint(
-          painter: _PintorAvatar(
-            paleta: p,
-            equipo: equipo,
-            piel: _tonoDePiel(r.tonoPiel, p),
-            cabello: _colorDeCabello(r.colorCabello, p),
-            esbelto: r.tipoCuerpo == TipoCuerpo.esbelto,
-            robusto: r.tipoCuerpo == TipoCuerpo.robusto,
-            resplandor: resplandor,
-          ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: <Widget>[
+            // El halo se pinta aparte: la figura es una ilustración, no un
+            // dibujo vectorial, y el resplandor debe quedar por detrás.
+            if (resplandor)
+              CustomPaint(
+                size: Size.square(tamano),
+                painter: _PintorAvatar(
+                  paleta: p,
+                  equipo: equipo,
+                  piel: _tonoDePiel(r.tonoPiel, p),
+                  cabello: _colorDeCabello(r.colorCabello, p),
+                  esbelto: r.tipoCuerpo == TipoCuerpo.esbelto,
+                  robusto: r.tipoCuerpo == TipoCuerpo.robusto,
+                  resplandor: true,
+                  soloFondo: true,
+                ),
+              ),
+            Image.asset(
+              Arte.figura(
+                trato: r.formaTrato,
+                cuerpo: r.tipoCuerpo,
+                rostro: r.rostro,
+              ),
+              height: tamano,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.medium,
+              // Si el arte faltara, el dibujo vectorial sigue siendo una figura
+              // válida: la pantalla nunca queda vacía.
+              errorBuilder: (BuildContext context, Object error, StackTrace? pila) =>
+                  CustomPaint(
+                size: Size.square(tamano),
+                painter: _PintorAvatar(
+                  paleta: p,
+                  equipo: equipo,
+                  piel: _tonoDePiel(r.tonoPiel, p),
+                  cabello: _colorDeCabello(r.colorCabello, p),
+                  esbelto: r.tipoCuerpo == TipoCuerpo.esbelto,
+                  robusto: r.tipoCuerpo == TipoCuerpo.robusto,
+                  resplandor: resplandor,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -272,6 +308,7 @@ class _PintorAvatar extends CustomPainter {
     required this.esbelto,
     required this.robusto,
     required this.resplandor,
+    this.soloFondo = false,
   });
 
   final AteneaPalette paleta;
@@ -281,6 +318,12 @@ class _PintorAvatar extends CustomPainter {
   final bool esbelto;
   final bool robusto;
   final bool resplandor;
+
+  /// Pinta solo el halo y el pedestal, sin la figura.
+  ///
+  /// Es lo que se usa detrás de la ilustración del personaje: el escenario sí,
+  /// el muñeco vectorial no.
+  final bool soloFondo;
 
   @override
   void paint(Canvas lienzo, Size medida) {
@@ -313,6 +356,8 @@ class _PintorAvatar extends CustomPainter {
       ),
       relleno,
     );
+
+    if (soloFondo) return;
 
     final double ancho = esbelto ? 0.135 : (robusto ? 0.185 : 0.16);
     final Color cuerpo = equipo[RanuraItem.cuerpo] ?? paleta.superficieElevada;
@@ -573,6 +618,7 @@ class _PintorAvatar extends CustomPainter {
       anterior.esbelto != esbelto ||
       anterior.robusto != robusto ||
       anterior.resplandor != resplandor ||
+      anterior.soloFondo != soloFondo ||
       !_mismoEquipo(anterior.equipo, equipo) ||
       anterior.paleta != paleta;
 

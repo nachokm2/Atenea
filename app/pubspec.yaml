@@ -73,10 +73,18 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # To add assets to your application, add an assets section, like this:
-  # assets:
-  #   - images/a_dot_burr.jpeg
-  #   - images/a_dot_ham.jpeg
+  # Arte del Reino. Las ilustraciones se preparan desde los originales con
+  # `python scripts/preparar_arte.py`: recorta el fondo, ajusta el tamaño y
+  # guarda en WebP con transparencia real.
+  assets:
+    - assets/arte/personajes/
+    - assets/arte/items/cabeza/
+    - assets/arte/items/cuerpo/
+    - assets/arte/items/capa/
+    - assets/arte/items/botas/
+    - assets/arte/items/arma/
+    - assets/arte/items/accesorio/
+    - assets/arte/items/cabello/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

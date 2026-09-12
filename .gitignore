@@ -35,3 +35,6 @@ app/web/main.dart.js*
 .DS_Store
 Thumbs.db
 .atenea/
+
+# Compilados del cliente
+app/build/
