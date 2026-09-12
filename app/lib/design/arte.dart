@@ -96,8 +96,11 @@ abstract final class Arte {
 
   /// Código de ítem del catálogo sembrado -> archivo dentro de `items/`.
   ///
-  /// Hay 37 ilustraciones para 46 ítems, así que algunas se comparten entre
+  /// Hay 38 ilustraciones para 46 ítems, así que algunas se comparten entre
   /// piezas de la misma familia. Se anota cuál se repite y por qué.
+  ///
+  /// Desde que llegaron los guantes, los 46 ítems del catálogo tienen dibujo:
+  /// ninguno cae ya al icono de su ranura.
   static const Map<String, String> _porItem = <String, String>{
     // --- Cabeza ---
     'yelmo_veterano': 'cabeza/yelmo',
@@ -124,6 +127,12 @@ abstract final class Arte {
     'capa_llamas_persistentes': 'capa/capa_002',
     'tpl_capa_estudiante': 'capa/capa_001',
     'tpl_capa_maestro': 'capa/capa_002',
+
+    // --- Guantes ---
+    'guantes_cuero': 'guantes/guantes',
+    // Prestado: el dibujo es de cuero y los guanteletes son de placas de acero.
+    // Sirve mientras no haya uno propio, y se nota que no es el suyo.
+    'guanteletes_acero': 'guantes/guantes',
 
     // --- Botas ---
     'botas_camino': 'botas/botas',
@@ -157,6 +166,14 @@ abstract final class Arte {
     'antorcha_constancia': 'arma/linterna',
     'tpl_insignia_perfeccion': 'accesorio/amuleto',
   };
+
+  /// Vista de solo lectura del mapa de ilustraciones.
+  ///
+  /// La usa la prueba que carga cada archivo: una ruta mal escrita aquí, o una
+  /// carpeta sin declarar en `pubspec.yaml`, no da error de compilación y solo
+  /// se vería como un hueco en la pantalla del Vestidor.
+  static Map<String, String> get ilustracionesPorItem =>
+      Map<String, String>.unmodifiable(_porItem);
 
   /// Ilustraciones que existen y todavía no tiene asignadas ningún ítem.
   ///

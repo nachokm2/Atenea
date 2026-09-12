@@ -82,6 +82,7 @@ flutter:
     - assets/arte/items/cuerpo/
     - assets/arte/items/capa/
     - assets/arte/items/botas/
+    - assets/arte/items/guantes/
     - assets/arte/items/arma/
     - assets/arte/items/accesorio/
     - assets/arte/items/cabello/

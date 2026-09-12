@@ -5,9 +5,9 @@ las versiones procesadas que quedan en `app/assets/arte/`.
 
 ## Qué hay
 
-`originales/` contiene los 43 PNG entregados, repartidos en ocho categorías:
-seis figuras de personaje, seis peinados y 31 objetos (cabeza, cuerpo, capa,
-botas, armas y accesorios). Pesan 78 MB en total.
+`originales/` contiene los 44 PNG entregados, repartidos en nueve categorías:
+seis figuras de personaje, seis peinados y 32 objetos (cabeza, cuerpo, capa,
+botas, guantes, armas y accesorios). Pesan 79 MB en total.
 
 ## Por qué hay un paso intermedio
 
@@ -32,7 +32,7 @@ imagen (no todas lo traen igual de claro), lo recorta con un relleno que crece
 desde los bordes y se detiene en el contorno del dibujo, descarta las motas
 sueltas que quedan, recorta al contenido real y guarda en WebP con alfa.
 
-Resultado: de 78 MB a 1,8 MB, un 97,6 % menos, sin pérdida visible.
+Resultado: de 79 MB a 2,0 MB, un 97,5 % menos, sin pérdida visible.
 
 La opción `--informe` dice qué haría sin escribir nada.
 
@@ -52,12 +52,13 @@ pack solo hay que cambiar el widget `AvatarCapas`.
 
 ## Cobertura actual
 
-37 de las 43 ilustraciones están asignadas a los 46 ítems del catálogo; algunas
-se comparten entre piezas de la misma familia (los cinco escudos usan el mismo
-dibujo, por ejemplo). Lo que todavía no tiene arte cae al icono de su ranura,
-que es un marcador honesto: se nota que falta, no se finge que existe.
+Los **46 ítems del catálogo tienen dibujo**: ninguno cae ya al icono de su
+ranura. Se consigue con 28 ilustraciones, porque algunas se comparten entre
+piezas de la misma familia (los cinco escudos usan el mismo dibujo, por ejemplo).
+
+Un préstamo merece nombre propio: los guanteletes de acero muestran el dibujo de
+los guantes de cuero. Es lo mejor que hay hoy y se nota que no es el suyo, así
+que si algún día se encarga una pieza más, que sea esa.
 
 Quedan sin asignar y disponibles: bolso, cinturón, poción, pergamino y los seis
 peinados. El mapa vive en `app/lib/design/arte.dart`.
-
-Sin arte propio todavía: los dos pares de guantes del catálogo.

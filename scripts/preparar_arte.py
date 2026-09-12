@@ -54,6 +54,7 @@ REGLAS: dict[str, Regla] = {
     "Capas": Regla("items/capa", 512, 512, "capas"),
     "Cascos-Gorros": Regla("items/cabeza", 512, 512, "cascos y tocados"),
     "Botas": Regla("items/botas", 512, 512, "calzado"),
+    "Guantes": Regla("items/guantes", 512, 512, "guantes y guanteletes"),
     "Herramientas": Regla("items/arma", 512, 512, "armas y utensilios"),
     "Accesorios": Regla("items/accesorio", 512, 512, "accesorios"),
 }
