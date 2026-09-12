@@ -1,0 +1,11 @@
+# Etiquetas de la suite del cliente.
+#
+# `vivo` marca las pruebas que salen a la red contra una API de verdad. No se
+# excluyen por defecto porque se saltan solas cuando la API no responde, pero
+# tenerlas etiquetadas permite pedirlas o dejarlas fuera a propósito:
+#
+#     flutter test --tags vivo
+#     flutter test --exclude-tags vivo
+tags:
+  vivo:
+    timeout: 3x

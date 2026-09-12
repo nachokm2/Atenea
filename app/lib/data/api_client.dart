@@ -21,6 +21,7 @@ class ApiClient {
     required AlmacenTokens tokens,
     Dio? dio,
     this.alPerderSesion,
+    this.zonaHorariaIana,
   })  : _tokens = tokens,
         _dio = dio ?? Dio() {
     _dio.options = _dio.options.copyWith(
@@ -52,6 +53,14 @@ class ApiClient {
   /// acceso.
   final VoidCallback? alPerderSesion;
 
+  /// Zona horaria IANA del usuario (`America/Santiago`), si se conoce.
+  ///
+  /// Se rellena en cuanto llegan los ajustes del perfil y desde entonces manda
+  /// sobre lo que diga el sistema. Mientras siga nula se intenta deducir del
+  /// sistema, y si eso tampoco da una zona válida no se envía nada: el Reino
+  /// prefiere su propio dato guardado antes que una adivinanza.
+  String? zonaHorariaIana;
+
   final Dio _dio;
   final AlmacenTokens _tokens;
 
@@ -67,10 +76,32 @@ class ApiClient {
     if (token != null && token.isNotEmpty && opciones.extra['sinAuth'] != true) {
       opciones.headers['Authorization'] = 'Bearer $token';
     }
-    opciones.headers['X-Zona-Horaria'] ??= DateTime.now().timeZoneName;
-    opciones.headers['X-Desfase-Minutos'] ??= DateTime.now().timeZoneOffset.inMinutes;
+    // El nombre de la cabecera es el del contrato (§8.4), no una traducción:
+    // el Reino lee `X-Timezone` y con eso decide de qué día es cada actividad.
+    final String? zona = zonaHorariaIana ?? zonaDelSistema();
+    if (zona != null) opciones.headers['X-Timezone'] ??= zona;
+    opciones.headers['X-Timezone-Offset'] ??= DateTime.now().timeZoneOffset.inMinutes;
     handler.next(opciones);
   }
+
+  /// Zona horaria del sistema, **solo si** es una identificación IANA válida.
+  ///
+  /// `DateTime.timeZoneName` devuelve lo que cada sistema quiera: en Linux suele
+  /// ser `America/Santiago`, pero en un Windows en español devuelve "Hora verano
+  /// Sudamérica Pacífico", con acento y espacios. Una cabecera HTTP solo admite
+  /// ASCII, así que enviar eso hacía que el servidor respondiera 400 a **todas**
+  /// las peticiones: la app no funcionaba en absoluto en esas máquinas.
+  ///
+  /// Ante la duda se omite: el Reino ya guarda la zona del usuario en su perfil
+  /// y prefiere esa antes que una adivinanza.
+  static String? zonaDelSistema() {
+    final String nombre = DateTime.now().timeZoneName.trim();
+    return _ianaValida.hasMatch(nombre) ? nombre : null;
+  }
+
+  /// `Region/Ciudad`, solo ASCII, como manda la base de datos de zonas IANA.
+  static final RegExp _ianaValida =
+      RegExp(r'^[A-Za-z][A-Za-z0-9_+-]*(?:/[A-Za-z0-9_+-]+)+$');
 
   Future<void> _alFallar(DioException e, ErrorInterceptorHandler handler) async {
     handler.next(e);

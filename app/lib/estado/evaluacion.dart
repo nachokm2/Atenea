@@ -205,6 +205,7 @@ class ControladorEvaluacion extends ChangeNotifier {
       final RegistroRespuesta eco = await _repos.evaluacion.responder(
         intento.id,
         preguntaId: pregunta.id,
+        tipo: pregunta.tipo,
         respuesta: _respuesta ?? '',
         milisegundos: _milisegundosDePregunta(),
         clave: clave,

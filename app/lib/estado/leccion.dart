@@ -247,6 +247,7 @@ class ControladorLeccion extends ChangeNotifier with WidgetsBindingObserver {
       final ResultadoRespuesta veredicto = await _repos.leccion.responder(
         actividad.id,
         preguntaId: pregunta.id,
+        tipo: pregunta.tipo,
         respuesta: _respuesta ?? '',
         milisegundos: milisegundos,
         clave: clave,

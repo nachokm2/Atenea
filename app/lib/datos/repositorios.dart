@@ -23,6 +23,82 @@ import 'dtos.dart';
 export 'dtos.dart';
 
 // ---------------------------------------------------------------------------
+// El sobre de una respuesta
+// ---------------------------------------------------------------------------
+
+/// Envuelve lo que el aprendiz respondió en el objeto que espera el Reino.
+///
+/// El contrato (§7.6 `AnswerIn`, §7.7 `AssessmentAnswerIn`) declara `response`
+/// como un **objeto**, y el corrector de cada tipo busca dentro una clave
+/// concreta: `option_ids` para la selección, `blanks` para los huecos, `order`
+/// para la secuencia, `pairs` para las parejas, `sql` para la consulta. Mandar
+/// el valor pelado (una lista, un texto, un booleano) hace que el servidor
+/// responda 422 antes de mirar nada.
+///
+/// Las pantallas siguen trabajando con el valor natural de cada tipo; la
+/// traducción a la forma del contrato vive aquí y en un solo sitio.
+///
+/// Si quien llama ya construyó el objeto con una de las claves conocidas, se
+/// respeta tal cual: así una pantalla puede mandar `{'text': …, 'hint': …}` sin
+/// que esta función se lo deshaga.
+Map<String, dynamic> sobreDeRespuesta(TipoPregunta tipo, Object? valor) {
+  if (valor is Map) {
+    final Map<String, dynamic> mapa = Map<String, dynamic>.from(valor);
+    final bool yaEsSobre = mapa.keys.any(_clavesDeRespuesta.contains);
+    if (yaEsSobre) return mapa;
+    if (tipo == TipoPregunta.relacionar) {
+      return <String, dynamic>{'pairs': mapa};
+    }
+    return mapa;
+  }
+
+  List<dynamic> comoLista(Object? v) {
+    if (v == null) return const <dynamic>[];
+    if (v is List) return v;
+    if (v is Set) return v.toList();
+    return <dynamic>[v];
+  }
+
+  switch (tipo) {
+    case TipoPregunta.opcionMultiple:
+      return <String, dynamic>{'option_ids': comoLista(valor)};
+    case TipoPregunta.verdaderoFalso:
+      return <String, dynamic>{'value': valor};
+    case TipoPregunta.completar:
+      return <String, dynamic>{'blanks': comoLista(valor)};
+    case TipoPregunta.ordenar:
+      return <String, dynamic>{'order': comoLista(valor)};
+    case TipoPregunta.relacionar:
+      return <String, dynamic>{'pairs': valor ?? <String, dynamic>{}};
+    case TipoPregunta.ejercicioSql:
+      return <String, dynamic>{'sql': (valor ?? '').toString()};
+    case TipoPregunta.respuestaCorta:
+    case TipoPregunta.casoEstudio:
+    case TipoPregunta.ejercicioCodigo:
+      return <String, dynamic>{'text': (valor ?? '').toString()};
+  }
+}
+
+/// Claves que el corrector del Reino reconoce dentro de `response`.
+const Set<String> _clavesDeRespuesta = <String>{
+  'option_ids',
+  'option_id',
+  'selected',
+  'value',
+  'answer',
+  'answers',
+  'blanks',
+  'values',
+  'pairs',
+  'matches',
+  'order',
+  'sequence',
+  'text',
+  'sql',
+  'query',
+};
+
+// ---------------------------------------------------------------------------
 // Idempotencia y utilidades de consulta
 // ---------------------------------------------------------------------------
 
@@ -749,11 +825,13 @@ class RepoLeccion {
 
   /// Envía una respuesta y devuelve la corrección con su retroalimentación.
   ///
-  /// [respuesta] viaja tal cual: la clave elegida, la lista ordenada, el mapa
-  /// de parejas o el texto libre, según el tipo de pregunta.
+  /// [respuesta] es el valor natural del tipo: la clave elegida, la lista
+  /// ordenada, el mapa de parejas o el texto libre. [sobreDeRespuesta] lo
+  /// envuelve en la forma que exige el contrato, por eso hace falta [tipo].
   Future<ResultadoRespuesta> responder(
     String actividadId, {
     required String preguntaId,
+    required TipoPregunta tipo,
     required Object respuesta,
     int? milisegundos,
     bool ayudaUsada = false,
@@ -765,7 +843,7 @@ class RepoLeccion {
           clave ?? claveDeterminista('answer:$actividadId', preguntaId),
       cuerpo: _cuerpo(<String, Object?>{
         'question_id': preguntaId,
-        'response': respuesta,
+        'response': sobreDeRespuesta(tipo, respuesta),
         'response_ms': milisegundos,
         'hint_used': ayudaUsada ? true : null,
       }),
@@ -878,6 +956,7 @@ class RepoEvaluacion {
   Future<RegistroRespuesta> responder(
     String intentoId, {
     required String preguntaId,
+    required TipoPregunta tipo,
     required Object respuesta,
     int? milisegundos,
     String? clave,
@@ -888,7 +967,7 @@ class RepoEvaluacion {
           clave ?? claveDeterminista('assessment-answer:$intentoId', preguntaId),
       cuerpo: _cuerpo(<String, Object?>{
         'question_id': preguntaId,
-        'response': respuesta,
+        'response': sobreDeRespuesta(tipo, respuesta),
         'response_ms': milisegundos,
       }),
     );

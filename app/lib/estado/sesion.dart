@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../data/almacen_tokens.dart';
+import '../data/api_client.dart';
 import '../data/errores.dart';
 import '../datos/repositorios.dart';
 
@@ -115,7 +116,10 @@ class ControladorSesion extends ChangeNotifier {
       () => _repos.auth.registrar(
         correo: correo,
         contrasena: contrasena,
-        zonaHoraria: DateTime.now().timeZoneName,
+        // Solo si el sistema sabe decirla en forma IANA: guardar el nombre
+        // localizado ("Hora verano Sudamérica Pacífico") dejaría al perfil con
+        // una zona que el Reino no reconoce y que el aprendiz vería en Ajustes.
+        zonaHoraria: ApiClient.zonaDelSistema(),
         idioma: 'es-CL',
       ),
     );
@@ -243,6 +247,7 @@ class ControladorSesion extends ChangeNotifier {
   Future<void> cargarAjustes() async {
     try {
       _ajustes = await _repos.auth.ajustes();
+      _anotarZonaHoraria();
       _error = null;
     } catch (e) {
       _error = _comoError(e);
@@ -288,6 +293,7 @@ class ControladorSesion extends ChangeNotifier {
         zonaHoraria: zonaHoraria,
         idioma: idioma,
       );
+      _anotarZonaHoraria();
       _error = null;
       notifyListeners();
       return true;
@@ -295,6 +301,19 @@ class ControladorSesion extends ChangeNotifier {
       _error = _comoError(e);
       notifyListeners();
       return false;
+    }
+  }
+
+  /// Le pasa al cliente HTTP la zona horaria que el aprendiz tiene guardada.
+  ///
+  /// El Reino decide con ella de qué día es cada actividad, y de eso dependen
+  /// la racha y las misiones diarias. Fuera de un móvil el sistema no siempre
+  /// sabe decir su zona en forma IANA (un Windows en español devuelve "Hora
+  /// verano Sudamérica Pacífico"), así que el dato del perfil manda.
+  void _anotarZonaHoraria() {
+    final String? zona = _ajustes?.zonaHoraria;
+    if (zona != null && zona.isNotEmpty) {
+      _repos.cliente.zonaHorariaIana = zona;
     }
   }
 
@@ -342,6 +361,7 @@ class ControladorSesion extends ChangeNotifier {
       _usuario = yo.usuario ?? _usuario;
       _personaje = yo.personaje ?? _personaje;
       _ajustes = yo.ajustes ?? _ajustes;
+      _anotarZonaHoraria();
       _tieneRuta = yo.tieneRuta;
       _error = null;
       _fase = yo.tienePersonaje ? FaseSesion.lista : FaseSesion.sinPersonaje;
