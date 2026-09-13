@@ -13,15 +13,14 @@ modelo el error concreto; agotados los intentos se lanza `SalidaInvalida`
 
 from __future__ import annotations
 
-import json
-
 import copy
+import json
 from typing import Annotated, Any, Final, Literal, TypeVar
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ValidationError, field_validator
 
-from app.core.logging import get_logger
 from app.core.errors import ExternalServiceError
+from app.core.logging import get_logger
 from app.models.enums import (
     CoverageLevel,
     DifficultyLevel,
@@ -456,7 +455,7 @@ def _resumen_errores(error: ValidationError, maximo: int = 6) -> str:
     return "\n".join(lineas)
 
 
-def validar(modelo: type[ModeloSalida], bruto: Any) -> ModeloSalida:
+def validar[ModeloSalida: EsquemaSalida](modelo: type[ModeloSalida], bruto: Any) -> ModeloSalida:
     """Valida una salida cruda contra su modelo Pydantic."""
     if not isinstance(bruto, dict):
         raise SalidaInvalida(
@@ -466,7 +465,7 @@ def validar(modelo: type[ModeloSalida], bruto: Any) -> ModeloSalida:
     return modelo.model_validate(bruto)
 
 
-def generar_validado(
+def generar_validado[ModeloSalida: EsquemaSalida](
     proveedor: ProveedorIA,
     solicitud: SolicitudIA,
     modelo: type[ModeloSalida],
@@ -534,7 +533,6 @@ def generar_validado(
 
 __all__ = [
     "CLAVES_NO_SOPORTADAS",
-    "esquema_para_proveedor",
     "ESQUEMAS",
     "TIPOS_BLOQUE_GENERABLES",
     "TIPOS_PREGUNTA_MVP",
@@ -553,6 +551,7 @@ __all__ = [
     "SalidaVeredicto",
     "esquema_de_tarea",
     "esquema_estricto",
+    "esquema_para_proveedor",
     "generar_validado",
     "validar",
 ]

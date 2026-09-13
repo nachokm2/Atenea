@@ -33,10 +33,12 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, File, Form, Query, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, Query, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import CurrentUser, DbSession, IdempotencyDep
+from app.core.limites import freno
 from app.models.enums import DocumentStatus
 from app.models.ingestion import Document, DocumentVersion, GenerationJob
 from app.modules.gamification.servicio_config import obtener_servicio_config
@@ -155,6 +157,9 @@ async def _leer_subida(archivo: UploadFile, *, max_bytes: int) -> bytes:
     status_code=status.HTTP_201_CREATED,
     tags=["material"],
     summary="Sube un archivo y encola su ingesta",
+    # Como dependencia y no como decorador: esta ruta usa `UploadFile` y `Form`,
+    # y el envoltorio del decorador impide que FastAPI resuelva esos tipos.
+    dependencies=[Depends(freno(settings.rate_limit_upload))],
 )
 async def subir_documento(
     user: CurrentUser,

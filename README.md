@@ -47,11 +47,36 @@ trabajos corriendo.
 .\scripts\dev.ps1 worker
 ```
 
+## Ponerla en el mundo
+
+El despliegue se describe entero en [.railway/railway.ts](.railway/railway.ts), que
+sustituye al antiguo `railway.toml`: Railway declaró obsoleto aquel formato y no
+admite servicios nuevos con él.
+
+```bash
+railway login
+railway link
+railway config plan     # enseña qué cambiaría, sin tocar nada
+railway config apply    # lo aplica tras confirmar
+```
+
+Los secretos no viven en ese archivo. Se cargan una vez en el panel de Railway:
+`JWT_SECRET`, `ANTHROPIC_API_KEY` y `VOYAGE_API_KEY`. Si falta alguno, o si el
+secreto de firma sigue siendo el de desarrollo, **la aplicación no arranca** y
+dice exactamente qué falta. Es a propósito: un servidor mal configurado no falla,
+responde 200 y hace daño en silencio.
+
+Un detalle que conviene conocer antes de escalar: el material que sube el
+aprendiz vive en disco, y en Railway un volumen se monta en un solo servicio. Por
+eso hay **un** servicio y el procesador de trabajos corre dentro de la propia API
+(`WORKER_EN_PROCESO`). El día que ese material viva en un bucket, se apaga esa
+variable y el worker vuelve a ser un servicio aparte, que escala mejor.
+
 ## Comprobar que todo sigue en pie
 
 ```powershell
-.\scripts\dev.ps1 test        # 475 pruebas del backend
-cd app; flutter test          # 19 pruebas del cliente
+.\scripts\dev.ps1 test        # 498 pruebas del backend
+cd app; flutter test          # 29 pruebas del cliente
 python scripts\recorrido_mvp.py   # recorrido completo del primer día contra la API
 python scripts\probar_ia.py       # genera una ruta con Claude de verdad (cuesta dinero)
 ```

@@ -129,7 +129,7 @@ def test_un_fallo_reintentable_vuelve_a_pendiente_pero_espera(db: Session) -> No
 
 def test_un_fallo_no_reintentable_cierra_el_trabajo(db: Session) -> None:
     """Material ilegible o esquema roto: reintentar daría el mismo resultado."""
-    trabajo = cola.encolar(db, job_type=JobType.DOCUMENT_INGESTION, queue=cola.COLA_INGESTA)
+    cola.encolar(db, job_type=JobType.DOCUMENT_INGESTION, queue=cola.COLA_INGESTA)
     tomado = cola.tomar_siguiente(db, colas=[cola.COLA_INGESTA])
     cola.fallar(db, tomado, "El PDF está escaneado.", reintentable=False)
     assert tomado.status == JobStatus.FAILED

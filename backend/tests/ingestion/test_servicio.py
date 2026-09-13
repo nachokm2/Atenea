@@ -17,6 +17,7 @@ from typing import Any
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
+from tests.ingestion.conftest import pdf_con_texto, pdf_en_blanco, texto_largo
 
 from app.core.errors import DEFAULT_MESSAGES, NotFound, ValidationFailed
 from app.models.enums import DocumentStatus, DocumentType, EventType, JobStatus, JobType
@@ -25,7 +26,6 @@ from app.models.identity import User
 from app.models.ingestion import Document, DocumentChunk, DocumentVersion, KnowledgeBase
 from app.modules.ingestion import almacenamiento, servicio
 from app.worker import cola, principal
-from tests.ingestion.conftest import pdf_con_texto, pdf_en_blanco, texto_largo
 
 MATERIAL = (
     "# Manual de SQL\n\n"

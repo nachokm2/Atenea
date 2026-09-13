@@ -25,15 +25,15 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Query, Response, status
-
-from app.core.deps import CurrentUser, DbSession, IdempotencyDep
 import sqlalchemy as sa
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
+from app.core.deps import CurrentUser, DbSession, IdempotencyDep
 from app.core.errors import AteneaError, NotFound, ValidationFailed
-from app.core.time import utcnow
-from app.models.content import LessonBlock, PathModule, Question
+from app.core.limites import freno
+from app.models.content import LearningPath, Lesson, LessonBlock, PathModule, Question, Topic
 from app.models.enums import (
     ContentStatus,
     EventType,
@@ -42,7 +42,7 @@ from app.models.enums import (
     ProvenanceContentType,
 )
 from app.models.ingestion import Document, KnowledgeBase
-from app.worker import cola
+from app.models.progress import UserPathProgress
 from app.modules.content import (
     areas as servicio_areas,
     evaluaciones as servicio_evaluaciones,
@@ -77,8 +77,8 @@ from app.modules.content.schemas import (
     Page,
     PageMeta,
     PathConfirmIn,
-    PathCreateIn,
     PathCreatedOut,
+    PathCreateIn,
     PathDetailOut,
     PathSummaryOut,
     PathUpdateIn,
@@ -91,10 +91,11 @@ from app.modules.content.schemas import (
     TopicNodeOut,
     WeakTopicOut,
 )
-from app.modules.gamification.eventos import registrar_evento
+from app.modules.gamification.eventos import buscar_por_clave, registrar_evento
 from app.modules.gamification.recompensas import ReciboRecompensas
 from app.modules.gamification.servicio_config import ServicioConfig
 from app.modules.progress import a_float
+from app.worker import cola
 
 router = APIRouter()
 
@@ -392,6 +393,8 @@ def _biblioteca_de_documentos(
     response_model=PathCreatedOut,
     status_code=status.HTTP_201_CREATED,
     summary="Crea una ruta y encola su diseño",
+    # 5 por minuto (§8.7): cada llamada encarga un diseño a Claude y gasta dinero.
+    dependencies=[Depends(freno("5/minute"))],
 )
 def crear_ruta(
     cuerpo: PathCreateIn,
@@ -469,7 +472,7 @@ def obtener_ruta(path_id: uuid.UUID, db: DbSession, user: CurrentUser) -> PathDe
 
 
 def _encolar_primer_modulo(
-    db: Session, usuario_id: uuid.UUID, path_id: uuid.UUID, detalle: object
+    db: Session, usuario_id: uuid.UUID, path_id: uuid.UUID, detalle: object  # noqa: ARG001 - firma fijada por quien llama
 ) -> None:
     """Encola la redacción del primer módulo que aún no tenga contenido.
 
@@ -668,6 +671,9 @@ def iniciar_leccion(
     "/activities/{activity_id}/answers",
     response_model=AnswerResultOut,
     summary="Envía una respuesta y recibe la corrección",
+    # 20 por minuto (§8.7): responder lleva su tiempo, y una respuesta abierta
+    # puede acabar en una llamada al juez.
+    dependencies=[Depends(freno("20/minute"))],
 )
 def responder_actividad(
     activity_id: uuid.UUID,
@@ -824,24 +830,48 @@ def reportar_contenido(
 ) -> Response:
     """Marca el contenido como reportado y emite `CONTENT_REPORTED` (§7.6, §4.2).
 
-    Una pregunta reportada pasa a `FLAGGED`, lo que la saca del pool y de las
-    evaluaciones (§3.2); el módulo `ai` la regenera a partir del evento.
+    Dos guardas que antes no había, y que juntas cerraban un agujero grande.
+
+    La primera es de propiedad: solo se puede reportar contenido al que se tiene
+    acceso. Sin ella, cualquier cuenta recién registrada podía enumerar las
+    preguntas de una Ruta del Reino, que es la misma para todo el mundo, y
+    dejarlas marcadas una a una: el filtro de exclusión es global, así que el
+    Reino entero se quedaba sin preguntas.
+
+    La segunda es de umbral. En el material propio, un reporte basta: es del
+    aprendiz y nadie más lo ve. En una Ruta compartida hacen falta varios
+    reportes de **personas distintas** antes de retirar nada, porque retirarlo
+    afecta a todos. Que sean personas distintas lo garantiza la clave de
+    idempotencia, que ya no lleva la hora: reportar dos veces lo mismo cuenta una.
     """
+    clave = f"content-reported:{user.id}:{cuerpo.content_id}"
+    ya_reportado = buscar_por_clave(db, clave) is not None
+
     if cuerpo.content_type == "question":
         pregunta = db.get(Question, cuerpo.content_id)
         if pregunta is None:
             raise NotFound()
-        pregunta.is_flagged = True
-        pregunta.flag_reason = cuerpo.reason
-        pregunta.flag_count = int(pregunta.flag_count) + 1
-        pregunta.content_status = ContentStatus.FLAGGED
+        compartido = _es_contenido_compartido(db, pregunta.topic_id)
+        _asegurar_acceso_al_tema(db, user.id, pregunta.topic_id)
+        if not ya_reportado:
+            pregunta.is_flagged = True
+            pregunta.flag_reason = cuerpo.reason
+            pregunta.flag_count = int(pregunta.flag_count) + 1
+            umbral = settings.content_flag_threshold if compartido else 1
+            if int(pregunta.flag_count) >= umbral:
+                pregunta.content_status = ContentStatus.FLAGGED
         contenido_tipo = ProvenanceContentType.QUESTION
     else:
         bloque = db.get(LessonBlock, cuerpo.content_id)
         if bloque is None:
             raise NotFound()
-        bloque.is_flagged = True
-        bloque.flag_reason = cuerpo.reason
+        leccion = db.get(Lesson, bloque.lesson_id)
+        if leccion is None:
+            raise NotFound()
+        _asegurar_acceso_al_tema(db, user.id, leccion.topic_id)
+        if not ya_reportado:
+            bloque.is_flagged = True
+            bloque.flag_reason = cuerpo.reason
         contenido_tipo = ProvenanceContentType.LESSON_BLOCK
     db.flush()
 
@@ -856,10 +886,54 @@ def reportar_contenido(
             "comment": cuerpo.comment or "",
             "provenance_type": contenido_tipo.value,
         },
-        idempotency_key=f"content-reported:{user.id}:{cuerpo.content_id}:{int(utcnow().timestamp())}",
+        idempotency_key=clave,
         source_module="content",
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def _ruta_del_tema(db: Session, topic_id: uuid.UUID | None) -> LearningPath | None:
+    """Ruta a la que pertenece un tema, subiendo por su módulo."""
+    if topic_id is None:
+        return None
+    return db.execute(
+        sa.select(LearningPath)
+        .join(PathModule, PathModule.learning_path_id == LearningPath.id)
+        .join(Topic, Topic.module_id == PathModule.id)
+        .where(Topic.id == topic_id)
+    ).scalar_one_or_none()
+
+
+def _es_contenido_compartido(db: Session, topic_id: uuid.UUID | None) -> bool:
+    """¿El tema vive en una Ruta del Reino, que ven todos los aprendices?
+
+    Una Ruta del Reino no tiene dueño (`user_id` nulo): es la misma fila para
+    todo el mundo, así que marcar una de sus preguntas se la quita a todos.
+    """
+    ruta = _ruta_del_tema(db, topic_id)
+    return bool(ruta is not None and ruta.user_id is None)
+
+
+def _asegurar_acceso_al_tema(db: Session, usuario_id: uuid.UUID, topic_id: uuid.UUID | None) -> None:
+    """Exige que el aprendiz pueda ver ese contenido; si no, 404 (§8.7).
+
+    Se responde 404 y no 403 a propósito: decir "no puedes" confirma que existe.
+    """
+    ruta = _ruta_del_tema(db, topic_id)
+    if ruta is None:
+        raise NotFound()
+    if ruta.user_id == usuario_id:
+        return
+    if ruta.user_id is None:
+        adoptada = db.execute(
+            sa.select(UserPathProgress.id).where(
+                UserPathProgress.user_id == usuario_id,
+                UserPathProgress.learning_path_id == ruta.id,
+            )
+        ).scalar_one_or_none()
+        if adoptada is not None:
+            return
+    raise NotFound()
 
 
 # ---------------------------------------------------------------------------

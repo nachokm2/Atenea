@@ -68,9 +68,9 @@ from app.seeds.areas import AREAS, AreaSemilla
 from app.seeds.config_juego import PARAMETROS
 from app.seeds.items import ITEMS, ItemSemilla, listados_tienda
 from app.seeds.logros import catalogo as catalogo_logros
-from app.seeds.reglas_recompensa import definiciones as reglas_recompensa
 from app.seeds.misiones import PLANTILLAS
 from app.seeds.niveles import filas_nivel
+from app.seeds.reglas_recompensa import definiciones as reglas_recompensa
 from app.seeds.ruta_semilla_sql import (
     RUTA,
     ModuloSemilla,
@@ -702,7 +702,7 @@ def sembrar_reglas_recompensa(db: Session, resumen: Resumen) -> None:
     hace que terminar una lección se sienta. Cada regla apunta a su clave de
     `game_configs`, nunca a una cifra escrita a mano.
     """
-    from app.models.gamification import RewardRule
+    from app.models.gamification import RewardRule  # noqa: PLC0415 - cruce entre módulos (§1.3)
 
     for definicion in reglas_recompensa():
         valores = dict(definicion)

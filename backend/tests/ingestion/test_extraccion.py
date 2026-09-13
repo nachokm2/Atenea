@@ -8,11 +8,11 @@ con un `500`.
 from __future__ import annotations
 
 import pytest
+from tests.ingestion.conftest import docx_minimo, pdf_con_texto, pdf_en_blanco, texto_largo
 
 from app.core.errors import DEFAULT_MESSAGES
 from app.models.enums import DocumentType
 from app.modules.ingestion import extraccion
-from tests.ingestion.conftest import docx_minimo, pdf_con_texto, pdf_en_blanco, texto_largo
 
 # ---------------------------------------------------------------------------
 # Tipo real por contenido, nunca por extensión (§8.7)

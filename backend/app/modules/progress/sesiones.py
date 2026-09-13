@@ -313,7 +313,9 @@ class ServicioSesiones:
             # día y, con él, el objetivo diario en minutos y la racha. Por eso
             # este evento pasa por el motor de gamificación y no se limita a
             # insertar la fila, como sí hacen los eventos meramente analíticos.
-            from app.modules.gamification import eventos as eventos_gamificacion
+            from app.modules.gamification import (  # noqa: PLC0415 - cruce perezoso entre módulos (§1.3)
+                eventos as eventos_gamificacion,
+            )
 
             eventos_gamificacion.registrar_evento(
                 self.db,

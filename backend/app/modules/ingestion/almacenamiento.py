@@ -22,7 +22,6 @@ El directorio base sale de `settings.storage_path`; las pruebas lo redirigen con
 from __future__ import annotations
 
 import hashlib
-import os
 import uuid
 from pathlib import Path
 
@@ -117,7 +116,8 @@ def guardar(storage_key: str, datos: bytes) -> int:
     destino.parent.mkdir(parents=True, exist_ok=True)
     temporal = destino.with_name(f".{destino.name}.{uuid.uuid4().hex[:8]}.tmp")
     temporal.write_bytes(datos)
-    os.replace(temporal, destino)
+    # Reemplazo atómico: o está el archivo entero o no está ninguno.
+    temporal.replace(destino)
     return len(datos)
 
 

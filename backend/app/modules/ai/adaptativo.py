@@ -292,7 +292,7 @@ class Decision:
         }
 
 
-def explicaciones_previas(db: Session, usuario_id: uuid.UUID, topic_id: uuid.UUID) -> int:
+def explicaciones_previas(db: Session, usuario_id: uuid.UUID, topic_id: uuid.UUID) -> int:  # noqa: ARG001 - firma fijada por quien llama
     """Cuántas re-explicaciones se han generado ya para ese tema.
 
     Se cuenta sobre `content_provenance` (el rastro que deja cada explicación); es lo

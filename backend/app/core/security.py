@@ -17,7 +17,7 @@ import hashlib
 import hmac
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any, Final
 
 import bcrypt as _bcrypt
@@ -32,7 +32,7 @@ from app.core.errors import Unauthorized
 # El backend funciona igual; el parche solo evita el ruido en los logs.
 if not hasattr(_bcrypt, "__about__"):  # pragma: no cover - depende de la versión instalada
 
-    class _BcryptAbout:  # noqa: D401 - envoltorio mínimo
+    class _BcryptAbout:
         """Envoltorio de compatibilidad que expone la versión de bcrypt a passlib."""
 
         __version__ = getattr(_bcrypt, "__version__", "4.0.0")
@@ -92,7 +92,7 @@ def needs_rehash(password_hash: str) -> bool:
 
 def _now() -> datetime:
     """Instante actual en UTC (nunca `datetime.now()` sin zona)."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _encode(

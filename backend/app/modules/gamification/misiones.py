@@ -17,8 +17,7 @@ from __future__ import annotations
 import random
 import uuid
 from dataclasses import dataclass
-from datetime import date as date_type
-from datetime import datetime, timedelta
+from datetime import date as date_type, datetime, timedelta
 from typing import Any
 
 import sqlalchemy as sa
@@ -279,7 +278,7 @@ def asignar_misiones_diarias(
     sin_repetir = cfg.obtener_int("missions.daily.no_repeat_days")
     recientes = _codigos_recientes(db, usuario_id, fecha_local, sin_repetir)
 
-    azar = random.Random(_semilla(usuario_id, fecha_local))  # noqa: S311 - determinismo, no criptografía
+    azar = random.Random(_semilla(usuario_id, fecha_local))
     disponibles = plantillas_candidatas(
         db, MissionScope.DAILY, goal_type=goal_type, contexto=contexto, excluir_codigos=recientes
     )
@@ -296,10 +295,7 @@ def asignar_misiones_diarias(
         if not restantes:
             break
         etiqueta = mezcla[posicion] if posicion < len(mezcla) else "variety"
-        if etiqueta == "variety":
-            tier = azar.choice(TIERS_VARIEDAD)
-        else:
-            tier = MissionTier(etiqueta)
+        tier = azar.choice(TIERS_VARIEDAD) if etiqueta == "variety" else MissionTier(etiqueta)
         plantilla = _elegir_ponderado(azar, restantes)
         usadas.add(plantilla.id)
         creadas.append(

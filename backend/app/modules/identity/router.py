@@ -30,13 +30,18 @@ TODO(A1/A8): aplicar el límite de peticiones de §8.7 (60/min general) cuando
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Header, Request, Response, status
+from fastapi import APIRouter, Depends, Header, Request, Response, status
 
+from app.core.config import settings
 from app.core.deps import CurrentUser, DbSession, IdempotencyDep
+from app.core.limites import freno
 from app.modules.gamification.servicio_config import ServicioConfig
-from app.modules.identity import avatar as servicio_avatar
-from app.modules.identity import personaje as servicio_personaje
-from app.modules.identity import servicio_auth, servicio_usuario
+from app.modules.identity import (
+    avatar as servicio_avatar,
+    personaje as servicio_personaje,
+    servicio_auth,
+    servicio_usuario,
+)
 from app.modules.identity.schemas import (
     AccountDeleteIn,
     AuthTokens,
@@ -111,7 +116,16 @@ def registrar(
     return _tokens(par)
 
 
-@router.post("/auth/login", response_model=AuthTokens, tags=["auth"], summary="Iniciar sesión")
+@router.post(
+    "/auth/login",
+    response_model=AuthTokens,
+    tags=["auth"],
+    summary="Iniciar sesión",
+    # Sin freno, probar contraseñas en masa es gratis, y cada intento cuesta un
+    # bcrypt de coste 12 sobre un backend síncrono: además de un robo, es una
+    # denegación de servicio barata.
+    dependencies=[Depends(freno(settings.rate_limit_login))],
+)
 def iniciar_sesion(cuerpo: LoginIn, request: Request, db: DbSession) -> AuthTokens:
     """Valida credenciales y emite un par de tokens nuevo."""
     agente, ip = _cliente(request)

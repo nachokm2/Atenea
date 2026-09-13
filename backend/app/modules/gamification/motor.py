@@ -22,8 +22,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import date as date_type
-from datetime import datetime
+from datetime import date as date_type, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
@@ -41,8 +40,7 @@ from app.models.enums import (
     XPSource,
 )
 from app.models.gamification import DomainEvent, Streak, UserMission
-from app.modules.gamification import logros, misiones, niveles, rachas, reglas
-from app.modules.gamification import xp as motor_xp
+from app.modules.gamification import logros, misiones, niveles, rachas, reglas, xp as motor_xp
 from app.modules.gamification.recompensas import (
     AgregadorRecibo,
     ConocimientoRecibo,
@@ -537,7 +535,7 @@ def _xp_de_repaso(db: Session, ctx: Contexto, evento: DomainEvent) -> int:
 
 
 def _sincronizar_cache_personaje(
-    db: Session, usuario_id: uuid.UUID, xp_total: int, estado: "niveles.EstadoNivel"
+    db: Session, usuario_id: uuid.UUID, xp_total: int, estado: niveles.EstadoNivel
 ) -> None:
     """Refresca la caché desnormalizada de `characters` tras mover el XP.
 
@@ -548,7 +546,9 @@ def _sincronizar_cache_personaje(
     esto el panel y el perfil mostrarían siempre un cero aunque el ledger tenga
     la experiencia: es la diferencia entre "gané XP" y "veo que gané XP".
     """
-    from app.models.identity import Character  # import perezoso: evita el ciclo
+    from app.models.identity import (  # noqa: PLC0415 - cruce perezoso entre módulos (§1.3)
+        Character,  # import perezoso: evita el ciclo
+    )
 
     db.execute(
         sa_update(Character)

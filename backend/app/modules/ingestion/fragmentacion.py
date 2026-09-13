@@ -105,7 +105,7 @@ class ParametrosTroceo:
     @property
     def tokens_solape(self) -> int:
         """Tokens que se arrastran de un fragmento de prosa al siguiente."""
-        return max(0, int(round(self.target_tokens * self.overlap_pct)))
+        return max(0, round(self.target_tokens * self.overlap_pct))
 
 
 def parametros_de(configuracion: dict | None) -> ParametrosTroceo:
@@ -285,7 +285,7 @@ def analizar_bloques(texto: str) -> list[Bloque]:
 # ---------------------------------------------------------------------------
 
 
-def _unidades_de_corte(texto: str, maximo: int) -> list[str]:
+def _unidades_de_corte(texto: str, maximo: int) -> list[str]:  # noqa: ARG001 - firma fijada por quien llama
     """Unidades por las que se puede partir un párrafo: frases y, si no hay, palabras.
 
     Un PDF mal extraído produce párrafos kilométricos sin un solo punto. Cortarlos por

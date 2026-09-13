@@ -361,7 +361,9 @@ def registrar_previsualizacion(
     momento: dt.datetime | None = None,
 ) -> None:
     """Registra `ITEM_PREVIEWED` (analítica del botón "Probar" de la tienda)."""
-    from app.models.identity import User  # import local: evita un ciclo con `identity`
+    from app.models.identity import (  # noqa: PLC0415 - cruce perezoso entre módulos (§1.3)
+        User,  # import local: evita un ciclo con `identity`
+    )
 
     item = obtener_item(db, usuario_id, item_id)
     usuario = db.get(User, usuario_id)

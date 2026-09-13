@@ -19,6 +19,7 @@ Garantías (parámetros en `ai.sql_sandbox`, CONTRACT.md §5.8):
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import threading
 from dataclasses import dataclass, field
@@ -260,7 +261,7 @@ def ejecutar_consulta(
                 resultado.truncated = True
                 filas = filas[: limites.max_rows]
             resultado.rows = _normalizar_filas([tuple(fila) for fila in filas])
-        except BaseException as fallo:  # noqa: BLE001 - se reenvía al hilo llamante
+        except BaseException as fallo:
             error.append(fallo)
 
     inicio = dt.datetime.now(dt.UTC)
@@ -269,10 +270,10 @@ def ejecutar_consulta(
     hilo.join(timeout=max(0.05, limites.timeout_ms / 1000))
     if hilo.is_alive():
         interrumpida.set()
-        try:
+        # La conexión puede estar ya cerrada: interrumpir es un intento, no una
+        # garantía, y el hilo se abandona igualmente al agotar su plazo.
+        with contextlib.suppress(Exception):  # pragma: no cover
             conexion.interrupt()
-        except Exception:  # pragma: no cover - la conexión puede estar ya cerrada
-            pass
         hilo.join(timeout=2.0)
     resultado.elapsed_ms = int((dt.datetime.now(dt.UTC) - inicio).total_seconds() * 1000)
 

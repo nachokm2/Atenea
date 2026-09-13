@@ -10,14 +10,12 @@ from __future__ import annotations
 import uuid
 
 import pytest
-
-from app.core.errors import AteneaError
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.core.db import get_db
 from app.core.deps import get_current_user
-from app.core.errors import register_exception_handlers
+from app.core.errors import AteneaError, register_exception_handlers
 from app.models.enums import GoldSource, ItemSlot
 from app.modules.economy import equipamiento, monedero, requisitos
 from app.modules.economy.router import router

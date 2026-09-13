@@ -1,0 +1,32 @@
+# Lo que no tiene por qué viajar a la imagen.
+#
+# Sin este archivo, los `__pycache__` de Windows y el entorno virtual local
+# acaban dentro del contenedor: engordan la imagen, invalidan la caché de capas
+# en cada construcción y pueden meter bytecode compilado con otra versión de
+# Python que la del contenedor.
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Nunca: son secretos.
+.env
+.env.*
+!.env.example
+
+# Cosas del repositorio que la imagen no usa.
+.git/
+.github/
+.railway/
+app/
+arte/
+docs/
+scripts/
+storage/
+*.md
+!backend/CONTRACT.md

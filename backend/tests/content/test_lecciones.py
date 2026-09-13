@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 from app.core.errors import AteneaError
 from app.core.time import utcnow
-from app.models.enums import AttemptStatus, AttemptResult, ModuleStatus, ProgressState
+from app.models.enums import AttemptResult, AttemptStatus, ModuleStatus, ProgressState
 from app.models.progress import (
     QuestionAttempt,
     UserLessonProgress,

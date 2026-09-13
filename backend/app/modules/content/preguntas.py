@@ -143,7 +143,7 @@ def muestrear_repaso(
     cantidad = tamano_de_repaso(cfg, len(pool))
     if cantidad >= len(pool):
         return pool
-    azar = random.Random(semilla)  # noqa: S311 - muestreo pedagógico, no criptográfico
+    azar = random.Random(semilla)
     return azar.sample(pool, cantidad)
 
 
@@ -170,7 +170,7 @@ def muestrear_banco(
     if cantidad <= 0 or not banco:
         return []
     vistas = set(previas)
-    azar = random.Random(semilla)  # noqa: S311 - muestreo pedagógico, no criptográfico
+    azar = random.Random(semilla)
 
     frescas = [q for q in banco if q.id not in vistas]
     repetibles = [q for q in banco if q.id in vistas]

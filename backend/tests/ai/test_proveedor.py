@@ -25,7 +25,7 @@ def test_fabrica_rechaza_un_proveedor_desconocido() -> None:
         prov.crear_proveedor("gpt")
 
 
-def test_enrutamiento_por_tarea(cfg) -> None:  # noqa: ANN001 - fixture del conftest
+def test_enrutamiento_por_tarea(cfg) -> None:
     """Cada tarea usa el modelo que fija `ai.models` (§5.8), nunca uno escrito a mano."""
     assert prov.modelo_para_tarea(cfg, prov.TAREA_PATH_DESIGN) == "claude-opus-5"
     assert prov.modelo_para_tarea(cfg, prov.TAREA_LESSON) == "claude-sonnet-5"

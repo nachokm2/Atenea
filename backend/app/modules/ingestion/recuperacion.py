@@ -99,7 +99,7 @@ def parametros_de(cfg: Any | None = None) -> ParametrosRecuperacion:
     if cfg is not None:
         try:
             datos.update(cfg.obtener_json("ai.retrieval", RECUPERACION_POR_DEFECTO) or {})
-        except Exception:  # noqa: BLE001 - sin configuración sembrada se usa el respaldo
+        except Exception:
             logger.debug("recuperacion_config_ausente")
     return ParametrosRecuperacion(
         vector_top_k=max(1, int(datos["vector_top_k"])),
@@ -285,7 +285,7 @@ def recuperar(
     ajustes = ajustes_de(cfg)
     try:
         vector = proveedor.embeber([texto], consulta=True)[0]
-    except Exception as exc:  # noqa: BLE001 - la rama léxica debe seguir funcionando
+    except Exception as exc:
         logger.warning("recuperacion_sin_vector", error=str(exc))
         vector = []
 

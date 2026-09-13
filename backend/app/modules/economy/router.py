@@ -26,9 +26,10 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Response, status
 
 from app.core.deps import CurrentUser, DbSession, IdempotencyDep
+from app.core.limites import freno
 from app.models.enums import ItemOrigin, ItemRarity, ItemSlot
 from app.modules.economy import equipamiento, inventario, monedero, tienda
 from app.modules.economy.schemas import (
@@ -98,7 +99,7 @@ def _compra(db, usuario_id: uuid.UUID, resultado: tienda.ResultadoCompra) -> Pur
     """Adapta el resultado de una compra, incluyendo las capas del avatar."""
     try:
         capas = equipamiento.configuracion_avatar(db, usuario_id)["layers"]
-    except Exception:  # noqa: BLE001 - sin personaje aún no hay avatar que pintar
+    except Exception:
         capas = []
     return PurchaseOut(
         purchase=PurchaseRecordOut.model_validate(resultado.purchase),
@@ -148,6 +149,8 @@ def obtener_tienda(
     response_model=PurchaseOut,
     tags=["tienda"],
     summary="Compra atómica de un cosmético",
+    # 10 por minuto (§8.7): mueve oro, y conviene que no se mueva a ráfagas.
+    dependencies=[Depends(freno("10/minute"))],
 )
 def comprar_item(
     user: CurrentUser,

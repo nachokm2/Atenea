@@ -16,8 +16,7 @@ ninguna ruta recibe un identificador de usuario.
 
 from __future__ import annotations
 
-from datetime import date as date_type
-from datetime import timedelta
+from datetime import date as date_type, timedelta
 
 import sqlalchemy as sa
 from fastapi import APIRouter, Query

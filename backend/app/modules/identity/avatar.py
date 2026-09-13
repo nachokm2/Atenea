@@ -25,8 +25,7 @@ from app.core.time import utcnow
 from app.models.enums import EventType
 from app.models.identity import AvatarConfig, User
 from app.modules.economy import equipamiento
-from app.modules.identity import personaje as servicio_personaje
-from app.modules.identity import servicio_usuario
+from app.modules.identity import personaje as servicio_personaje, servicio_usuario
 
 #: Campos de `avatar_configs` que el usuario puede cambiar desde la API.
 CAMPOS_RASGOS: tuple[str, ...] = (

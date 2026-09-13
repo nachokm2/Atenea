@@ -17,6 +17,7 @@ import sqlalchemy as sa
 from app.core.time import utcnow
 from app.models.content import LearningPath
 from app.models.progress import StudyActivity
+from app.modules.progress.progreso import ServicioProgreso
 
 pytestmark = pytest.mark.db
 
@@ -154,11 +155,9 @@ def test_la_leccion_ajena_responde_404(cliente):
     assert respuesta.json()["error"]["code"] == "NOT_FOUND"
 
 
-def test_reportar_contenido_marca_la_pregunta_y_devuelve_204(cliente, db, contenido):
-    """`POST /content/report` marca la pregunta como reportada y la saca del pool (§3.2)."""
-    pregunta = contenido.preguntas_l1[0]
-
-    respuesta = cliente.post(
+def _reportar(cliente, pregunta):
+    """Envía un reporte de esa pregunta con el cliente dado."""
+    return cliente.post(
         "/api/v1/content/report",
         json={
             "content_type": "question",
@@ -168,11 +167,55 @@ def test_reportar_contenido_marca_la_pregunta_y_devuelve_204(cliente, db, conten
         },
     )
 
-    assert respuesta.status_code == 204
+
+def test_reportar_contenido_ajeno_responde_404(cliente, contenido):
+    """No se puede reportar contenido al que no se tiene acceso.
+
+    La Ruta del Reino del fixture no está adoptada. Sin esta guarda, cualquier
+    cuenta recién registrada podía enumerar sus preguntas y marcarlas una a una:
+    el filtro de exclusión es global, así que el Reino entero se quedaba sin
+    preguntas. Se responde 404 y no 403 porque decir "no puedes" confirma que
+    existe.
+    """
+    respuesta = _reportar(cliente, contenido.preguntas_l1[0])
+
+    assert respuesta.status_code == 404
+
+
+def test_un_solo_reporte_no_retira_contenido_compartido(cliente, db, usuario, contenido):
+    """En una Ruta del Reino hacen falta varios reportes de personas distintas.
+
+    Retirar una pregunta compartida se la quita a todos, así que un reporte
+    suelto la anota pero no la saca del pool.
+    """
+    ServicioProgreso(db).asegurar_progreso_ruta(usuario.id, contenido.ruta.id)
+    db.flush()
+    pregunta = contenido.preguntas_l1[0]
+
+    assert _reportar(cliente, pregunta).status_code == 204
+
     db.refresh(pregunta)
     assert pregunta.is_flagged is True
     assert pregunta.flag_reason == "incorrect"
-    assert pregunta.content_status.value == "flagged"
+    assert pregunta.flag_count == 1
+    assert pregunta.content_status.value != "flagged", "un solo reporte no retira nada"
+
+
+def test_reportar_dos_veces_lo_mismo_cuenta_una(cliente, db, usuario, contenido):
+    """El umbral mide personas distintas, no insistencia.
+
+    La clave de idempotencia llevaba la hora, así que el mismo aprendiz podía
+    contar tantas veces como quisiera. Ya no.
+    """
+    ServicioProgreso(db).asegurar_progreso_ruta(usuario.id, contenido.ruta.id)
+    db.flush()
+    pregunta = contenido.preguntas_l1[0]
+
+    assert _reportar(cliente, pregunta).status_code == 204
+    assert _reportar(cliente, pregunta).status_code == 204
+
+    db.refresh(pregunta)
+    assert pregunta.flag_count == 1
 
 
 # ---------------------------------------------------------------------------

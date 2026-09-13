@@ -27,8 +27,7 @@ from app.core.time import is_valid_timezone, user_local_date, utcnow
 from app.models.enums import EventType, GoalType
 from app.models.gamification import DailyGoal, DomainEvent
 from app.models.identity import Character, User, UserSettings
-from app.modules.gamification import eventos as bus
-from app.modules.gamification import rachas
+from app.modules.gamification import eventos as bus, rachas
 from app.modules.gamification.servicio_config import ServicioConfig
 
 #: Ventana mínima entre dos cambios efectivos de zona horaria (§8.6).
@@ -279,7 +278,9 @@ def borrar_cuenta(db: Session, usuario: User, *, reason: str | None = None) -> U
     registrarse. Emite `USER_DELETED`, que es lo que `ingestion` consume para
     purgar sus documentos.
     """
-    from app.modules.identity.servicio_auth import revocar_todos_los_refresh
+    from app.modules.identity.servicio_auth import (  # noqa: PLC0415 - cruce perezoso entre módulos (§1.3)
+        revocar_todos_los_refresh,
+    )
 
     instante = utcnow()
     dominio = usuario.email.split("@")[-1] if "@" in usuario.email else None

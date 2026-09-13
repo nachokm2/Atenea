@@ -431,7 +431,7 @@ def _fragmentos_del_tema(
 
 def _generar_leccion(
     db: Session,
-    cfg: ServicioConfig,
+    cfg: ServicioConfig,  # noqa: ARG001 - firma fijada por quien llama
     proveedor: ProveedorIA,
     *,
     tema: Topic,

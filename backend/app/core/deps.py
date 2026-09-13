@@ -31,9 +31,11 @@ DbSession = Annotated[Session, Depends(get_db)]
 BearerCredentials = Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)]
 
 
-def _load_user(db: Session, user_id: uuid.UUID) -> "User":
+def _load_user(db: Session, user_id: uuid.UUID) -> User:
     """Carga un usuario activo y no borrado; lanza `Unauthorized` si no procede."""
-    from app.models.identity import User  # import perezoso: evita el ciclo con app.models
+    from app.models.identity import (  # noqa: PLC0415 - cruce perezoso entre módulos (§1.3)
+        User,  # import perezoso: evita el ciclo con app.models
+    )
 
     user = db.execute(select(User).where(User.id == user_id)).scalar_one_or_none()
     if user is None or not user.is_active or user.deleted_at is not None:
@@ -45,7 +47,7 @@ def get_current_user(
     request: Request,
     db: DbSession,
     credentials: BearerCredentials = None,
-) -> "User":
+) -> User:
     """Valida el JWT de acceso, carga el usuario y lo deja en `request.state.user`.
 
     Lanza `Unauthorized` (401 `UNAUTHORIZED`) si falta la cabecera, el token es
@@ -72,7 +74,7 @@ def get_current_user_optional(
     request: Request,
     db: DbSession,
     credentials: BearerCredentials = None,
-) -> "User | None":
+) -> User | None:
     """Igual que `get_current_user`, pero devuelve `None` en rutas semipúblicas.
 
     Un token presente pero inválido **sí** falla: solo la ausencia de token es

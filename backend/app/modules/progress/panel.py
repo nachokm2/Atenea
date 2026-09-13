@@ -40,8 +40,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import date as date_type
-from datetime import datetime
+from datetime import date as date_type, datetime
 
 import sqlalchemy as sa
 from sqlalchemy.orm import Session, aliased
@@ -420,7 +419,7 @@ class ServicioPanel:
     def _objetivo(
         self,
         user_id: uuid.UUID,
-        hoy: date_type,
+        hoy: date_type,  # noqa: ARG002 - firma fijada por la interfaz
         racha: PanelRacha,
         dia: StreakDay | None,
         cfg: dict,

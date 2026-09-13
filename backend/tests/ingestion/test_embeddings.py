@@ -142,7 +142,7 @@ def test_la_clave_de_almacen_es_opaca() -> None:
 def test_guardar_y_leer_el_binario() -> None:
     """Escritura atómica y lectura por clave; el tamaño coincide."""
     clave = almacenamiento.nueva_clave("txt")
-    datos = "contenido del material".encode()
+    datos = b"contenido del material"
     assert almacenamiento.guardar(clave, datos) == len(datos)
     assert almacenamiento.leer(clave) == datos
     assert almacenamiento.existe(clave) is True

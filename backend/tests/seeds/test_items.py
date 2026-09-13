@@ -21,11 +21,10 @@ import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
 from app.models.economy import Item, ItemRequirement, ShopListing
-from app.models.enums import Currency, ItemOrigin, ItemRarity, ItemSlot, RequirementType
+from app.models.enums import CharacterArchetype, Currency, ItemOrigin, ItemRarity, ItemSlot, RequirementType
 from app.models.identity import User
 from app.modules.economy import requisitos
 from app.modules.gamification.servicio_config import ServicioConfig
-from app.models.enums import CharacterArchetype
 from app.seeds.items import ITEMS, KITS_INICIALES, listados_tienda
 
 pytestmark = pytest.mark.db

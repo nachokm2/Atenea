@@ -15,8 +15,7 @@ otro agente; los nombres de campo son los del contrato, sin traducir.
 from __future__ import annotations
 
 import uuid
-from datetime import date as date_type
-from datetime import datetime
+from datetime import date as date_type, datetime
 from typing import Annotated, Any
 
 import sqlalchemy as sa
@@ -578,7 +577,7 @@ def marcar_todas_leidas(db: DbSession, usuario: CurrentUser) -> Response:
     return Response(status_code=204)
 
 
-def _curva(db: DbSession, cfg: ServicioConfig, scope: LevelScope) -> list[LevelOut]:
+def _curva(db: DbSession, cfg: ServicioConfig, scope: LevelScope) -> list[LevelOut]:  # noqa: ARG001 - firma fijada por quien llama
     """Curva materializada de `level_definitions` para un ámbito."""
     return [
         LevelOut(

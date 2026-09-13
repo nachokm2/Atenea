@@ -1,0 +1,112 @@
+# Lo que tiene que pasar antes de que un cambio entre en `main`.
+#
+# El proyecto no tenía ninguna comprobación automática: cada fallo se encontraba
+# a mano, y varios llevaban semanas escondidos porque nadie volvía a pasar la
+# suite entera. Esto no es ceremonia; es la red que impide que los mismos fallos
+# vuelvan a entrar.
+name: Pruebas
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Un empujón nuevo sobre la misma rama cancela el anterior: no tiene sentido
+# pagar dos veces por comprobar código que ya quedó atrás.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        # La misma imagen que en local: pgvector viene dentro, y sin la extensión
+        # la primera migración falla.
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: atenea
+          POSTGRES_PASSWORD: atenea_dev
+          POSTGRES_DB: atenea
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U atenea"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      # La suite crea y usa `atenea_test`; esta apunta a la base de partida.
+      DATABASE_URL: postgresql+psycopg://atenea:atenea_dev@localhost:5432/atenea
+      ENVIRONMENT: test
+      AI_PROVIDER: mock
+      EMBEDDINGS_PROVIDER: mock
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Instalar dependencias
+        working-directory: backend
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Estilo
+        working-directory: backend
+        run: ruff check .
+
+      - name: Migraciones de cero a head
+        working-directory: backend
+        run: alembic upgrade head
+
+      - name: Deriva entre modelos y base
+        working-directory: backend
+        run: alembic check
+
+      - name: Pruebas
+        working-directory: backend
+        run: python -m pytest -q
+
+  cliente:
+    name: Cliente
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Dependencias
+        working-directory: app
+        run: flutter pub get
+
+      # No hay paso de formato a propósito: el cliente se escribió con su propio
+      # estilo y `dart format` reescribiría 84 de sus 86 archivos. Adoptarlo es
+      # una decisión de una sola vez, y merece su propio cambio, no colarse en el
+      # primer flujo de integración continua.
+      - name: Análisis
+        working-directory: app
+        run: flutter analyze lib test
+
+      - name: Pruebas
+        working-directory: app
+        # La prueba de contrato contra la API viva se salta sola cuando no hay
+        # API, así que aquí comprueba lo demás sin fallar por su ausencia.
+        run: flutter test
+
+      - name: Compilación web
+        working-directory: app
+        run: flutter build web --release

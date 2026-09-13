@@ -157,7 +157,7 @@ def rarezas_vendibles(db: Session) -> tuple[ItemRarity, ...]:
     return tuple(vendibles)
 
 
-def precio_vigente(db: Session, listing: ShopListing) -> int:
+def precio_vigente(db: Session, listing: ShopListing) -> int:  # noqa: ARG001 - firma fijada por quien llama
     """Precio que cobra el servidor: el del listado (que la semilla fija por rareza)."""
     return int(listing.price)
 
@@ -284,14 +284,11 @@ def catalogo(
         ShopListing.is_featured.desc(), ShopListing.featured_order, Item.code
     )
 
-    poseidos = {
-        fila
-        for fila in db.execute(
+    poseidos = set(db.execute(
             sa.select(UserItem.item_id).where(
                 UserItem.user_id == usuario_id, UserItem.revoked_at.is_(None)
             )
-        ).scalars()
-    }
+        ).scalars())
 
     ofertas: list[OfertaTienda] = []
     for listing, item in db.execute(consulta).all():

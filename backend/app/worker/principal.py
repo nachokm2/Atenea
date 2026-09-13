@@ -302,7 +302,7 @@ def procesar_trabajo(db: Session, trabajo: GenerationJob, *, cfg: Any | None = N
     inicio = time.monotonic()
     try:
         resultado = manejador(db, trabajo, cfg)
-    except Exception as error:  # noqa: BLE001 - cualquier fallo cierra el trabajo, no el worker
+    except Exception as error:
         mensaje = (
             error.message if isinstance(error, AteneaError) else "Fallo inesperado del worker."
         )
@@ -420,7 +420,7 @@ def bucle(
                 with SessionLocal() as sesion:
                     mantenimiento(sesion)
                     sesion.commit()
-            except Exception:  # noqa: BLE001 - el mantenimiento nunca tumba el worker
+            except Exception:
                 logger.exception("mantenimiento_fallido", worker=NOMBRE_WORKER)
 
         trabajo: GenerationJob | None = None
@@ -436,7 +436,7 @@ def bucle(
                     procesar_trabajo(sesion, trabajo)
                     sesion.commit()
                     procesados += 1
-        except Exception:  # noqa: BLE001 - un fallo de transporte no mata el proceso
+        except Exception:
             logger.exception("ciclo_fallido", worker=NOMBRE_WORKER)
             detener.wait(segundos_sondeo)
             continue

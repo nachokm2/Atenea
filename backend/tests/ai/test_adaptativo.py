@@ -9,7 +9,7 @@ import pytest
 import sqlalchemy as sa
 
 from app.core.time import utcnow
-from app.models.content import Assessment, Lesson, PathModule, Question, Topic
+from app.models.content import Assessment, PathModule, Question, Topic
 from app.models.enums import (
     ActivityContext,
     AssessmentOutcome,
@@ -25,8 +25,7 @@ from app.models.enums import (
 )
 from app.models.ingestion import ContentProvenance, GenerationJob
 from app.models.progress import AssessmentAttempt, QuestionAttempt
-from app.modules.ai import adaptativo
-from app.modules.ai import arquitecto_ruta as fase_a
+from app.modules.ai import adaptativo, arquitecto_ruta as fase_a
 
 
 @pytest.fixture

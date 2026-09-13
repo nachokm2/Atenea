@@ -584,7 +584,7 @@ def otorgar_item(
     origin: ItemOrigin,
     source_ref: dict[str, Any] | None = None,
     unlock_reason: str | None = None,
-    evento_disparador: uuid.UUID | None = None,
+    evento_disparador: uuid.UUID | None = None,  # noqa: ARG001 - firma fijada por quien llama
     momento: dt.datetime | None = None,
 ) -> Otorgamiento:
     """Entrega una instancia del ítem al usuario de forma **idempotente**.

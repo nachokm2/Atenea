@@ -17,8 +17,7 @@ Contrato §4: `domain_events` es el bus del MVP. Toda recompensa nace aquí:
 from __future__ import annotations
 
 import uuid
-from datetime import date as date_type
-from datetime import datetime
+from datetime import date as date_type, datetime
 from typing import Any
 
 import sqlalchemy as sa
@@ -28,7 +27,14 @@ from sqlalchemy.orm import Session
 
 from app.core.time import DEFAULT_TIMEZONE, resolve_occurred_at, user_local_date, utcnow
 from app.models.enums import EventStatus, EventType
-from app.models.gamification import DomainEvent, Streak, StreakDay, UserAchievement, UserMission, XPTransaction
+from app.models.gamification import (
+    DomainEvent,
+    Streak,
+    StreakDay,
+    UserAchievement,
+    UserMission,
+    XPTransaction,
+)
 from app.modules.gamification.recompensas import (
     AgregadorRecibo,
     MisionRecibo,

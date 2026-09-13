@@ -48,6 +48,12 @@ select = [
     "T20",  # flake8-print: prohibido print() en la app
     "PTH",  # flake8-use-pathlib
     "ARG",  # argumentos sin usar
+    # Importación dentro de una función. El contrato (§1.3) obliga a que los
+    # cruces entre módulos sean perezosos, y el código los marca con
+    # `# noqa: PLC0415`. Sin la regla activada esas marcas no significaban nada
+    # y ruff las señalaba como sobrantes; con ella activada, cada importación
+    # perezosa nueva tiene que declararse a propósito.
+    "PLC0415",
 ]
 ignore = [
     "E501",    # la longitud la controla el formateador (line-length = 110)
@@ -67,7 +73,10 @@ ignore = [
 "app/**/__init__.py" = ["F401"]
 # Las semillas y los scripts sí pueden imprimir por consola.
 "app/seeds/**" = ["T20"]
-"tests/**" = ["T20", "ARG001", "ARG002", "S101"]
+# En las pruebas la importación dentro de la función es idiomática: sirve para
+# aislar un módulo, para retrasar una carga cara o para no importar lo que se va
+# a sustituir. Fuera de ellas, el contrato (§1.3) exige marcarla.
+"tests/**" = ["T20", "ARG001", "ARG002", "S101", "PLC0415"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]

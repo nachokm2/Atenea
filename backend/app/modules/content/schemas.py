@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any, Generic, TypeVar
+from typing import Any, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -60,7 +60,7 @@ class PageMeta(BaseModel):
     total: int | None = None
 
 
-class Page(BaseModel, Generic[T]):
+class Page[T](BaseModel):
     """Sobre `{"items": [...], "page": {...}}` del contrato (§8.2)."""
 
     items: list[T]

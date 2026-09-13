@@ -219,7 +219,7 @@ def juzgar_respuesta(
 
     costos.verificar_cuota(db, cfg, usuario_id, costos.CUOTA_RESPUESTAS_JUZGADAS)
 
-    rubrica = dict(((question.body or {}).get("rubric") or {}))
+    rubrica = dict((question.body or {}).get("rubric") or {})
     plantilla = plantilla_para_tarea(db, TAREA_JUDGE)
     job = costos.crear_job(
         db,

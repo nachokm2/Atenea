@@ -105,7 +105,7 @@ def _entero(cfg: Any | None, clave: str, respaldo: int) -> int:
         return respaldo
     try:
         return int(cfg.obtener_int(clave, respaldo))
-    except Exception:  # noqa: BLE001 - la ingesta no puede caerse por configuración ausente
+    except Exception:
         return respaldo
 
 
@@ -115,7 +115,7 @@ def _mapa(cfg: Any | None, clave: str, respaldo: dict[str, Any]) -> dict[str, An
         return dict(respaldo)
     try:
         valor = cfg.obtener_json(clave, respaldo)
-    except Exception:  # noqa: BLE001
+    except Exception:
         return dict(respaldo)
     return dict(valor or respaldo)
 

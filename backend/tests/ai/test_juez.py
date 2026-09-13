@@ -19,8 +19,7 @@ from app.models.enums import (
     QuestionType,
 )
 from app.models.ingestion import GenerationJob
-from app.modules.ai import arquitecto_ruta as fase_a
-from app.modules.ai import juez
+from app.modules.ai import arquitecto_ruta as fase_a, juez
 
 RUBRICA = {
     "criteria": [

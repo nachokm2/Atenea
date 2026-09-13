@@ -35,8 +35,8 @@ import pytest  # noqa: E402
 import sqlalchemy as sa  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
-from app.core.db import Base, engine  # noqa: E402
 import app.models  # noqa: E402,F401  (puebla Base.metadata con las 52 tablas)
+from app.core.db import Base, engine  # noqa: E402
 
 
 def _crear_esquema() -> None:
@@ -62,8 +62,17 @@ def _limites_de_espera(dbapi_conexion, _registro) -> None:
     colgada; con ellos, falla en segundos y con un mensaje que dice qué pasó.
     """
     with dbapi_conexion.cursor() as cursor:
+        # Lo que importa de verdad: un candado que no llega no puede colgar la
+        # ejecución. Quince segundos bastan para cualquier espera legítima.
         cursor.execute("SET lock_timeout = '15s'")
-        cursor.execute("SET idle_in_transaction_session_timeout = '120s'")
+        # Varias suites abren **una** conexión para toda la ejecución, dentro de
+        # una transacción que se revierte al final. Con el tope en dos minutos,
+        # Postgres las mataba en cuanto la suite entera pasó de ese tiempo, y el
+        # fallo aparecía como un corte de red en el desmontaje del último caso,
+        # que no tenía nada que ver. El tope sigue existiendo para que una
+        # transacción olvidada no quede abierta indefinidamente; solo que ahora
+        # es más largo que la ejecución completa.
+        cursor.execute("SET idle_in_transaction_session_timeout = '30min'")
 
 
 @pytest.fixture(scope="session", autouse=True)

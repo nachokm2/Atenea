@@ -129,7 +129,7 @@ def test_una_consulta_equivocada_no_puntua() -> None:
     assert resultado.error_code is None
 
 
-def test_lee_los_limites_de_game_configs(cfg) -> None:  # noqa: ANN001 - fixture tipada en conftest
+def test_lee_los_limites_de_game_configs(cfg) -> None:
     """Los límites salen de `ai.sql_sandbox`, nunca de un literal en el código."""
     limites = sandbox_sql.config_sandbox(cfg)
     assert limites.engine == "duckdb"

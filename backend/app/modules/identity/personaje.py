@@ -31,9 +31,7 @@ from app.core.time import user_local_date, utcnow
 from app.models.enums import CharacterArchetype, EventType, LevelScope
 from app.models.identity import AvatarConfig, Character, User
 from app.modules.economy import monedero
-from app.modules.gamification import eventos as bus
-from app.modules.gamification import niveles, rachas
-from app.modules.gamification import xp as motor_xp
+from app.modules.gamification import eventos as bus, niveles, rachas, xp as motor_xp
 from app.modules.gamification.recompensas import ReciboRecompensas
 from app.modules.gamification.servicio_config import ConfiguracionAusenteError, ServicioConfig
 

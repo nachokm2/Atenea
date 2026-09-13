@@ -217,21 +217,7 @@ class ReciboRecompensas(_Base):
         """Secciones que tienen algo que animar, en el orden canónico de §7.10."""
         presentes: list[str] = []
         for seccion in ORDEN_PRESENTACION:
-            if seccion == "xp" and self.xp is not None and self.xp.amount:
-                presentes.append(seccion)
-            elif seccion == "gold" and self.gold is not None and self.gold.amount:
-                presentes.append(seccion)
-            elif seccion == "mastery" and (self.mastery_deltas or self.knowledge is not None):
-                presentes.append(seccion)
-            elif seccion == "streak" and self.streak is not None and self.streak.is_first_activity_of_day:
-                presentes.append(seccion)
-            elif seccion == "level_up" and self.level is not None and self.level.leveled_up:
-                presentes.append(seccion)
-            elif seccion == "item" and self.items:
-                presentes.append(seccion)
-            elif seccion == "achievement" and self.achievements:
-                presentes.append(seccion)
-            elif seccion == "mission" and self.missions:
+            if (seccion == "xp" and self.xp is not None and self.xp.amount) or (seccion == "gold" and self.gold is not None and self.gold.amount) or (seccion == "mastery" and (self.mastery_deltas or self.knowledge is not None)) or (seccion == "streak" and self.streak is not None and self.streak.is_first_activity_of_day) or (seccion == "level_up" and self.level is not None and self.level.leveled_up) or (seccion == "item" and self.items) or (seccion == "achievement" and self.achievements) or (seccion == "mission" and self.missions):
                 presentes.append(seccion)
         return presentes
 

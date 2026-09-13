@@ -324,7 +324,7 @@ def test_si_el_juez_falla_la_respuesta_queda_pendiente_y_no_se_pierde(
     sin contestar y la lección no se podría cerrar.
     """
     monkeypatch.setattr(correccion, "_juez_disponible", lambda: _JuezQueRevienta())
-    monkeypatch.setattr(correccion, "_proveedor_disponible", lambda cfg: object())
+    monkeypatch.setattr(correccion, "_proveedor_disponible", lambda cfg: object())  # noqa: ARG005 - firma fijada por el sustituto
     pregunta = _pregunta(QuestionType.OPEN_SHORT, {"rubric": ["menciona claves foráneas"]})
 
     veredicto = correccion.corregir(
@@ -358,9 +358,9 @@ def test_un_veredicto_pendiente_no_cuenta_para_el_dominio(cfg_falso, monkeypatch
             return {"reason": "ai_budget_exceeded"}
 
     monkeypatch.setattr(
-        correccion, "_juez_disponible", lambda: lambda *a, **k: _VeredictoPendiente()
+        correccion, "_juez_disponible", lambda: lambda *a, **k: _VeredictoPendiente()  # noqa: ARG005 - firma fijada por el sustituto
     )
-    monkeypatch.setattr(correccion, "_proveedor_disponible", lambda cfg: object())
+    monkeypatch.setattr(correccion, "_proveedor_disponible", lambda cfg: object())  # noqa: ARG005 - firma fijada por el sustituto
     pregunta = _pregunta(QuestionType.OPEN_SHORT, {"rubric": ["define índice"]})
 
     veredicto = correccion.corregir(

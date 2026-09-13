@@ -10,7 +10,6 @@ import sqlalchemy as sa
 from app.models.content import (
     Assessment,
     AssessmentQuestion,
-    Lesson,
     LessonBlock,
     PathModule,
     Question,
@@ -24,8 +23,7 @@ from app.models.enums import (
     QuestionType,
 )
 from app.models.ingestion import ContentProvenance, GenerationJob
-from app.modules.ai import arquitecto_ruta as fase_a
-from app.modules.ai import autor_leccion as fase_b
+from app.modules.ai import arquitecto_ruta as fase_a, autor_leccion as fase_b
 from app.modules.ai.esquemas_salida import TIPOS_PREGUNTA_MVP
 
 
@@ -129,9 +127,9 @@ def test_la_cache_caduca_con_una_version_nueva_del_documento(
     fase_b.generar_modulo(db, cfg, proveedor, module_id=modulo.id, usuario_id=ruta.user_id)
     assert fase_b.contenido_vigente(db, modulo) is True
 
-    from app.models.ingestion import Document, DocumentVersion
-    from app.models.enums import DocumentStatus
     from app.core.time import utcnow
+    from app.models.enums import DocumentStatus
+    from app.models.ingestion import Document, DocumentVersion
 
     documento = db.execute(
         sa.select(Document).where(Document.knowledge_base_id == biblioteca.id)

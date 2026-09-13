@@ -30,12 +30,12 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.core.config import settings  # noqa: E402
-from app.core.db import Base  # noqa: E402
+from app.core.config import settings
+from app.core.db import Base
 
 # Importar el paquete de modelos es lo que puebla `Base.metadata`.
 # No se puede sustituir por importaciones sueltas: deben cargarse los seis archivos.
-import app.models  # noqa: E402,F401
+import app.models
 
 # Objeto de configuración de Alembic (lee alembic.ini).
 config = context.config
@@ -88,9 +88,7 @@ def include_object(
         "ix_document_chunks_search_vector",
         "ix_items_requirement_facts",
     }
-    if type_ == "index" and name in manual_indexes:
-        return False
-    return True
+    return not (type_ == "index" and name in manual_indexes)
 
 
 def run_migrations_offline() -> None:

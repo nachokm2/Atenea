@@ -11,9 +11,8 @@ La forma de `DashboardOut`, `ProfileOut`, `StatsOut` y `UserKnowledgeOut` es
 from __future__ import annotations
 
 import uuid
-from datetime import date as date_type
-from datetime import datetime
-from typing import Generic, TypeVar
+from datetime import date as date_type, datetime
+from typing import TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -50,7 +49,7 @@ class PageMeta(BaseModel):
     total: int | None = None
 
 
-class Page(BaseModel, Generic[T]):
+class Page[T](BaseModel):
     """Sobre `{"items": [...], "page": {...}}` del contrato (§8.2)."""
 
     items: list[T]

@@ -14,12 +14,12 @@ import uuid
 from typing import Any
 
 from sqlalchemy.orm import Session
+from tests.ingestion.conftest import ConfigDePruebas
 
 from app.models.enums import ChunkType
 from app.models.identity import User
 from app.models.ingestion import Document, DocumentChunk, DocumentVersion, KnowledgeBase
 from app.modules.ingestion import embeddings, recuperacion, servicio
-from tests.ingestion.conftest import ConfigDePruebas
 
 # ---------------------------------------------------------------------------
 # Corpus de pruebas

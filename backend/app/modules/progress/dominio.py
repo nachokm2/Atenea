@@ -49,13 +49,12 @@ import uuid
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from decimal import Decimal
 
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
 from app.core.time import ensure_utc, utcnow
-from app.models.content import Lesson, LearningPath, PathModule, Topic
+from app.models.content import LearningPath, Lesson, PathModule, Topic
 from app.models.enums import (
     ActivityContext,
     AttemptStatus,

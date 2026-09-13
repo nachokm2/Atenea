@@ -132,7 +132,7 @@ class ProveedorMock:
             return _vector_de_hash(texto, self.dimensiones)
         return _normalizar(acumulado)
 
-    def embeber(self, textos: list[str], *, consulta: bool = False) -> list[list[float]]:
+    def embeber(self, textos: list[str], *, consulta: bool = False) -> list[list[float]]:  # noqa: ARG002 - firma fijada por la interfaz
         """Devuelve un vector determinista por texto (el flag `consulta` no cambia nada)."""
         return [self._vector(texto or "") for texto in textos]
 
@@ -198,7 +198,7 @@ class ProveedorVoyage:
 
         try:
             return _peticion()
-        except Exception as exc:  # noqa: BLE001 - se traduce al error del catálogo
+        except Exception as exc:
             logger.warning("embeddings_voyage_error", error=str(exc))
             raise ExternalServiceError(
                 "No pudimos indexar tu material en este momento. Inténtalo de nuevo.",
@@ -229,7 +229,7 @@ def ajustes_de(cfg: Any | None = None) -> AjustesEmbeddings:
     if cfg is not None:
         try:
             datos.update(cfg.obtener_json("ai.embeddings", EMBEDDINGS_POR_DEFECTO) or {})
-        except Exception:  # noqa: BLE001 - sin configuración sembrada se usa el respaldo
+        except Exception:
             logger.debug("embeddings_config_ausente")
     # `EMBEDDINGS_PROVIDER` del entorno manda en desarrollo y pruebas: permite forzar
     # el proveedor sin tocar `game_configs`.

@@ -71,12 +71,10 @@ FIRMAS_RECHAZADAS: tuple[tuple[bytes, str], ...] = (
 
 #: Palabras vacías para la detección de idioma (heurística barata, sin dependencias).
 _VACIAS_ES = frozenset(
-    "de la que el en y a los del se las por un para con no una su al lo como más pero sus"
-    " le ya o este sí porque esta entre cuando muy sin sobre también me hasta hay donde".split()
+    ["de", "la", "que", "el", "en", "y", "a", "los", "del", "se", "las", "por", "un", "para", "con", "no", "una", "su", "al", "lo", "como", "más", "pero", "sus", "le", "ya", "o", "este", "sí", "porque", "esta", "entre", "cuando", "muy", "sin", "sobre", "también", "me", "hasta", "hay", "donde"]
 )
 _VACIAS_EN = frozenset(
-    "the of and to in a is that it for on with as was are be this by or an at from not have"
-    " has but they you we can which their there when where more than into".split()
+    ["the", "of", "and", "to", "in", "a", "is", "that", "it", "for", "on", "with", "as", "was", "are", "be", "this", "by", "or", "an", "at", "from", "not", "have", "has", "but", "they", "you", "we", "can", "which", "their", "there", "when", "where", "more", "than", "into"]
 )
 
 
@@ -179,15 +177,9 @@ def _parece_markdown(texto: str) -> bool:
     marcas = 0
     for linea in texto.splitlines()[:400]:
         recortada = linea.strip()
-        if re.match(r"^#{1,6}\s+\S", recortada):
+        if re.match(r"^#{1,6}\s+\S", recortada) or recortada.startswith(("```", "~~~")):
             marcas += 2
-        elif recortada.startswith(("```", "~~~")):
-            marcas += 2
-        elif re.match(r"^([-*+]\s+\S|\d+[.)]\s+\S)", recortada):
-            marcas += 1
-        elif recortada.count("|") >= 2:
-            marcas += 1
-        elif re.search(r"\[[^\]]+\]\([^)]+\)", recortada):
+        elif re.match(r"^([-*+]\s+\S|\d+[.)]\s+\S)", recortada) or recortada.count("|") >= 2 or re.search(r"\[[^\]]+\]\([^)]+\)", recortada):
             marcas += 1
         if marcas >= 3:
             return True
@@ -359,7 +351,7 @@ def _extraer_pdf(datos: bytes, *, max_paginas: int, min_chars_por_pagina: int) -
         if getattr(lector, "is_encrypted", False):
             try:
                 lector.decrypt("")
-            except Exception:  # noqa: BLE001 - cifrado con contraseña real
+            except Exception:
                 raise DocumentoIlegible(
                     "El PDF está protegido con contraseña y no podemos leerlo.",
                     details={"reason": "encrypted_pdf"},
@@ -388,7 +380,7 @@ def _extraer_pdf(datos: bytes, *, max_paginas: int, min_chars_por_pagina: int) -
     for pagina in paginas_pdf:
         try:
             crudas.append(pagina.extract_text() or "")
-        except Exception:  # noqa: BLE001 - una página rota no invalida el documento
+        except Exception:
             crudas.append("")
 
     caracteres = sum(len(texto.strip()) for texto in crudas)
@@ -454,7 +446,7 @@ def _extraer_docx(datos: bytes) -> TextoExtraido:
 
     try:
         documento = docx.Document(io.BytesIO(datos))
-    except Exception as exc:  # noqa: BLE001 - python-docx lanza excepciones variadas
+    except Exception as exc:
         raise DocumentoIlegible(
             "El documento de Word está dañado y no se puede leer.",
             details={"reason": "corrupt_docx"},

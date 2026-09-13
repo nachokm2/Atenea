@@ -12,8 +12,7 @@ Contrato §8.6:
 
 from __future__ import annotations
 
-from datetime import date as date_type
-from datetime import datetime, time, timedelta, timezone
+from datetime import UTC, date as date_type, datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 #: Zona horaria por defecto del producto (coincide con `users.timezone`).
@@ -23,7 +22,7 @@ DEFAULT_TIMEZONE = "America/Santiago"
 #: en `game_configs` es la fuente de verdad; esto es solo el respaldo).
 DEFAULT_SYNC_TOLERANCE_MIN = 10
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def utcnow() -> datetime:

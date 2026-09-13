@@ -495,11 +495,11 @@ def crear_proveedor(nombre: str | None = None, *, cfg: ServicioConfig | None = N
     """
     elegido = (nombre or settings.ai_provider or "mock").lower()
     if elegido in ("mock", "simulado", "fake"):
-        from app.modules.ai.simulado import ProveedorSimulado
+        from app.modules.ai.simulado import ProveedorSimulado  # noqa: PLC0415 - cruce entre módulos (§1.3)
 
         return ProveedorSimulado(cfg=cfg)
     if elegido in ("claude", "anthropic"):
-        from app.modules.ai.claude import ProveedorClaude
+        from app.modules.ai.claude import ProveedorClaude  # noqa: PLC0415 - cruce entre módulos (§1.3)
 
         return ProveedorClaude(cfg=cfg)
     raise ValueError(f"Proveedor de IA desconocido: {nombre!r}")

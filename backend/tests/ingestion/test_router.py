@@ -14,6 +14,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
+from tests.ingestion.conftest import docx_minimo, pdf_en_blanco, texto_largo
 
 from app.core.db import get_db
 from app.core.deps import get_current_user
@@ -22,7 +23,6 @@ from app.models.identity import User
 from app.modules.ingestion import servicio
 from app.modules.ingestion.router import router
 from app.worker import cola
-from tests.ingestion.conftest import docx_minimo, pdf_en_blanco, texto_largo
 
 MATERIAL = (
     "# Manual de SQL\n\n## LEFT JOIN\n\nUn LEFT JOIN conserva la tabla izquierda.\n\n"

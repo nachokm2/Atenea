@@ -19,8 +19,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import date as date_type
-from datetime import datetime, timedelta
+from datetime import date as date_type, datetime, timedelta
 from typing import Any
 
 import sqlalchemy as sa

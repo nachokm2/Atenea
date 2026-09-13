@@ -6,6 +6,7 @@ Sin red: se inyecta un cliente falso con la misma superficie que el SDK `anthrop
 from __future__ import annotations
 
 import json
+import uuid
 from decimal import Decimal
 from typing import Any
 
@@ -17,8 +18,6 @@ from app.core.errors import ExternalServiceError
 from app.modules.ai.claude import ProveedorClaude
 from app.modules.ai.esquemas_salida import SalidaExplicacion, esquema_estricto
 from app.modules.ai.proveedor import TAREA_LESSON, FragmentoContexto, SolicitudIA
-
-import uuid
 
 
 class _Bloque:

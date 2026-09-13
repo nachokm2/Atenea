@@ -22,7 +22,6 @@ from app.modules.ai import arquitecto_ruta as fase_a
 from app.modules.ai.esquemas_salida import SalidaRuta, esquema_estricto, validar
 from app.modules.ai.proveedor import TAREA_PATH_DESIGN, SolicitudIA, plantilla_para_tarea
 
-
 # ---------------------------------------------------------------------------
 # Recuperación híbrida (§6.12)
 # ---------------------------------------------------------------------------

@@ -12,7 +12,7 @@ Dos clases de prueba, como pide el contrato (§8.10):
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import sqlalchemy as sa
@@ -50,7 +50,7 @@ URL_BASE_DE_PRUEBAS = "postgresql+psycopg://atenea:atenea_dev@localhost:55432/at
 #: sembrar la misma clave a la vez sin esperarse una a otra.
 VERSION_SEMILLA = 7
 ZONA = "America/Santiago"
-UTC = timezone.utc
+UTC = UTC
 
 # ---------------------------------------------------------------------------
 # Valores canónicos de `game_configs` (CONTRACT.md §5.5 y §5.6)
@@ -502,11 +502,11 @@ def abrir_actividad(db):
 
 __all__ = [
     "CONFIG_SEMILLA",
-    "Contenido",
     "UTC",
     "ZONA",
-    "crear_actividad",
+    "Contenido",
     "_crear_evidencia",
+    "crear_actividad",
     "registrar_evaluacion",
     "registrar_respuesta",
 ]
