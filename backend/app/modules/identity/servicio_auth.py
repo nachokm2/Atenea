@@ -25,6 +25,7 @@ import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core import correo
 from app.core.config import settings
 from app.core.errors import Conflict, InvalidCredentials, TokenReuseDetected, Unauthorized, ValidationFailed
 from app.core.security import (
@@ -33,12 +34,13 @@ from app.core.security import (
     hash_password,
     hash_refresh_token,
     needs_rehash,
+    new_opaque_token,
     refresh_token_expires_at,
     verify_password,
 )
 from app.core.time import is_valid_timezone, utcnow
 from app.models.enums import AuthProvider, EventType, UserRole
-from app.models.identity import RefreshToken, User
+from app.models.identity import PasswordReset, RefreshToken, User
 from app.modules.identity import servicio_usuario
 
 #: Longitud mínima de la contraseña. bcrypt solo mira los primeros 72 bytes.
@@ -380,6 +382,110 @@ def cambiar_contrasena(
     revocar_todos_los_refresh(db, usuario.id, momento=momento)
 
 
+# ---------------------------------------------------------------------------
+# Recuperación de contraseña
+# ---------------------------------------------------------------------------
+
+
+def pedir_restablecimiento(
+    db: Session,
+    *,
+    email: str,
+    user_agent: str | None = None,
+    ip_address: str | None = None,
+    momento: dt.datetime | None = None,
+) -> None:
+    """Emite un permiso de un solo uso y lo envía por correo.
+
+    **No dice si el correo existe.** La ruta responde siempre igual, y esta
+    función tampoco lanza cuando no encuentra a nadie: un formulario que
+    distingue "te lo enviamos" de "no te conocemos" es una lista de cuentas
+    válidas que cualquiera puede ir consultando.
+
+    Cada petición invalida los permisos anteriores del mismo aprendiz. Pedirlo
+    tres veces seguidas deja un solo enlace vivo, el último, que es lo que la
+    persona espera al no ver llegar el primero.
+    """
+    instante = momento or utcnow()
+    usuario = buscar_por_email(db, email)
+    if usuario is None or usuario.deleted_at is not None:
+        return
+
+    db.execute(
+        sa.update(PasswordReset)
+        .where(
+            PasswordReset.user_id == usuario.id,
+            PasswordReset.used_at.is_(None),
+            PasswordReset.expires_at > instante,
+        )
+        .values(used_at=instante)
+    )
+
+    token = new_opaque_token()
+    db.add(
+        PasswordReset(
+            user_id=usuario.id,
+            token_hash=hash_refresh_token(token),
+            expires_at=instante + dt.timedelta(minutes=settings.password_reset_ttl_min),
+            requested_user_agent=(user_agent or "")[:255] or None,
+            requested_ip=(ip_address or "")[:45] or None,
+        )
+    )
+    db.flush()
+
+    enlace = f"{settings.password_reset_url}?token={token}"
+    correo.enviar(
+        destinatario=usuario.email,
+        asunto="Vuelve al Reino: elige una contraseña nueva",
+        cuerpo=(
+            "Alguien pidió restablecer la contraseña de tu cuenta de Atenea.\n\n"
+            f"Abre este enlace para elegir una nueva:\n{enlace}\n\n"
+            f"Caduca en {settings.password_reset_ttl_min} minutos y solo sirve una vez.\n\n"
+            "Si no fuiste tú, no hace falta que hagas nada: tu contraseña sigue "
+            "siendo la de siempre y este enlace se apagará solo."
+        ),
+    )
+
+
+def restablecer_contrasena(
+    db: Session,
+    *,
+    token: str,
+    new_password: str,
+    momento: dt.datetime | None = None,
+) -> None:
+    """Gasta el permiso y deja la contraseña nueva (§7.1).
+
+    Revoca todos los refresh tokens: quien entró con la contraseña vieja deja de
+    estar dentro. Es lo mínimo que se espera de recuperar una cuenta que pudo
+    haber estado en manos de otro.
+    """
+    instante = momento or utcnow()
+    fila = db.execute(
+        sa.select(PasswordReset).where(PasswordReset.token_hash == hash_refresh_token(token))
+    ).scalar_one_or_none()
+
+    # Un enlace inexistente, gastado o caducado dan el mismo error: decir cuál de
+    # las tres cosas es ayuda a quien está probando enlaces, no a quien lo perdió.
+    if fila is None or fila.used_at is not None or fila.expires_at <= instante:
+        raise Unauthorized(
+            "Ese enlace ya no sirve. Pide uno nuevo desde la pantalla de acceso."
+        )
+
+    usuario = db.get(User, fila.user_id)
+    if usuario is None or usuario.deleted_at is not None:
+        raise Unauthorized(
+            "Ese enlace ya no sirve. Pide uno nuevo desde la pantalla de acceso."
+        )
+
+    validar_fuerza_contrasena(new_password, email=usuario.email)
+
+    usuario.password_hash = hash_password(new_password)
+    fila.used_at = instante
+    db.flush()
+    revocar_todos_los_refresh(db, usuario.id, momento=instante)
+
+
 __all__ = [
     "LARGO_MAXIMO",
     "LARGO_MINIMO",
@@ -391,8 +497,10 @@ __all__ = [
     "emitir_par",
     "iniciar_sesion",
     "normalizar_email",
+    "pedir_restablecimiento",
     "refrescar",
     "registrar",
+    "restablecer_contrasena",
     "revocar_refresh",
     "revocar_todos_los_refresh",
     "validar_fuerza_contrasena",

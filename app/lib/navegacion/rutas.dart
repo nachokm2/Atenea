@@ -20,6 +20,12 @@ abstract final class Rutas {
   /// P02 · Registro y acceso.
   static const String acceso = '/acceso';
 
+  /// P02b · Elegir contraseña nueva con el enlace del correo.
+  ///
+  /// Es también el destino del enlace profundo `atenea://password/reset`, que es
+  /// lo que se envía por correo al pedir la recuperación.
+  static const String nuevaContrasena = '/nueva-contrasena';
+
   /// P03 · Creación de personaje.
   static const String crearPersonaje = '/crear-personaje';
 
@@ -147,6 +153,9 @@ abstract final class Rutas {
   static const List<String> deEntrada = <String>[
     bienvenida,
     acceso,
+    // El enlace del correo llega casi siempre sin sesión, que es justo el caso:
+    // se abre porque no se puede entrar.
+    nuevaContrasena,
   ];
 
   /// Índice del destino de la barra al que pertenece una dirección.
@@ -191,6 +200,9 @@ abstract final class EnlacesProfundos {
 
   /// `atenea://lesson/{id}`
   static String leccion(String leccionId) => '$esquema://lesson/$leccionId';
+
+  /// `atenea://password/reset?token=…`, el enlace del correo de recuperación.
+  static const String nuevaContrasena = '$esquema://password/reset';
 
   /// Traduce un enlace profundo a una dirección interna.
   ///
@@ -242,6 +254,14 @@ abstract final class EnlacesProfundos {
           return Rutas.generacion(rutaId);
         }
         return Rutas.ruta(rutaId);
+      case 'password':
+        // El permiso viaja en la consulta y tiene que sobrevivir a la
+        // traducción: sin él la pantalla no puede hacer nada.
+        if (partes.length < 2 || partes[1] != 'reset') return null;
+        final String permiso = uri.queryParameters['token'] ?? '';
+        return permiso.isEmpty
+            ? Rutas.nuevaContrasena
+            : '${Rutas.nuevaContrasena}?token=${Uri.encodeQueryComponent(permiso)}';
       case 'lesson':
         if (partes.length < 2) return null;
         return Rutas.leccion(partes[1]);

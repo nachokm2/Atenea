@@ -38,3 +38,9 @@ Thumbs.db
 
 # Compilados del cliente
 app/build/
+
+# Firma de Android. Nunca al repositorio: es la llave con la que se publica
+# Atenea, y quien la tenga puede firmar una actualizacion en tu nombre.
+app/android/key.properties
+*.jks
+*.keystore

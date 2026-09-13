@@ -243,6 +243,46 @@ class ControladorSesion extends ChangeNotifier {
     }
   }
 
+  /// Pide el enlace de recuperación. Devuelve `true` si la petición salió.
+  ///
+  /// Un `true` **no** significa que exista la cuenta: el Reino responde igual en
+  /// los dos casos a propósito, y la pantalla dice lo mismo siempre.
+  Future<bool> pedirRecuperacion(String correo) async {
+    _ocupado = true;
+    _error = null;
+    notifyListeners();
+    try {
+      await _repos.auth.pedirRecuperacion(correo);
+      return true;
+    } catch (e) {
+      _error = _comoError(e);
+      return false;
+    } finally {
+      _ocupado = false;
+      notifyListeners();
+    }
+  }
+
+  /// Elige la contraseña nueva con el permiso recibido por correo.
+  Future<bool> restablecerContrasena({
+    required String permiso,
+    required String nueva,
+  }) async {
+    _ocupado = true;
+    _error = null;
+    notifyListeners();
+    try {
+      await _repos.auth.restablecerContrasena(permiso: permiso, nueva: nueva);
+      return true;
+    } catch (e) {
+      _error = _comoError(e);
+      return false;
+    } finally {
+      _ocupado = false;
+      notifyListeners();
+    }
+  }
+
   /// Relee las preferencias del servidor.
   Future<void> cargarAjustes() async {
     try {

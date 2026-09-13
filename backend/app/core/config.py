@@ -139,6 +139,27 @@ class Settings(BaseSettings):
     rate_limit_ai: str = "6/minute"
     rate_limit_upload: str = "12/minute"
 
+    # ------------------------------------------------------------------
+    # Correo (solo para recuperar la contraseña)
+    # ------------------------------------------------------------------
+    #: `consola` escribe el mensaje en el registro en vez de enviarlo: sirve para
+    #: recorrer el flujo entero en local sin dar de alta ningún servicio. En
+    #: producción es un error de arranque, porque dejaría a quien olvide su
+    #: contraseña esperando un correo que nadie envió.
+    email_provider: Literal["consola", "smtp"] = "consola"
+    email_from: str = "Atenea <no-responder@atenea.cl>"
+    smtp_host: str = "localhost"
+    smtp_port: int = 587
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+
+    #: Cuánto vive el permiso para elegir una contraseña nueva. Corto a
+    #: propósito: es una llave a la cuenta viajando por correo.
+    password_reset_ttl_min: int = 30
+
+    #: Dónde abre la app el enlace del correo. En móvil es un enlace profundo.
+    password_reset_url: str = "atenea://password/reset"
+
     #: Reportes de personas distintas que hacen falta para retirar una pregunta
     #: de una Ruta del Reino. En el material propio basta con uno: es del
     #: aprendiz. En el compartido, retirarlo afecta a todos, y con un solo
@@ -214,6 +235,12 @@ class Settings(BaseSettings):
         if not self.cors_origins:
             faltas.append(
                 "CORS_ORIGINS está vacío: sin orígenes declarados CORS quedaría en comodín"
+            )
+
+        if self.email_provider == "consola":
+            faltas.append(
+                "EMAIL_PROVIDER es 'consola': quien olvide su contraseña esperaría "
+                "un correo que nadie envía"
             )
 
         if faltas:

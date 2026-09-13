@@ -8,6 +8,8 @@
 | POST | `/auth/logout` | Sí |
 | GET | `/auth/me` | Sí |
 | POST | `/auth/password` | Sí |
+| POST | `/auth/password/forgot` | No |
+| POST | `/auth/password/reset` | No (usa el enlace) |
 | DELETE | `/auth/account` | Sí |
 | GET · PUT | `/settings` | Sí |
 | POST | `/characters` | Sí (**Idempotency-Key**) |
@@ -55,6 +57,8 @@ from app.modules.identity.schemas import (
     LogoutIn,
     MeOut,
     PasswordChangeIn,
+    PasswordForgotIn,
+    PasswordResetIn,
     PushTokenIn,
     RefreshIn,
     RegisterIn,
@@ -200,6 +204,48 @@ def cambiar_contrasena(cuerpo: PasswordChangeIn, user: CurrentUser, db: DbSessio
     """Cambia la contraseña y revoca todos los refresh tokens del usuario."""
     servicio_auth.cambiar_contrasena(
         db, user, current_password=cuerpo.current_password, new_password=cuerpo.new_password
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/auth/password/forgot",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["auth"],
+    summary="Pedir un enlace para elegir contraseña nueva",
+    # Más apretado que el resto: es la única ruta que provoca el envío de un
+    # correo a una dirección que elige quien llama.
+    dependencies=[Depends(freno("5/minute"))],
+)
+def olvide_la_contrasena(cuerpo: PasswordForgotIn, request: Request, db: DbSession) -> Response:
+    """Envía el enlace de recuperación, exista o no esa cuenta.
+
+    Responde **siempre** 204. Distinguir "te lo enviamos" de "no te conocemos"
+    convertiría este formulario en una lista de cuentas válidas que cualquiera
+    puede ir consultando de una en una.
+    """
+    agente, ip = _cliente(request)
+    servicio_auth.pedir_restablecimiento(
+        db, email=str(cuerpo.email), user_agent=agente, ip_address=ip
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post(
+    "/auth/password/reset",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["auth"],
+    summary="Elegir contraseña nueva con el enlace recibido",
+    dependencies=[Depends(freno("10/minute"))],
+)
+def restablecer_contrasena(cuerpo: PasswordResetIn, db: DbSession) -> Response:
+    """Gasta el permiso, deja la contraseña nueva y cierra las sesiones abiertas.
+
+    Cerrarlas importa: si la cuenta estuvo en manos de otro, recuperar la
+    contraseña sin echarlo no habría servido de nada.
+    """
+    servicio_auth.restablecer_contrasena(
+        db, token=cuerpo.token, new_password=cuerpo.new_password
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

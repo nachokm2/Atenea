@@ -89,6 +89,19 @@ class PasswordChangeIn(EntradaBase):
     new_password: str = Field(min_length=1, max_length=PASSWORD_MAX)
 
 
+class PasswordForgotIn(EntradaBase):
+    """Cuerpo de `POST /auth/password/forgot`: solo el correo."""
+
+    email: EmailStr
+
+
+class PasswordResetIn(EntradaBase):
+    """Cuerpo de `POST /auth/password/reset`: el permiso y la contraseña nueva."""
+
+    token: str = Field(min_length=1, max_length=255)
+    new_password: str = Field(min_length=1, max_length=PASSWORD_MAX)
+
+
 class AccountDeleteIn(EntradaBase):
     """Cuerpo opcional de `DELETE /auth/account`."""
 

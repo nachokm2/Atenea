@@ -14,15 +14,33 @@ import 'package:flutter/foundation.dart';
 abstract final class Entorno {
   static const String _apiDefinida = String.fromEnvironment('ATENEA_API');
 
+  /// URL de producción. Se usa en cualquier compilación de release que no
+  /// traiga `ATENEA_API`, y es **https** a propósito: desde Android 9 el
+  /// tráfico en claro está bloqueado, así que un `http://` en release no
+  /// fallaría con un error claro, simplemente no respondería nunca.
+  static const String apiProduccion = 'https://api.atenea.cl/api/v1';
+
   /// URL base de la API, incluyendo el prefijo de versión.
+  ///
+  /// En depuración apunta a la máquina de desarrollo, con la salvedad de que en
+  /// el emulador de Android `localhost` es el propio emulador y hay que usar
+  /// `10.0.2.2`. En release nunca se apunta a una dirección local: un paquete
+  /// publicado que busca el ordenador de quien lo compiló no sirve a nadie.
   static String get apiBase {
     if (_apiDefinida.isNotEmpty) return _apiDefinida;
+    if (kReleaseMode) return apiProduccion;
     if (kIsWeb) return 'http://localhost:8000/api/v1';
     return switch (defaultTargetPlatform) {
       TargetPlatform.android => 'http://10.0.2.2:8000/api/v1',
       _ => 'http://localhost:8000/api/v1',
     };
   }
+
+  /// ¿La API a la que se apunta viaja cifrada?
+  ///
+  /// Solo se consulta para avisar durante el desarrollo. En release, apuntar a
+  /// `http://` es además inútil en Android, que bloquea el tráfico en claro.
+  static bool get apiEsSegura => apiBase.startsWith('https://');
 
   /// Esquema de los enlaces profundos que abren la app desde una
   /// notificación: `atenea://home`, `atenea://route/{id}`, etc.

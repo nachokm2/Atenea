@@ -1,0 +1,18 @@
+# Credenciales de firma de Atenea para Android.
+#
+# Copia este archivo a `android/key.properties` y rellenalo. Ese archivo esta
+# ignorado por git a proposito: contiene la contrasena del almacen de claves.
+#
+# Crear el almacen (una sola vez en la vida de la app):
+#
+#   keytool -genkey -v -keystore %USERPROFILE%\atenea-release.jks \
+#           -keyalg RSA -keysize 2048 -validity 10000 -alias atenea
+#
+# Guarda ese .jks y estas contrasenas en un sitio seguro y con copia. Perderlos
+# significa no poder volver a publicar una actualizacion de Atenea nunca mas:
+# Play identifica la app por su firma, no por su nombre.
+
+storePassword=
+keyPassword=
+keyAlias=atenea
+storeFile=C:/Users/TU-USUARIO/atenea-release.jks

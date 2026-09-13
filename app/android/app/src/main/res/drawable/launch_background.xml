@@ -1,12 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modify this file to customize your launch splash screen -->
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@android:color/white" />
+<!--
+  Lo primero que ve quien abre Atenea, antes de que Flutter dibuje nada.
 
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
+  Es la noche del Reino con la espada al centro, la misma imagen y el mismo
+  fondo que usa la app. El blanco que venía por defecto daba un destello a
+  pantalla completa antes de cada arranque, justo lo contrario de lo que quiere
+  transmitir una app con tema oscuro.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/fondo_arranque" />
+    <item>
         <bitmap
             android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+            android:src="@drawable/splash" />
+    </item>
 </layer-list>

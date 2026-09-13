@@ -327,6 +327,28 @@ class RepoAuth {
         },
       );
 
+  /// Pide el enlace para elegir una contraseña nueva.
+  ///
+  /// El Reino responde igual exista o no la cuenta: si respondiera distinto,
+  /// este formulario sería una lista de cuentas válidas que cualquiera podría
+  /// consultar. Por eso aquí tampoco hay nada que interpretar.
+  Future<void> pedirRecuperacion(String correo) => cliente.enviar(
+        '/auth/password/forgot',
+        sinAuth: true,
+        cuerpo: <String, dynamic>{'email': correo.trim()},
+      );
+
+  /// Elige la contraseña nueva con el permiso que llegó por correo.
+  Future<void> restablecerContrasena({
+    required String permiso,
+    required String nueva,
+  }) =>
+      cliente.enviar(
+        '/auth/password/reset',
+        sinAuth: true,
+        cuerpo: <String, dynamic>{'token': permiso, 'new_password': nueva},
+      );
+
   /// Borrado lógico de la cuenta y de sus documentos.
   Future<void> eliminarCuenta() => cliente.eliminar('/auth/account');
 

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- `AteneaPalette.noche.fondo` de lib/design/tokens.dart. Si allí cambia,
+         cambia aquí: es el mismo fondo, y el salto se nota al arrancar. -->
+    <color name="fondo_arranque">#0F1420</color>
+    <!-- Fondo del icono adaptativo, detrás de la espada. -->
+    <color name="fondo_icono">#0F1420</color>
+</resources>

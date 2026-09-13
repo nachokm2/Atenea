@@ -130,6 +130,9 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     refresh_tokens: Mapped[list[RefreshToken]] = relationship(
         back_populates="user", cascade="all, delete-orphan", passive_deletes=True
     )
+    password_resets: Mapped[list[PasswordReset]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", passive_deletes=True
+    )
     settings: Mapped[UserSettings | None] = relationship(
         back_populates="user",
         uselist=False,
@@ -192,6 +195,52 @@ class RefreshToken(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     replaced_by: Mapped[RefreshToken | None] = relationship(
         remote_side="RefreshToken.id", foreign_keys=[replaced_by_id]
     )
+
+
+class PasswordReset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Permiso de un solo uso para elegir una contraseña nueva.
+
+    Sin esto, olvidar la contraseña significaba perder la cuenta: `POST
+    /auth/password` exige la sesión y la contraseña actual, y `DELETE
+    /auth/account` también exige sesión, así que no había forma de entrar ni de
+    salir. La pantalla de acceso tenía el botón y una hoja que prometía una
+    versión futura.
+
+    Del mismo corte que `RefreshToken`, y por las mismas razones:
+
+    - Solo se guarda el **SHA-256** del token. Quien lea la base no puede
+      restablecer la contraseña de nadie.
+    - Vive poco (`PASSWORD_RESET_TTL_MIN`) y se gasta al usarse (`used_at`).
+    - Se anota quién lo pidió y desde dónde, que es lo único que permite
+      distinguir después una recuperación legítima de un intento de secuestro.
+    """
+
+    __tablename__ = "password_resets"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        postgresql.UUID(as_uuid=True),
+        sa.ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    token_hash: Mapped[str] = mapped_column(sa.String(64), nullable=False)
+    """SHA-256 en hexadecimal del token; el token en claro solo viaja al correo."""
+
+    expires_at: Mapped[dt.datetime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+    used_at: Mapped[dt.datetime | None] = mapped_column(
+        sa.DateTime(timezone=True), nullable=True
+    )
+    """Cuándo se gastó. Un permiso usado no vuelve a servir."""
+
+    requested_user_agent: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
+    requested_ip: Mapped[str | None] = mapped_column(sa.String(45), nullable=True)
+
+    __table_args__ = (
+        sa.UniqueConstraint("token_hash"),
+        sa.Index("ix_password_resets_user_id", "user_id"),
+        sa.Index("ix_password_resets_expires_at", "expires_at"),
+    )
+
+    user: Mapped[User] = relationship(back_populates="password_resets")
 
 
 class UserSettings(UUIDPrimaryKeyMixin, TimestampMixin, Base):

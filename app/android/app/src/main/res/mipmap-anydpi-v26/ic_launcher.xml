@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Icono adaptativo (Android 8 en adelante).
+
+  El sistema recorta este icono con la máscara que use cada lanzador: círculo,
+  cuadrado redondeado o gota. Por eso el dibujo del primer plano ocupa solo el
+  44% del lienzo: con más, los lanzadores circulares le cortan la punta a la
+  espada.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/fondo_icono" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <monochrome android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>

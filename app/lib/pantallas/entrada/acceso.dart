@@ -96,14 +96,6 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
     // El enrutador redirige solo: P03 si la cuenta es nueva, Inicio si no.
   }
 
-  String? _validarCorreo(String? valor) {
-    final String v = (valor ?? '').trim();
-    if (v.isEmpty) return 'Escribe tu correo.';
-    final bool formaValida = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]{2,}$').hasMatch(v);
-    if (!formaValida) return 'Ese correo no parece completo.';
-    return null;
-  }
-
   String? _validarContrasena(String? valor) {
     final String v = valor ?? '';
     if (v.isEmpty) return 'Escribe tu contraseña.';
@@ -364,13 +356,128 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
   Future<void> _mostrarRecuperacion(BuildContext context) {
     return mostrarHoja<void>(
       context,
-      constructor: (BuildContext hoja) => const _HojaTexto(
-        titulo: '¿Perdiste la llave?',
-        parrafos: <String>[
-          'Todavía estamos forjando la recuperación de contraseña por correo: '
-              'llegará en una próxima versión.',
-          'Mientras tanto, escríbenos desde el correo de tu cuenta y te '
-              'ayudamos a volver a entrar sin perder tu racha ni tu progreso.',
+      constructor: (BuildContext hoja) =>
+          _HojaRecuperacion(correoInicial: _correo.text.trim()),
+    );
+  }
+}
+
+/// Pide el enlace para elegir una contraseña nueva.
+///
+/// Siempre dice lo mismo al terminar, haya cuenta o no con ese correo. No es
+/// vaguedad: responder distinto convertiría esta hoja en una forma cómoda de
+/// averiguar quién tiene cuenta en Atenea, probando direcciones de una en una.
+class _HojaRecuperacion extends StatefulWidget {
+  const _HojaRecuperacion({required this.correoInicial});
+
+  /// Lo que ya había escrito en el formulario de acceso, para no repetirlo.
+  final String correoInicial;
+
+  @override
+  State<_HojaRecuperacion> createState() => _HojaRecuperacionState();
+}
+
+class _HojaRecuperacionState extends State<_HojaRecuperacion> {
+  late final TextEditingController _correo =
+      TextEditingController(text: widget.correoInicial);
+  final GlobalKey<FormState> _formulario = GlobalKey<FormState>();
+  bool _enviado = false;
+
+  @override
+  void dispose() {
+    _correo.dispose();
+    super.dispose();
+  }
+
+  Future<void> _enviar() async {
+    if (!(_formulario.currentState?.validate() ?? false)) return;
+    final ControladorSesion sesion = context.read<ControladorSesion>();
+    final bool salio = await sesion.pedirRecuperacion(_correo.text.trim());
+    if (!mounted) return;
+    if (salio) {
+      setState(() => _enviado = true);
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          sesion.error?.mensaje ?? 'No pudimos enviarlo. Inténtalo otra vez.',
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final AteneaPalette paleta = context.paleta;
+    final ControladorSesion sesion = context.watch<ControladorSesion>();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(Espacio.lg, 0, Espacio.lg, Espacio.xl),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Text('¿Perdiste la llave?', style: context.textos.headlineSmall),
+          const SizedBox(height: Espacio.sm),
+          if (_enviado) ...<Widget>[
+            Text(
+              'Si esa dirección tiene cuenta en el Reino, el enlace ya va en '
+              'camino. Revisa tu correo, y también la carpeta de no deseados.',
+              style: context.textos.bodyMedium?.copyWith(
+                color: paleta.textoSecundario,
+              ),
+            ),
+            const SizedBox(height: Espacio.xs),
+            Text(
+              'Caduca en media hora y solo sirve una vez.',
+              style: context.textos.bodySmall?.copyWith(
+                color: paleta.textoSecundario,
+              ),
+            ),
+            const SizedBox(height: Espacio.lg),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Entendido'),
+            ),
+          ] else ...<Widget>[
+            Text(
+              'Escribe el correo de tu cuenta y te enviamos un enlace para '
+              'elegir una contraseña nueva. No pierdes ni tu racha ni tu '
+              'progreso.',
+              style: context.textos.bodyMedium?.copyWith(
+                color: paleta.textoSecundario,
+              ),
+            ),
+            const SizedBox(height: Espacio.md),
+            Form(
+              key: _formulario,
+              child: TextFormField(
+                controller: _correo,
+                keyboardType: TextInputType.emailAddress,
+                autocorrect: false,
+                enabled: !sesion.ocupado,
+                textInputAction: TextInputAction.done,
+                decoration: const InputDecoration(
+                  labelText: 'Correo',
+                  hintText: 'tu@correo.cl',
+                ),
+                validator: _validarCorreo,
+                onFieldSubmitted: (_) => _enviar(),
+              ),
+            ),
+            const SizedBox(height: Espacio.lg),
+            FilledButton(
+              onPressed: sesion.ocupado ? null : _enviar,
+              child: sesion.ocupado
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Enviarme el enlace'),
+            ),
+          ],
         ],
       ),
     );
@@ -441,6 +548,15 @@ class _Terminos extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Valida un correo escrito a mano, en la pantalla y en la hoja.
+String? _validarCorreo(String? valor) {
+  final String v = (valor ?? '').trim();
+  if (v.isEmpty) return 'Escribe tu correo.';
+  final bool formaValida = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]{2,}$').hasMatch(v);
+  if (!formaValida) return 'Ese correo no parece completo.';
+  return null;
 }
 
 /// Hoja de texto corrido reutilizada por términos y recuperación.

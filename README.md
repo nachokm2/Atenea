@@ -72,6 +72,32 @@ eso hay **un** servicio y el procesador de trabajos corre dentro de la propia AP
 (`WORKER_EN_PROCESO`). El día que ese material viva en un bucket, se apaga esa
 variable y el worker vuelve a ser un servicio aparte, que escala mejor.
 
+## Publicar el Android
+
+El paquete de release necesita una llave de firma que **no** vive en el
+repositorio. Se crea una sola vez:
+
+```bash
+keytool -genkey -v -keystore ~/atenea-release.jks         -keyalg RSA -keysize 2048 -validity 10000 -alias atenea
+```
+
+Copia [app/android/key.properties.ejemplo](app/android/key.properties.ejemplo) a
+`app/android/key.properties` y rellénalo. Guarda el `.jks` y sus contraseñas con
+copia de seguridad: Play identifica la app por su firma, así que perderlos
+significa no poder volver a publicar una actualización de Atenea nunca más.
+
+Sin ese archivo la compilación sigue funcionando, firmada con la clave de
+depuración, y avisa por consola. Sirve para probar en local; Play la rechaza.
+
+```bash
+cd app
+flutter build appbundle --release --dart-define=ATENEA_API=https://tu-api/api/v1
+```
+
+Si no pasas `ATENEA_API`, el paquete apunta a `Entorno.apiProduccion`. Nunca a
+`localhost`: un paquete publicado que busca el ordenador de quien lo compiló no
+le sirve a nadie, y desde Android 9 el tráfico sin cifrar está bloqueado.
+
 ## Comprobar que todo sigue en pie
 
 ```powershell

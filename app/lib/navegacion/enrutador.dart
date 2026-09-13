@@ -26,6 +26,7 @@ import '../estado/sesion.dart';
 import '../pantallas/entrada/acceso.dart';
 import '../pantallas/entrada/bienvenida.dart';
 import '../pantallas/entrada/crear_personaje.dart';
+import '../pantallas/entrada/nueva_contrasena.dart';
 import '../pantallas/inicio/inicio.dart';
 import '../pantallas/inicio/misiones.dart';
 import '../pantallas/aventura/aventura.dart';
@@ -76,6 +77,13 @@ GoRouter crearEnrutador(ControladorSesion sesion) {
         // (lib/pantallas/entrada/acceso.dart).
         builder: (BuildContext context, GoRouterState state) =>
             const PantallaAcceso(),
+      ),
+      GoRoute(
+        path: Rutas.nuevaContrasena,
+        // P02b — destino del enlace del correo de recuperación
+        // (lib/pantallas/entrada/nueva_contrasena.dart).
+        builder: (BuildContext context, GoRouterState state) =>
+            PantallaNuevaContrasena(permiso: state.uri.queryParameters['token']),
       ),
       GoRoute(
         path: Rutas.crearPersonaje,
@@ -268,6 +276,11 @@ String? _redirigir(ControladorSesion sesion, GoRouterState state) {
 
   final String destino = state.matchedLocation;
   final bool enEntrada = Rutas.deEntrada.contains(destino);
+
+  // El enlace de recuperación manda sobre cualquier fase. Quien lo abre ya
+  // tiene sesión iniciada en otro sitio la mitad de las veces, y mandarlo al
+  // Inicio le quitaría justo lo que vino a hacer.
+  if (destino == Rutas.nuevaContrasena) return null;
 
   switch (sesion.fase) {
     case FaseSesion.arrancando:

@@ -1,6 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Sin este permiso, un APK o AAB de release no puede hacer ni una sola
+         peticion de red y la app se queda para siempre en la pantalla de acceso.
+         Flutter solo lo declara en las variantes de depuracion y de perfil, asi
+         que en release hay que ponerlo aqui: es el fallo mas silencioso de todo
+         el empaquetado de Android. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
     <application
-        android:label="atenea"
+        android:label="Atenea"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -23,6 +30,17 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+
+            <!-- Enlaces propios: `atenea://home`, `atenea://lesson/{id}` y, sobre
+                 todo, `atenea://password/reset?token=...`, que es el que llega por
+                 correo cuando alguien olvida su contrasena. Sin este filtro, el
+                 enlace no abre nada y la recuperacion no sirve en el telefono. -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="atenea"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

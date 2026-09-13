@@ -41,6 +41,7 @@ def _produccion(**extra) -> dict:
         "embeddings_provider": "voyage",
         "voyage_api_key": "vk-de-mentira",
         "cors_origins": ["https://atenea.cl"],
+        "email_provider": "smtp",
     }
     base.update(extra)
     return base
@@ -68,6 +69,7 @@ def test_desarrollo_arranca_con_todo_por_defecto() -> None:
         ({"embeddings_provider": "mock"}, "EMBEDDINGS_PROVIDER"),
         ({"voyage_api_key": None}, "VOYAGE_API_KEY"),
         ({"cors_origins": []}, "CORS_ORIGINS"),
+        ({"email_provider": "consola"}, "EMAIL_PROVIDER"),
     ],
 )
 def test_produccion_mal_configurada_no_arranca(roto: dict, senal: str) -> None:
