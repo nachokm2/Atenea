@@ -38,6 +38,12 @@ flutter run --dart-define=ATENEA_API=http://10.0.2.2:8000/api/v1      # emulador
 flutter run --dart-define=ATENEA_API=http://192.168.1.20:8000/api/v1  # teléfono en la misma red
 ```
 
+Atenea usa dos servicios de IA distintos y conviene no confundirlos. **Claude**
+escribe las lecciones y corrige las respuestas abiertas. **Los embeddings**
+(OpenAI o Voyage, a elección) convierten el material en vectores para poder
+buscar por significado dentro de él: sin ellos, las lecciones se escribirían sin
+mirar lo que subió el aprendiz.
+
 Con la semilla ya hay una ruta jugable de principio a fin sin gastar un peso en
 IA. Para que la IA genere rutas a partir de documentos propios hacen falta dos
 cosas más: `ANTHROPIC_API_KEY` en el `.env` de la raíz y el procesador de

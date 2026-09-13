@@ -93,7 +93,15 @@ export default defineRailway((ctx) => {
       WORKER_EN_PROCESO: "true",
 
       AI_PROVIDER: "claude",
-      EMBEDDINGS_PROVIDER: "voyage",
+
+      // OpenAI y no Voyage porque es la cuenta que ya existe. Son
+      // intercambiables: mismas 512 dimensiones y misma métrica coseno.
+      //
+      // Cambiar de proveedor con material ya indexado obliga a reindexarlo: los
+      // vectores de dos proveedores no se pueden comparar entre sí, y mientras
+      // tanto la búsqueda por significado devolvería cualquier cosa. Por eso
+      // `document_chunks.embedding_model` guarda con cuál se generó cada uno.
+      EMBEDDINGS_PROVIDER: "openai",
 
       // Correo. Solo se usa para recuperar la contraseña, pero sin él el
       // arranque falla a propósito: dejaría a quien la olvide esperando un
@@ -109,7 +117,7 @@ export default defineRailway((ctx) => {
       // debe conocerlos.
       JWT_SECRET: preserve(),
       ANTHROPIC_API_KEY: preserve(),
-      VOYAGE_API_KEY: preserve(),
+      OPENAI_API_KEY: preserve(),
       SMTP_HOST: preserve(),
       SMTP_USER: preserve(),
       SMTP_PASSWORD: preserve(),

@@ -49,6 +49,9 @@ MODELO_MOCK = "mock-hash-512"
 #: Extremo de la API de Voyage AI.
 URL_VOYAGE = "https://api.voyageai.com/v1/embeddings"
 
+#: Extremo de embeddings de OpenAI.
+URL_OPENAI = "https://api.openai.com/v1/embeddings"
+
 _TOKEN = re.compile(r"\w+", re.UNICODE)
 
 
@@ -218,48 +221,192 @@ class ProveedorVoyage:
         return vectores
 
 
+class ProveedorOpenAI:
+    """Embeddings de OpenAI (`text-embedding-3-small`, recortado a 512).
+
+    Existe para no obligar a dar de alta otra cuenta a quien ya tiene una de
+    OpenAI. Es intercambiable con Voyage: mismas dimensiones, misma métrica
+    coseno, misma tabla.
+
+    `text-embedding-3-small` admite el parámetro `dimensions` porque está
+    entrenado de forma que los primeros números del vector ya concentran casi
+    todo el significado. Eso permite pedir 512 en vez de los 1536 nativos y
+    encajar en `Vector(512)` sin reindexar ni cambiar el contrato.
+
+    Un aviso que importa: **los vectores de dos proveedores no se pueden
+    comparar entre sí**. Si se cambia de proveedor con material ya indexado, hay
+    que volver a indexarlo; mientras tanto la búsqueda por significado devolvería
+    resultados sin sentido. Por eso `document_chunks.embedding_model` guarda con
+    qué modelo se generó cada fragmento.
+    """
+
+    nombre = "openai"
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        modelo: str = "text-embedding-3-small",
+        dimensiones: int = 512,
+        tiempo_limite: float = 30.0,
+    ) -> None:
+        self.api_key = api_key
+        self.modelo = modelo
+        self.dimensiones = int(dimensiones)
+        self.tiempo_limite = tiempo_limite
+
+    def _llamar(self, textos: list[str]) -> list[list[float]]:
+        """Una llamada al extremo de embeddings, con reintentos exponenciales."""
+        import httpx  # noqa: PLC0415 - importación perezosa: solo con proveedor real
+        from tenacity import (  # noqa: PLC0415
+            retry,
+            retry_if_exception_type,
+            stop_after_attempt,
+            wait_exponential,
+        )
+
+        @retry(
+            reraise=True,
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(multiplier=1, min=1, max=8),
+            retry=retry_if_exception_type((httpx.TransportError, httpx.HTTPStatusError)),
+        )
+        def _peticion() -> list[list[float]]:
+            respuesta = httpx.post(
+                URL_OPENAI,
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "input": textos,
+                    "model": self.modelo,
+                    "dimensions": self.dimensiones,
+                },
+                timeout=self.tiempo_limite,
+            )
+            respuesta.raise_for_status()
+            cuerpo = respuesta.json()
+            datos = sorted(cuerpo.get("data", []), key=lambda fila: fila.get("index", 0))
+            return [list(fila["embedding"]) for fila in datos]
+
+        try:
+            return _peticion()
+        except Exception as exc:
+            logger.warning("embeddings_openai_error", error=str(exc))
+            raise ExternalServiceError(
+                "No pudimos indexar tu material en este momento. Inténtalo de nuevo.",
+                details={"provider": "openai", "model": self.modelo},
+            ) from exc
+
+    def embeber(self, textos: list[str], *, consulta: bool = False) -> list[list[float]]:  # noqa: ARG002 - firma fijada por la interfaz
+        """Embeddings de OpenAI.
+
+        No distingue consulta de documento: a diferencia de Voyage, sus modelos
+        no tienen `input_type` y el mismo vector sirve para los dos usos.
+        """
+        if not textos:
+            return []
+        vectores = self._llamar(textos)
+        if len(vectores) != len(textos):
+            raise ExternalServiceError(
+                "No pudimos indexar tu material en este momento. Inténtalo de nuevo.",
+                details={"provider": "openai", "expected": len(textos), "received": len(vectores)},
+            )
+        return vectores
+
+
 # ---------------------------------------------------------------------------
 # Selección del proveedor
 # ---------------------------------------------------------------------------
 
 
 def ajustes_de(cfg: Any | None = None) -> AjustesEmbeddings:
-    """Resuelve `ai.embeddings` de `game_configs`, con respaldo en `settings`."""
+    """Resuelve los ajustes de embeddings: quién los genera y con qué parámetros.
+
+    El reparto no es arbitrario y conviene entenderlo:
+
+    * **Quién** (`provider`) lo decide `EMBEDDINGS_PROVIDER` del entorno, porque
+      tiene que ir de la mano con la clave de API que hay puesta en esa máquina.
+      Es infraestructura, no un parámetro de juego. Además es lo que comprueba la
+      guarda de arranque, y una guarda que valida algo que no manda no vale nada.
+    * **Con qué** (`model`, `dimensions`, `batch_size`) sale de `ai.embeddings` en
+      `game_configs`, que es donde vive el ajuste fino (§8.10 regla 5).
+
+    Antes el entorno solo podía forzar `mock`: con `EMBEDDINGS_PROVIDER=openai`,
+    `game_configs` seguía imponiendo `voyage` y la petición se hacía al proveedor
+    equivocado.
+    """
     datos = dict(EMBEDDINGS_POR_DEFECTO)
     if cfg is not None:
         try:
             datos.update(cfg.obtener_json("ai.embeddings", EMBEDDINGS_POR_DEFECTO) or {})
         except Exception:
             logger.debug("embeddings_config_ausente")
-    # `EMBEDDINGS_PROVIDER` del entorno manda en desarrollo y pruebas: permite forzar
-    # el proveedor sin tocar `game_configs`.
-    proveedor = str(settings.embeddings_provider or datos.get("provider") or "mock")
-    if proveedor == "mock":
-        datos["provider"] = "mock"
     return AjustesEmbeddings(
-        provider=str(datos.get("provider") or "mock"),
+        provider=str(settings.embeddings_provider or datos.get("provider") or "mock"),
         model=str(datos.get("model") or EMBEDDINGS_POR_DEFECTO["model"]),
         dimensions=int(datos.get("dimensions") or settings.embeddings_dim),
         batch_size=max(1, int(datos.get("batch_size") or 128)),
     )
 
 
+#: Modelo por defecto de cada proveedor real, cuando `ai.embeddings.model` trae
+#: el de otro. Los nombres no son intercambiables entre proveedores.
+MODELO_POR_DEFECTO: dict[str, str] = {
+    "voyage": "voyage-3-lite",
+    "openai": "text-embedding-3-small",
+}
+
+
+def _modelo_para(nombre: str, pedido: str) -> str:
+    """Modelo a usar: el pedido si es de ese proveedor, y si no el suyo por defecto."""
+    por_defecto = MODELO_POR_DEFECTO[nombre]
+    del_proveedor = pedido.startswith("voyage") if nombre == "voyage" else pedido.startswith("text-embedding")
+    return pedido if (pedido and del_proveedor) else por_defecto
+
+
 def obtener_proveedor(cfg: Any | None = None, *, forzar: str | None = None) -> ProveedorEmbeddings:
-    """Devuelve el proveedor vigente; cae al `mock` si falta la clave del proveedor real."""
+    """Devuelve el proveedor vigente de embeddings.
+
+    En desarrollo, si falta la clave se cae al `mock` con un aviso: permite
+    trabajar sin dar de alta ninguna cuenta.
+
+    En producción **no se cae a nada**. Un servidor configurado con `openai` que
+    sirviera vectores de hash haría exactamente lo que la guarda de arranque
+    intenta impedir: escribir lecciones con citas que no vienen al caso, sin que
+    nada se ponga en rojo. Si la clave falta en producción, esto lanza, la
+    ingesta falla, y el fallo se ve.
+    """
     ajustes = ajustes_de(cfg)
     nombre = (forzar or ajustes.provider or "mock").lower()
 
-    if nombre == "voyage":
-        clave = settings.voyage_api_key
+    if nombre in MODELO_POR_DEFECTO:
+        clave = settings.voyage_api_key if nombre == "voyage" else settings.openai_api_key
         if not clave:
-            logger.warning("embeddings_sin_api_key", provider="voyage")
+            if settings.is_production:
+                raise ExternalServiceError(
+                    "El servicio de indexado no está configurado.",
+                    details={"provider": nombre, "reason": "missing_api_key"},
+                )
+            logger.warning("embeddings_sin_api_key", provider=nombre)
             return ProveedorMock(dimensiones=ajustes.dimensions)
-        return ProveedorVoyage(
-            api_key=clave, modelo=ajustes.model, dimensiones=ajustes.dimensions
+
+        modelo = _modelo_para(nombre, ajustes.model)
+        constructor = ProveedorVoyage if nombre == "voyage" else ProveedorOpenAI
+        return constructor(
+            api_key=clave, modelo=modelo, dimensiones=ajustes.dimensions
         )
 
     if nombre != "mock":
+        # Un nombre que no se reconoce es un error de configuración, no una
+        # petición de usar el simulado.
         logger.warning("embeddings_proveedor_desconocido", provider=nombre)
+        if settings.is_production:
+            raise ExternalServiceError(
+                "El servicio de indexado no está configurado.",
+                details={"provider": nombre, "reason": "unknown_provider"},
+            )
     return ProveedorMock(dimensiones=ajustes.dimensions)
 
 
