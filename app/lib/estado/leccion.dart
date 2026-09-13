@@ -287,6 +287,13 @@ class ControladorLeccion extends ChangeNotifier with WidgetsBindingObserver {
     if (_porReintentar.isNotEmpty) {
       final List<Pregunta> cola = List<Pregunta>.of(_porReintentar);
       _porReintentar.clear();
+      // La segunda oportunidad tiene que poder responderse. Mientras el
+      // veredicto anterior siguiera en `_resueltas`, la pregunta reencolada se
+      // presentaba en fase de retroalimentación: el aprendiz volvía a leer su
+      // propio error, pulsaba Continuar y no podía intentarlo otra vez.
+      for (final Pregunta p in cola) {
+        _resueltas.remove(p.id);
+      }
       final int base = _pasos.length;
       _pasos = <PasoLeccion>[
         ..._pasos,
