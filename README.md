@@ -54,11 +54,18 @@ sustituye al antiguo `railway.toml`: Railway declaró obsoleto aquel formato y n
 admite servicios nuevos con él.
 
 ```bash
+npm install             # el SDK que evalúa .railway/railway.ts
 railway login
 railway link
 railway config plan     # enseña qué cambiaría, sin tocar nada
 railway config apply    # lo aplica tras confirmar
 ```
+
+Hace falta la CLI **5.42.1 o superior** (`npm i -g @railway/cli`). En Windows,
+usa [scripts/railway.ps1](scripts/railway.ps1) en vez de `railway` a secas: el
+SDK comprueba la versión de la CLI buscando un ejecutable llamado `railway`, que
+en Windows no existe como tal, y responde que la CLI es vieja aunque esté al día.
+El envoltorio le señala el `railway.exe` de verdad.
 
 Los secretos no viven en ese archivo. Se cargan una vez en el panel de Railway:
 `JWT_SECRET`, `ANTHROPIC_API_KEY` y `VOYAGE_API_KEY`. Si falta alguno, o si el

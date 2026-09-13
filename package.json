@@ -1,0 +1,9 @@
+{
+  "name": "atenea-infraestructura",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Existe solo para que la CLI de Railway pueda evaluar .railway/railway.ts. Atenea no es un proyecto de Node: el backend es Python y el cliente es Flutter.",
+  "dependencies": {
+    "railway": "^3.11.0"
+  }
+}

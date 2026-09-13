@@ -44,3 +44,8 @@ app/build/
 app/android/key.properties
 *.jks
 *.keystore
+
+# Por si alguien instala algo de Node aqui: Atenea no es un proyecto de Node, y
+# la CLI de Railway trae dentro el motor que evalua `.railway/railway.ts`, asi
+# que no hace falta ningun paquete para desplegar.
+node_modules/

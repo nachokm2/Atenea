@@ -95,12 +95,24 @@ export default defineRailway((ctx) => {
       AI_PROVIDER: "claude",
       EMBEDDINGS_PROVIDER: "voyage",
 
+      // Correo. Solo se usa para recuperar la contraseña, pero sin él el
+      // arranque falla a propósito: dejaría a quien la olvide esperando un
+      // mensaje que nadie envía.
+      EMAIL_PROVIDER: "smtp",
+      EMAIL_FROM: "Atenea <no-responder@atenea.cl>",
+      SMTP_PORT: "587",
+
       CORS_ORIGINS: '["https://atenea.cl","https://www.atenea.cl"]',
 
-      // Cargados a mano en el panel una sola vez.
+      // Cargados a mano en el panel una sola vez. `preserve()` significa
+      // "deja el valor que ya está en Railway": este archivo no los conoce y no
+      // debe conocerlos.
       JWT_SECRET: preserve(),
       ANTHROPIC_API_KEY: preserve(),
       VOYAGE_API_KEY: preserve(),
+      SMTP_HOST: preserve(),
+      SMTP_USER: preserve(),
+      SMTP_PASSWORD: preserve(),
     },
   });
 
