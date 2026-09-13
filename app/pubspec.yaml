@@ -46,6 +46,8 @@ dependencies:
   fl_chart: ^1.2.0
   file_picker: ^12.2.0
   provider: ^6.1.5+1
+  # Solo para derivar la clave de idempotencia con UUID v5 (SHA-1).
+  crypto: ^3.0.6
 
 dev_dependencies:
   flutter_test:

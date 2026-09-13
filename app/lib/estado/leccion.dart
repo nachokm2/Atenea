@@ -83,6 +83,9 @@ class ControladorLeccion extends ChangeNotifier with WidgetsBindingObserver {
   String? _claveCompletar;
   final Map<String, String> _clavesRespuesta = <String, String>{};
 
+  /// Cuántas veces se ha enviado ya cada pregunta de esta actividad.
+  final Map<String, int> _intentosPorPregunta = <String, int>{};
+
   // -------------------------------------------------------------------------
   // Lecturas
   // -------------------------------------------------------------------------
@@ -237,9 +240,15 @@ class ControladorLeccion extends ChangeNotifier with WidgetsBindingObserver {
     _error = null;
     notifyListeners();
 
+    // La clave lleva el número de intento. Sin él, responder por segunda vez a
+    // la misma pregunta reenvía la misma clave y el Reino devuelve el veredicto
+    // del primer intento sin corregir nada: la revancha quedaría anulada y el
+    // acierto no contaría para el dominio.
+    final int intento = (_intentosPorPregunta[pregunta.id] ?? 0) + 1;
+    _intentosPorPregunta[pregunta.id] = intento;
     final String clave = _clavesRespuesta.putIfAbsent(
-      pregunta.id,
-      () => claveDeterminista('answer', '${actividad.id}:${pregunta.id}'),
+      '${pregunta.id}:$intento',
+      () => claveDeterminista('answer', '${actividad.id}:${pregunta.id}', intento),
     );
     final int milisegundos = _milisegundosDesdeLatido();
 
@@ -498,6 +507,7 @@ class ControladorLeccion extends ChangeNotifier with WidgetsBindingObserver {
     _porReintentar.clear();
     _yaReintentadas.clear();
     _clavesRespuesta.clear();
+    _intentosPorPregunta.clear();
     _claveCompletar = null;
     _xpDeRespuestas = 0;
     _recibo = null;

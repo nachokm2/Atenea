@@ -368,7 +368,7 @@ class _VistaPreguntaState extends State<VistaPregunta> {
   Widget _relacionar() {
     final Pregunta p = widget.pregunta;
     final List<OpcionPregunta> izquierda = p.parejas;
-    final List<String> candidatas = p.candidatas;
+    final List<OpcionPregunta> candidatas = p.candidatas;
     if (izquierda.isEmpty || candidatas.isEmpty) return const _SinOpciones();
 
     return Column(
@@ -377,7 +377,7 @@ class _VistaPreguntaState extends State<VistaPregunta> {
           if (i > 0) const SizedBox(height: Espacio.xs),
           _FilaPareja(
             izquierda: izquierda[i].texto,
-            elegida: _parejas[izquierda[i].clave],
+            elegida: _textoDeCandidata(candidatas, _parejas[izquierda[i].clave]),
             bloqueada: widget.bloqueado,
             alTocar: () => _elegirPareja(izquierda[i], candidatas),
           ),
@@ -386,9 +386,21 @@ class _VistaPreguntaState extends State<VistaPregunta> {
     );
   }
 
+  /// Texto visible de la candidata elegida, a partir de su clave.
+  static String? _textoDeCandidata(
+    List<OpcionPregunta> candidatas,
+    String? clave,
+  ) {
+    if (clave == null) return null;
+    for (final OpcionPregunta c in candidatas) {
+      if (c.clave == clave) return c.texto;
+    }
+    return clave;
+  }
+
   Future<void> _elegirPareja(
     OpcionPregunta fila,
-    List<String> candidatas,
+    List<OpcionPregunta> candidatas,
   ) async {
     if (widget.bloqueado) return;
     final String? elegida = await mostrarHoja<String>(
@@ -400,6 +412,7 @@ class _VistaPreguntaState extends State<VistaPregunta> {
       ),
     );
     if (elegida == null || !mounted) return;
+    // Se guarda la **clave**, no el texto: el corrector compara claves.
     setState(() => _parejas[fila.clave] = elegida);
     final bool completo = widget.pregunta.parejas.every(
       (OpcionPregunta o) => _parejas.containsKey(o.clave),
@@ -906,7 +919,12 @@ class _HojaCandidatas extends StatelessWidget {
   });
 
   final String titulo;
-  final List<String> candidatas;
+
+  /// Candidatas del lado derecho, con su clave: la hoja devuelve la **clave**,
+  /// que es lo que compara el corrector del Reino.
+  final List<OpcionPregunta> candidatas;
+
+  /// Clave de la candidata ya elegida, si la hay.
   final String? actual;
 
   @override
@@ -941,14 +959,14 @@ class _HojaCandidatas extends StatelessWidget {
                     const SizedBox(height: Espacio.xs),
                 itemBuilder: (BuildContext contexto, int indice) =>
                     _TarjetaOpcion(
-                  texto: candidatas[indice],
+                  texto: candidatas[indice].texto,
                   letra: String.fromCharCode(65 + indice),
-                  marca: candidatas[indice] == actual
+                  marca: candidatas[indice].clave == actual
                       ? _Marca.elegida
                       : _Marca.neutra,
                   bloqueada: false,
                   alTocar: () =>
-                      Navigator.of(context).pop(candidatas[indice]),
+                      Navigator.of(context).pop(candidatas[indice].clave),
                 ),
               ),
             ),

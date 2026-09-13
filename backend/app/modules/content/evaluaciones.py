@@ -453,7 +453,15 @@ def registrar_respuesta(
     if any(r.question_id == question_id for r in respondidas):
         raise AteneaError(code="ALREADY_ANSWERED", details={"question_id": str(question_id)})
 
-    veredicto = correccion.corregir(cfg, pregunta, response, attempt_no=1)
+    veredicto = correccion.corregir(
+        cfg,
+        pregunta,
+        response,
+        attempt_no=1,
+        db=db,
+        usuario_id=getattr(usuario, "id", None),
+        activity_id=intento.id,
+    )
     actividad = _actividad_de_intento(db, intento)
     evidencia = QuestionAttempt(
         user_id=usuario.id,

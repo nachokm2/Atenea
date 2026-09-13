@@ -26,9 +26,17 @@ from decimal import Decimal
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
+from app.core.logging import get_logger
 from app.core.time import ensure_utc, utcnow
 from app.models.content import LearningPath, Lesson, PathModule, Topic
-from app.models.enums import EventType, ModuleStatus, PathStatus, ProgressState
+from app.models.enums import (
+    ContentStatus,
+    EventType,
+    JobType,
+    ModuleStatus,
+    PathStatus,
+    ProgressState,
+)
 from app.models.gamification import DomainEvent
 from app.models.progress import (
     UserLessonProgress,
@@ -37,6 +45,8 @@ from app.models.progress import (
     UserTopicProgress,
 )
 from app.modules.progress import a_decimal_2, a_float
+
+logger = get_logger("atenea.progress")
 
 
 @dataclass(slots=True)
@@ -402,12 +412,56 @@ class ServicioProgreso:
         if siguiente is None:
             return None
         fila = self._fila_modulo(user_id, siguiente)
+        desbloqueado: uuid.UUID | None = None
         if fila.status == ModuleStatus.LOCKED:
             fila.status = ModuleStatus.AVAILABLE
             fila.unlocked_at = momento
             self.db.flush()
-            return siguiente.id
-        return None
+            desbloqueado = siguiente.id
+
+        self._encargar_contenido(siguiente, usuario_id=user_id)
+        return desbloqueado
+
+    def _encargar_contenido(self, modulo: PathModule, *, usuario_id: uuid.UUID) -> None:
+        """Encarga la redacción de un módulo recién abierto que aún no existe.
+
+        La generación de una Ruta propia es perezosa: la Fase A crea todos los
+        módulos vacíos y solo se encarga la escritura del primero. Sin esto, el
+        aprendiz terminaba el módulo 1, cobraba su oro, abría el 2 y se
+        encontraba un mapa en blanco sin forma de salir de ahí.
+
+        Las Rutas del Reino ya vienen escritas, así que no entran por aquí. La
+        clave de idempotencia lleva el módulo: pasar dos veces no encarga dos
+        trabajos.
+        """
+        if modulo.content_status == ContentStatus.READY:
+            return
+        try:  # pragma: no cover - la cola es infraestructura, no dominio
+            from app.worker import cola  # noqa: PLC0415 - importación perezosa (§1.3)
+
+            cola.encolar(
+                self.db,
+                job_type=JobType.MODULE_GENERATION,
+                usuario_id=usuario_id,
+                target_type="module",
+                target_id=modulo.id,
+                learning_path_id=modulo.learning_path_id,
+                payload={
+                    "module_id": str(modulo.id),
+                    "learning_path_id": str(modulo.learning_path_id),
+                },
+                idempotency_key=f"module-generation:{modulo.id}",
+                progress_label=f"Escribiendo el módulo {modulo.position}",
+            )
+        except Exception:  # pragma: no cover - nunca a costa del progreso
+            # Que la cola falle no puede costarle al aprendiz el módulo que
+            # acaba de terminar: se registra y se sigue.
+            logger.warning(
+                "progreso.encargo_de_modulo_fallido",
+                module_id=str(modulo.id),
+                learning_path_id=str(modulo.learning_path_id),
+                exc_info=True,
+            )
 
     # -- ruta -------------------------------------------------------------
 

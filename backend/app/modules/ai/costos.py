@@ -65,6 +65,15 @@ TIPOS_POR_CUOTA: Final[dict[str, tuple[JobType, ...]]] = {
     CUOTA_REGENERACIONES: (JobType.MODULE_GENERATION,),
 }
 
+#: Cuotas que solo cuentan los trabajos que el aprendiz pidió a mano.
+#:
+#: `module_regenerations` es, como dice su nombre, la cuota de **regenerar**: el
+#: límite existe para que nadie rehaga el mismo módulo veinte veces. La escritura
+#: automática del módulo siguiente, que el Reino encarga solo al desbloquearlo,
+#: no es una regeneración y no puede gastar ese saldo. Contarla dejaba a cero la
+#: cuota del día con solo terminar un módulo.
+_SOLO_FORZADOS: Final[frozenset[str]] = frozenset({CUOTA_REGENERACIONES})
+
 #: Estados que cuentan como consumo (un trabajo cancelado no gasta cuota).
 _ESTADOS_QUE_CONSUMEN: Final[tuple[JobStatus, ...]] = (
     JobStatus.PENDING,
@@ -269,18 +278,18 @@ def consumo_de_cuota(
     tipos = TIPOS_POR_CUOTA.get(clave, ())
     if not tipos:
         return 0
-    return int(
-        db.execute(
-            sa.select(sa.func.count(GenerationJob.id)).where(
-                GenerationJob.user_id == usuario_id,
-                GenerationJob.job_type.in_(tipos),
-                GenerationJob.status.in_(_ESTADOS_QUE_CONSUMEN),
-                GenerationJob.created_at >= desde,
-                GenerationJob.created_at < hasta,
-            )
-        ).scalar_one()
-        or 0
+    consulta = sa.select(sa.func.count(GenerationJob.id)).where(
+        GenerationJob.user_id == usuario_id,
+        GenerationJob.job_type.in_(tipos),
+        GenerationJob.status.in_(_ESTADOS_QUE_CONSUMEN),
+        GenerationJob.created_at >= desde,
+        GenerationJob.created_at < hasta,
     )
+    if clave in _SOLO_FORZADOS:
+        consulta = consulta.where(
+            GenerationJob.payload["forced"].astext == sa.literal("true")
+        )
+    return int(db.execute(consulta).scalar_one() or 0)
 
 
 def estado_cuota(

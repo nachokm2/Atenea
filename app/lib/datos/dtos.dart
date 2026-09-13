@@ -978,7 +978,13 @@ class DetalleItem {
         1,
       ),
       anuncioId: _txtN(_alguna(json, <String>['listing_id']) ?? listado['id']),
-      puedeComprar: _bol(_alguna(json, <String>['can_buy', 'can_purchase'])),
+      // Misma historia que en el Mercado: `ItemDetailOut` trae `owned` y
+      // `locked`, nunca `can_buy`.
+      puedeComprar: Anuncio._autorizaComprar(<String, dynamic>{
+        ...listado,
+        'owned': _alguna(json, <String>['owned', 'is_owned']),
+        'locked': _alguna(json, <String>['locked', 'is_locked']),
+      }),
       saldoOro: _ent(_alguna(json, <String>['balance', 'gold_balance'])),
     );
   }
@@ -1003,6 +1009,22 @@ class DetalleItem {
 
   /// Saldo de oro del usuario en el momento de consultar.
   final int saldoOro;
+
+  /// El mismo detalle, completado con lo que el Mercado ya sabe.
+  ///
+  /// `ItemDetailOut` no trae precio, listado ni saldo: son datos de la tienda,
+  /// no del ítem. Sin esto la ficha abierta desde el Mercado no encontraba
+  /// `anuncioId` y ofrecía un botón de "Entendido" en vez del de comprar, así
+  /// que no había ninguna pantalla desde la que gastar una moneda.
+  DetalleItem conAnuncio(Anuncio anuncio, {int saldo = 0}) => DetalleItem(
+        inventario: inventario,
+        precio: anuncio.precio,
+        moneda: anuncio.moneda,
+        nivelMinimo: anuncio.nivelMinimo,
+        anuncioId: anuncio.id,
+        puedeComprar: anuncio.puedeComprar,
+        saldoOro: saldo,
+      );
 
   /// Atajo al ítem del catálogo.
   Item get item => inventario.item;
@@ -1030,6 +1052,7 @@ class Anuncio {
     this.destacado = false,
     this.ordenDestacado,
     this.poseido = false,
+    this.bloqueado = false,
     this.puedeComprar = false,
     this.puedePagar = false,
     this.motivoBloqueo,
@@ -1048,11 +1071,31 @@ class Anuncio {
       destacado: _bol(json['is_featured']),
       ordenDestacado: _entN(json['featured_order']),
       poseido: _bol(_alguna(json, <String>['owned', 'is_owned'])),
-      puedeComprar: _bol(_alguna(json, <String>['can_buy', 'can_purchase'])),
+      bloqueado: _bol(_alguna(json, <String>['locked', 'is_locked'])),
+      puedeComprar: _autorizaComprar(json),
       puedePagar: _bol(_alguna(json, <String>['can_afford', 'has_enough_gold'])),
-      motivoBloqueo: _txtN(_alguna(json, <String>['locked_reason', 'lock_reason'])),
+      motivoBloqueo: _txtN(
+        _alguna(json, <String>['unlock_reason', 'locked_reason', 'lock_reason']),
+      ),
       requisitos: _lista(json['requirements'], Requisito.desdeJson),
     );
+  }
+
+  /// ¿El Reino autoriza esta compra?
+  ///
+  /// `ShopListingOut` **no** trae `can_buy`: trae las tres piezas con las que
+  /// se decide (`owned`, `locked`, `can_afford`). Leer un campo que el servidor
+  /// nunca emite dejaba el permiso en falso siempre, así que el botón de
+  /// comprar no se activaba para nadie y no se podía gastar una sola moneda.
+  ///
+  /// Si un día el servidor empieza a mandar el veredicto ya resuelto, manda ese.
+  static bool _autorizaComprar(Map<String, dynamic> json) {
+    final Object? explicito = _alguna(json, <String>['can_buy', 'can_purchase']);
+    if (explicito != null) return _bol(explicito);
+    final bool poseido = _bol(_alguna(json, <String>['owned', 'is_owned']));
+    final bool bloqueado = _bol(_alguna(json, <String>['locked', 'is_locked']));
+    final bool alcanza = _bol(_alguna(json, <String>['can_afford', 'has_enough_gold']));
+    return !poseido && !bloqueado && alcanza;
   }
 
   /// Identificador del listado (lo pide `POST /shop/purchase`).
@@ -1079,6 +1122,9 @@ class Anuncio {
   /// ¿El usuario ya lo tiene?
   final bool poseido;
 
+  /// ¿Le falta algún requisito (nivel, logro, dominio) para poder comprarlo?
+  final bool bloqueado;
+
   /// ¿El servidor autoriza la compra?
   final bool puedeComprar;
 
@@ -1093,6 +1139,26 @@ class Anuncio {
 
   /// ¿Es de la sección "Se ganan aprendiendo"?
   bool get seGanaAprendiendo => item.seGanaAprendiendo;
+
+  /// El mismo anuncio con el Mercado todavía cerrado.
+  ///
+  /// El servidor rechaza cualquier compra por debajo de `shop.unlock_level`, así
+  /// que ofrecerla sería prometer algo que no se puede cumplir.
+  Anuncio conMercadoCerrado() => Anuncio(
+        id: id,
+        item: item,
+        precio: precio,
+        moneda: moneda,
+        nivelMinimo: nivelMinimo,
+        destacado: destacado,
+        ordenDestacado: ordenDestacado,
+        poseido: poseido,
+        bloqueado: true,
+        puedeComprar: false,
+        puedePagar: puedePagar,
+        motivoBloqueo: motivoBloqueo ?? 'El Mercado abre más adelante.',
+        requisitos: requisitos,
+      );
 }
 
 /// Catálogo del Mercado con saldo y destacados (`ShopOut`, P15).
@@ -1103,16 +1169,37 @@ class Tienda {
     this.anuncios = const <Anuncio>[],
     this.itemsDeConocimiento = const <Anuncio>[],
     this.rarezasDesbloqueadas = const <String>[],
+    this.abierta = true,
+    this.nivelDeApertura = 1,
   });
 
   /// Lee `{balance, featured[], listings[], knowledge_items[]}`.
-  factory Tienda.desdeJson(Map<String, dynamic> json) => Tienda(
-        saldo: _ent(_alguna(json, <String>['balance', 'gold_balance'])),
-        destacados: _lista(json['featured'], Anuncio.desdeJson),
-        anuncios: _lista(json['listings'], Anuncio.desdeJson),
-        itemsDeConocimiento: _lista(json['knowledge_items'], Anuncio.desdeJson),
-        rarezasDesbloqueadas: _textos(json['unlocked_rarities']),
-      );
+  ///
+  /// `shop_unlocked` y `unlock_level` viven en la tienda, no en cada anuncio, y
+  /// el servidor los comprueba al comprar. Sin leerlos aquí, la interfaz ofrecía
+  /// objetos comprables con el Mercado todavía cerrado.
+  factory Tienda.desdeJson(Map<String, dynamic> json) {
+    final bool abierta = _alguna(json, <String>['shop_unlocked']) == null
+        ? true
+        : _bol(json['shop_unlocked']);
+    return Tienda(
+      saldo: _ent(_alguna(json, <String>['balance', 'gold_balance'])),
+      destacados: _anuncios(json['featured'], abierta: abierta),
+      anuncios: _anuncios(json['listings'], abierta: abierta),
+      itemsDeConocimiento: _anuncios(json['knowledge_items'], abierta: abierta),
+      rarezasDesbloqueadas: _textos(json['unlocked_rarities']),
+      abierta: abierta,
+      nivelDeApertura: _ent(_alguna(json, <String>['unlock_level']), 1),
+    );
+  }
+
+  static List<Anuncio> _anuncios(Object? crudo, {required bool abierta}) {
+    final List<Anuncio> salida = _lista(crudo, Anuncio.desdeJson);
+    if (abierta) return salida;
+    return <Anuncio>[
+      for (final Anuncio a in salida) a.conMercadoCerrado(),
+    ];
+  }
 
   /// Saldo de oro del usuario.
   final int saldo;
@@ -1128,6 +1215,12 @@ class Tienda {
 
   /// Rarezas que el nivel del usuario ya habilita.
   final List<String> rarezasDesbloqueadas;
+
+  /// ¿El Mercado ya está abierto para este héroe?
+  final bool abierta;
+
+  /// Nivel en el que se abre el Mercado.
+  final int nivelDeApertura;
 
   /// Ofertas de una ranura concreta.
   List<Anuncio> porRanura(RanuraItem ranura) =>
@@ -2226,8 +2319,25 @@ class DetalleRuta {
         itemDeConocimiento: json['knowledge_item'] is Map
             ? Item.desdeJson(_mapa(json['knowledge_item']))
             : null,
-        puedeConfirmar: _bol(_alguna(json, <String>['can_confirm', 'needs_confirm'])),
+        puedeConfirmar: _esperaConfirmacion(json),
       );
+
+  /// ¿El esquema está esperando que el aprendiz lo revise y lo confirme?
+  ///
+  /// `PathDetailOut` **no** trae `can_confirm`: lo dice el estado de la Ruta.
+  /// Leer un campo que el servidor nunca envía dejaba el botón de confirmar
+  /// apagado para siempre, y confirmar es lo único que dispara la escritura de
+  /// las lecciones: una Ruta propia se quedaba en el esquema, sin contenido y
+  /// sin forma de avanzar.
+  ///
+  /// Las Rutas del Reino vienen escritas y no se confirman.
+  static bool _esperaConfirmacion(Map<String, dynamic> json) {
+    final Object? explicito = _alguna(json, <String>['can_confirm', 'needs_confirm']);
+    if (explicito != null) return _bol(explicito);
+    final Map<String, dynamic> ruta = _mapa(_alguna(json, <String>['path']) ?? json);
+    if (_bol(_alguna(ruta, <String>['is_seed']))) return false;
+    return EstadoRuta.desdeApi(ruta['status']) == EstadoRuta.porRevisar;
+  }
 
   /// Cabecera de la Ruta con su avance.
   final ResumenRuta ruta;
@@ -2737,6 +2847,13 @@ class ObjetivoCobertura {
 }
 
 /// Opción, pareja o elemento ordenable de una pregunta.
+/// Cierra una sentencia SQL con punto y coma solo si le falta.
+String _conPuntoYComa(String sentencia) =>
+    sentencia.endsWith(';') ? sentencia : '$sentencia;';
+
+/// Marca de hueco de una plantilla de "completa": `{{0}}`, `{{1}}`…
+final RegExp _marcaDeHueco = RegExp(r'\{\{\s*\d+\s*\}\}');
+
 class OpcionPregunta {
   const OpcionPregunta({
     this.clave = '',
@@ -2887,9 +3004,13 @@ class Pregunta {
     return salida;
   }
 
-  /// Parejas del ejercicio de relacionar (izquierda con su candidata derecha).
+  /// Columna izquierda del ejercicio de relacionar.
+  ///
+  /// El cuerpo que manda el Reino trae `left` y `right`; `pairs` vive en la
+  /// clave de corrección y **nunca** viaja al cliente. Leer `pairs` aquí dejaba
+  /// la pantalla en blanco y la pregunta sin forma de responderse.
   List<OpcionPregunta> get parejas {
-    final Object? crudo = cuerpo['pairs'] ?? cuerpo['matches'];
+    final Object? crudo = cuerpo['left'] ?? cuerpo['pairs'] ?? cuerpo['matches'];
     if (crudo is! List) return const <OpcionPregunta>[];
     final List<OpcionPregunta> salida = <OpcionPregunta>[];
     for (int i = 0; i < crudo.length; i++) {
@@ -2899,31 +3020,75 @@ class Pregunta {
   }
 
   /// Alternativas del lado derecho, ya barajadas por el servidor.
-  List<String> get candidatas {
-    final List<String> desdeCuerpo =
-        _textos(cuerpo['right_options'] ?? cuerpo['candidates']);
-    if (desdeCuerpo.isNotEmpty) return desdeCuerpo;
-    final List<String> salida = <String>[];
-    for (final OpcionPregunta p in parejas) {
-      final String? derecha = p.pareja;
-      if (derecha != null && derecha.isNotEmpty) salida.add(derecha);
+  ///
+  /// Llevan su clave porque el corrector compara **claves**, no textos: mandar
+  /// lo que se lee en pantalla daría siempre cero.
+  List<OpcionPregunta> get candidatas {
+    final Object? crudo =
+        cuerpo['right'] ?? cuerpo['right_options'] ?? cuerpo['candidates'];
+    if (crudo is List) {
+      final List<OpcionPregunta> salida = <OpcionPregunta>[];
+      for (int i = 0; i < crudo.length; i++) {
+        salida.add(OpcionPregunta.desdeBruto(crudo[i], i));
+      }
+      return salida;
     }
-    return salida;
+    return const <OpcionPregunta>[];
   }
 
   /// Trozos de texto de "completa el hueco"; los huecos van como `null`.
+  ///
+  /// El Reino manda una `template` con marcas `{{0}}`, `{{1}}`… no una lista de
+  /// segmentos. Sin traducirla, la frase no se pintaba nunca y el aprendiz veía
+  /// un campo de texto suelto sin saber qué completaba.
   List<String?> get segmentos {
     final Object? crudo = cuerpo['segments'] ?? cuerpo['parts'];
-    if (crudo is! List) return const <String?>[];
-    return crudo.map((Object? e) => e?.toString()).toList(growable: false);
+    if (crudo is List) {
+      return crudo.map((Object? e) => e?.toString()).toList(growable: false);
+    }
+
+    // La semilla manda la frase en `template`, con marcas desde `{{0}}`; el
+    // generador la manda en `text`, con marcas desde `{{1}}`. Valen las dos:
+    // lo que importa es el orden en que aparecen las marcas, que es el orden
+    // en que el corrector espera los huecos.
+    String plantilla = _txt(cuerpo['template']);
+    if (plantilla.isEmpty) {
+      final String alternativa = _txt(cuerpo['text']);
+      if (_marcaDeHueco.hasMatch(alternativa)) plantilla = alternativa;
+    }
+    if (plantilla.isEmpty) return const <String?>[];
+
+    final List<String?> salida = <String?>[];
+    int desde = 0;
+    for (final RegExpMatch m in _marcaDeHueco.allMatches(plantilla)) {
+      final String antes = plantilla.substring(desde, m.start);
+      if (antes.isNotEmpty) salida.add(antes);
+      salida.add(null);
+      desde = m.end;
+    }
+    final String cola = plantilla.substring(desde);
+    if (cola.isNotEmpty) salida.add(cola);
+    return salida;
   }
 
   /// Cuántos huecos hay que rellenar.
   int get huecos {
-    final int declarado = _ent(cuerpo['blank_count'] ?? cuerpo['blanks']);
+    final Object? declarados = cuerpo['blanks'];
+    if (declarados is List && declarados.isNotEmpty) return declarados.length;
+    final int declarado = _ent(cuerpo['blank_count'] ?? declarados);
     if (declarado > 0) return declarado;
     final int porSegmentos = segmentos.where((String? s) => s == null).length;
     return porSegmentos > 0 ? porSegmentos : 1;
+  }
+
+  /// Pista de cada hueco, cuando el Reino la manda (`blanks[i].hint`).
+  List<String?> get pistasDeHuecos {
+    final Object? crudo = cuerpo['blanks'];
+    if (crudo is! List) return const <String?>[];
+    return <String?>[
+      for (final Object? e in crudo)
+        if (e is Map) _txtN(e['hint']) else null,
+    ];
   }
 
   /// Criterios de la rúbrica de una respuesta abierta.
@@ -2933,7 +3098,22 @@ class Pregunta {
   String? get esquemaSql => _txtN(cuerpo['schema_sql']);
 
   /// Datos de ejemplo del ejercicio SQL.
-  String? get datosSemilla => _txtN(cuerpo['seed_data']);
+  ///
+  /// Viajan como lista de sentencias. Volcarlas con `toString` pintaba el
+  /// literal de Dart, con corchetes y comas, en mitad de la pantalla.
+  String? get datosSemilla {
+    final Object? crudo = cuerpo['seed_data'];
+    if (crudo is List) {
+      final List<String> lineas = <String>[
+        for (final Object? e in crudo)
+          if (e != null && e.toString().trim().isNotEmpty)
+            // Muchas ya traen su punto y coma: anadirlo siempre lo duplica.
+            _conPuntoYComa(e.toString().trim()),
+      ];
+      return lineas.isEmpty ? null : lineas.join('\n');
+    }
+    return _txtN(crudo);
+  }
 
   /// Lenguaje del editor de código.
   String get lenguaje => _txt(cuerpo['language'], 'sql');

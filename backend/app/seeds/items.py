@@ -37,6 +37,7 @@ from decimal import Decimal
 from typing import Any
 
 from app.models.enums import (
+    CharacterArchetype,
     ItemOrigin,
     ItemRarity,
     ItemSlot,
@@ -257,12 +258,35 @@ _INICIALES: tuple[ItemSemilla, ...] = (
     ),
 )
 
-#: Kits iniciales por arquetipo (06c §3.2). Los entrega `identity` al crear el personaje.
+#: Kits iniciales por Orden (06c §3.2). Los entrega `economy` al evaluar
+#: `CHARACTER_CREATED`, de modo que las piezas salen también en el recibo.
+#:
+#: Las claves son el **valor del enum**, no el nombre castellano de la Orden.
+#: Estuvieron escritas como "acero", "arcano", "bosque" y "muro", que no son
+#: ninguno de los valores de `CharacterArchetype`, así que ninguna búsqueda
+#: acertaba nunca y el personaje nacía sin nada que ponerse.
 KITS_INICIALES: dict[str, tuple[str, ...]] = {
-    "acero": ("jubon_recluta", "espada_entrenamiento", "botas_camino"),
-    "arcano": ("tunica_iniciacion", "baston_aprendiz", "botas_camino"),
-    "bosque": ("chaleco_explorador", "arco_fresno", "botas_camino"),
-    "muro": ("sobreveste_vigia", "escudo_madera", "espada_entrenamiento", "botas_camino"),
+    CharacterArchetype.STEEL.value: (
+        "jubon_recluta",
+        "espada_entrenamiento",
+        "botas_camino",
+    ),
+    CharacterArchetype.ARCANE.value: (
+        "tunica_iniciacion",
+        "baston_aprendiz",
+        "botas_camino",
+    ),
+    CharacterArchetype.FOREST.value: (
+        "chaleco_explorador",
+        "arco_fresno",
+        "botas_camino",
+    ),
+    CharacterArchetype.WALL.value: (
+        "sobreveste_vigia",
+        "escudo_madera",
+        "espada_entrenamiento",
+        "botas_camino",
+    ),
 }
 
 

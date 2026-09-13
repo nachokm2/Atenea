@@ -263,6 +263,7 @@ class ApiClient {
     required List<int> bytes,
     required String nombreArchivo,
     Map<String, dynamic>? campos,
+    String? claveIdempotencia,
     ProgressCallback? alProgresar,
   }) async {
     try {
@@ -275,7 +276,15 @@ class ApiClient {
         ruta,
         data: formulario,
         onSendProgress: alProgresar,
-        options: Options(sendTimeout: const Duration(minutes: 5)),
+        options: Options(
+          sendTimeout: const Duration(minutes: 5),
+          // La clave va en la cabecera, como el resto de las rutas del §8.3.
+          // Enviarla como campo del formulario no servía de nada: el servidor
+          // solo mira `Idempotency-Key`, y la exige.
+          headers: <String, dynamic>{
+            'Idempotency-Key': ?claveIdempotencia,
+          },
+        ),
       );
       if ((r.statusCode ?? 0) >= 400) {
         throw ErrorAtenea.desdeDio(

@@ -49,6 +49,8 @@ class _PantallaMercadoState extends State<PantallaMercado> {
       context,
       itemId: anuncio.item.id,
       enMercado: true,
+      anuncio: anuncio,
+      saldoOro: context.read<ControladorPersonaje>().saldo,
     );
     if (!mounted) return;
     if (resultado.accion == AccionItem.comprar) {

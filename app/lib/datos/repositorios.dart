@@ -15,7 +15,10 @@
 ///   [ReciboRecompensas] y de las respuestas del servidor.
 library;
 
+import 'dart:convert';
 import 'dart:math';
+
+import 'package:crypto/crypto.dart';
 
 import '../data/api_client.dart';
 import 'dtos.dart';
@@ -113,21 +116,58 @@ String claveIdempotencia() {
   final List<int> bytes = List<int>.generate(16, (_) => _azar.nextInt(256));
   bytes[6] = (bytes[6] & 0x0f) | 0x40; // versión 4
   bytes[8] = (bytes[8] & 0x3f) | 0x80; // variante RFC 4122
+  return _formatearUuid(bytes);
+}
+
+/// Clave determinista para una acción repetible del cliente.
+///
+/// Útil cuando una misma acción se puede repetir sin ambigüedad, por ejemplo
+/// reabrir la misma lección: la clave se deriva del identificador y no de un
+/// azar, de modo que reintentar jamás duplica.
+///
+/// Tiene que ser un **UUID**, no un texto legible. El contrato (§8.3) lo exige
+/// y el servidor rechaza con 400 cualquier otra cosa, así que la versión
+/// anterior, que devolvía `"lesson-start:<id>:1"`, hacía que empezar una
+/// lección, responder, cerrarla, evaluar y reclamar una misión fallaran todas
+/// desde la app. Se deriva con UUID v5, que es determinista por definición: la
+/// misma acción sobre la misma entidad produce siempre la misma clave, y dos
+/// acciones distintas no colisionan.
+String claveDeterminista(String accion, String entidadId, [int secuencia = 1]) =>
+    _uuidV5(_espacioAtenea, '$accion:$entidadId:$secuencia');
+
+/// Espacio de nombres propio de Atenea, derivado a su vez del espacio DNS de
+/// la RFC 4122 sobre `atenea.cl`. Fijarlo aquí garantiza que la clave de una
+/// acción no cambie nunca entre versiones de la app.
+final List<int> _espacioAtenea =
+    _bytesV5(_espacioDns, 'atenea.cl');
+
+/// Espacio de nombres DNS de la RFC 4122: `6ba7b810-9dad-11d1-80b4-00c04fd430c8`.
+const List<int> _espacioDns = <int>[
+  0x6b, 0xa7, 0xb8, 0x10, 0x9d, 0xad, 0x11, 0xd1, //
+  0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8,
+];
+
+/// Los dieciséis bytes de un UUID v5 (SHA-1 del espacio más el nombre).
+List<int> _bytesV5(List<int> espacio, String nombre) {
+  final List<int> resumen =
+      sha1.convert(<int>[...espacio, ...utf8.encode(nombre)]).bytes;
+  final List<int> bytes = resumen.sublist(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x50; // versión 5
+  bytes[8] = (bytes[8] & 0x3f) | 0x80; // variante RFC 4122
+  return bytes;
+}
+
+String _uuidV5(List<int> espacio, String nombre) =>
+    _formatearUuid(_bytesV5(espacio, nombre));
+
+String _formatearUuid(List<int> bytes) {
   final StringBuffer sb = StringBuffer();
-  for (int i = 0; i < bytes.length; i++) {
+  for (int i = 0; i < 16; i++) {
     if (i == 4 || i == 6 || i == 8 || i == 10) sb.write('-');
     sb.write(bytes[i].toRadixString(16).padLeft(2, '0'));
   }
   return sb.toString();
 }
-
-/// Clave determinista para una cascada del cliente (`"<accion>:<id>:<n>"`).
-///
-/// Útil cuando una misma acción se puede repetir sin ambigüedad, por ejemplo
-/// reabrir la misma lección: la clave se deriva del identificador y no de un
-/// azar, de modo que reintentar jamás duplica.
-String claveDeterminista(String accion, String entidadId, [int secuencia = 1]) =>
-    '$accion:$entidadId:$secuencia';
 
 /// Construye los parámetros de consulta descartando los valores nulos.
 Map<String, dynamic> _consulta(Map<String, Object?> pares) {
@@ -438,14 +478,17 @@ class RepoPersonaje {
   /// Las claves son el valor de [RanuraItem.api] y el valor es el
   /// `user_item_id`, o `null` para dejar la ranura vacía.
   Future<Avatar> cambiarEquipo(Map<RanuraItem, String?> equipo) async {
-    final Map<String, dynamic> cuerpo = <String, dynamic>{};
+    final Map<String, dynamic> ranuras = <String, dynamic>{};
     equipo.forEach((RanuraItem ranura, String? itemUsuarioId) {
-      cuerpo[ranura.api] = itemUsuarioId;
+      ranuras[ranura.api] = itemUsuarioId;
     });
     final Map<String, dynamic> r = await cliente.actualizar(
       '/avatar/equipment',
       parcial: false,
-      cuerpo: cuerpo,
+      // El mapa viaja **envuelto** en `equipment`, como declara el contrato
+      // (§7.8 `AvatarEquipmentIn`). Mandarlo plano daba 422 en toda petición,
+      // así que equipar no funcionaba desde ninguna pantalla.
+      cuerpo: <String, dynamic>{'equipment': ranuras},
     );
     return Avatar.desdeJson(r);
   }
@@ -743,12 +786,8 @@ class RepoDocumentos {
       bytes: bytes,
       nombreArchivo: nombreArchivo,
       alProgresar: alProgresar,
-      campos: _cuerpo(<String, Object?>{
-        'title': titulo?.trim(),
-        // El cliente multipart no admite cabeceras propias: la clave de
-        // idempotencia viaja como campo del formulario.
-        'idempotency_key': clave ?? claveIdempotencia(),
-      }),
+      campos: _cuerpo(<String, Object?>{'title': titulo?.trim()}),
+      claveIdempotencia: clave ?? claveIdempotencia(),
     );
     return Documento.desdeJson(r);
   }

@@ -29,6 +29,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB, insert as pg_insert
 from sqlalchemy.orm import Session
 
+from app.core.logging import get_logger
 from app.core.time import user_local_date, utcnow
 from app.models.content import KnowledgeArea, LearningPath, PathModule, Topic
 from app.models.economy import Item, ItemRequirement, UserItem
@@ -49,6 +50,8 @@ from app.models.progress import (
     UserPathProgress,
 )
 from app.modules.economy.monedero import SOURCE_MODULE, recortar_clave, registrar_evento
+
+logger = get_logger("atenea.economy")
 
 # ---------------------------------------------------------------------------
 # Familias de hechos (`items.requirement_facts`)
@@ -742,6 +745,9 @@ def evaluar_desbloqueos(
     hechos = HechosUsuario(db, usuario_id, ahora=ahora)
     otorgados: list[Item] = []
 
+    if _es_creacion_de_personaje(ctx.get("event_type")):
+        otorgados.extend(_entregar_kit_inicial(db, usuario_id, evento_id, ahora))
+
     for item in candidatos(db, usuario_id, familias=familias, solo_auto=True):
         filas = requisitos_de(db, item.id)
         if not validar_integridad_educativa(item, filas):
@@ -769,6 +775,74 @@ def evaluar_desbloqueos(
 
     db.flush()
     return otorgados
+
+
+def _es_creacion_de_personaje(tipo: Any) -> bool:
+    """¿El evento que dispara la evaluación es `CHARACTER_CREATED`?"""
+    if tipo is None:
+        return False
+    valor = getattr(tipo, "value", tipo)
+    return str(valor) == EventType.CHARACTER_CREATED.value
+
+
+def _entregar_kit_inicial(
+    db: Session,
+    usuario_id: uuid.UUID,
+    evento_id: uuid.UUID | None,
+    ahora: dt.datetime,
+) -> list[Item]:
+    """Entrega el equipo con el que empieza cada Orden (06c §3.2).
+
+    El kit no se puede expresar con el DSL de desbloqueo, porque no existe un
+    requisito de arquetipo: depende de la Orden que el aprendiz acaba de elegir,
+    no de algo que haya logrado. Por eso se entrega aquí, desde el evento, en
+    lugar de con `auto_grant`.
+
+    Que pase por esta función y no por `identity` tiene una razón concreta: así
+    los ítems entran en el `RewardsReceipt` de la creación y la app los celebra.
+    Antes no los entregaba nadie y el personaje nacía sin nada que ponerse, con
+    la tienda cerrada hasta el nivel 3 y cien monedas que no podía gastar.
+
+    Es idempotente por `(user_id, item_id)`: repetir el evento no duplica nada.
+    """
+    from app.seeds.items import KITS_INICIALES  # noqa: PLC0415 - catálogo, no dominio
+
+    personaje = db.execute(
+        sa.select(Character).where(Character.user_id == usuario_id)
+    ).scalar_one_or_none()
+    if personaje is None:
+        return []
+
+    arquetipo = getattr(personaje.archetype, "value", personaje.archetype)
+    codigos = KITS_INICIALES.get(str(arquetipo), ())
+    if not codigos:
+        return []
+
+    items = list(
+        db.execute(sa.select(Item).where(Item.code.in_(codigos))).scalars().all()
+    )
+    # Se respeta el orden del kit, no el que devuelva la base.
+    por_codigo = {item.code: item for item in items}
+
+    entregados: list[Item] = []
+    for codigo in codigos:
+        item = por_codigo.get(codigo)
+        if item is None:
+            logger.warning("economy.kit_inicial_sin_item", code=codigo)
+            continue
+        resultado = otorgar_item(
+            db,
+            usuario_id,
+            item,
+            origin=ItemOrigin.STARTER,
+            source_ref={"trigger_event_id": str(evento_id) if evento_id else None},
+            unlock_reason="Kit inicial de tu Orden",
+            evento_disparador=evento_id,
+            momento=ahora,
+        )
+        if resultado.creado:
+            entregados.append(item)
+    return entregados
 
 
 __all__ = [

@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 from app.core.errors import AteneaError
 from app.core.time import utcnow
-from app.models.enums import AttemptResult, ModuleStatus, ProgressState
+from app.models.enums import AttemptStatus, AttemptResult, ModuleStatus, ProgressState
 from app.models.progress import (
     QuestionAttempt,
     UserLessonProgress,
@@ -86,6 +86,52 @@ def test_iniciar_leccion_es_idempotente(db, cfg, usuario, contenido):
 
     assert segunda.creada is False
     assert segunda.activity.id == primera.activity.id
+
+
+def test_una_actividad_agotada_no_bloquea_la_leccion_para_siempre(db, cfg, usuario, contenido):
+    """Reabrir una lección abandonada tiene que dar una actividad **nueva**.
+
+    La app deriva la clave de idempotencia de la lección, así que es la misma de
+    por vida. Mientras la reutilización no miraba el estado, abandonar una
+    lección y volver al día siguiente devolvía la actividad caducada: el aprendiz
+    respondía y el Reino contestaba `409 ATTEMPT_NOT_OPEN`, y a partir de ahí la
+    lección quedaba muerta, porque cada intento devolvía el mismo cadáver.
+
+    La idempotencia sigue valiendo para lo que existe: proteger el doble toque.
+    """
+    clave = _clave()
+    primera = lecciones.iniciar_leccion(
+        db, cfg, usuario, contenido.leccion1.id, idempotency_key=clave
+    )
+    primera.activity.status = AttemptStatus.EXPIRED
+    db.flush()
+
+    segunda = lecciones.iniciar_leccion(
+        db, cfg, usuario, contenido.leccion1.id, idempotency_key=clave
+    )
+
+    assert segunda.creada is True
+    assert segunda.activity.id != primera.activity.id
+    assert segunda.activity.status == AttemptStatus.IN_PROGRESS
+    # La clave de la vieja se aparta para que la unicidad siga valiendo.
+    assert primera.activity.idempotency_key != clave
+    assert segunda.activity.idempotency_key == clave
+
+
+def test_una_actividad_completada_tampoco_se_reutiliza(db, cfg, usuario, contenido):
+    """Una actividad ya entregada tampoco se resucita: se abre otra."""
+    clave = _clave()
+    primera = lecciones.iniciar_leccion(
+        db, cfg, usuario, contenido.leccion1.id, idempotency_key=clave
+    )
+    primera.activity.status = AttemptStatus.SUBMITTED
+    db.flush()
+
+    segunda = lecciones.iniciar_leccion(
+        db, cfg, usuario, contenido.leccion1.id, idempotency_key=clave
+    )
+
+    assert segunda.activity.id != primera.activity.id
 
 
 def test_leccion_de_un_modulo_bloqueado_responde_module_locked(db, cfg, usuario, contenido):

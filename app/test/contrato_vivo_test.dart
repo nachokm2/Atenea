@@ -88,10 +88,14 @@ void main() {
     expect(yo.tienePersonaje, isFalse);
 
     // 2 · Personaje
+    // Ninguna llamada pasa `clave` a mano: así se ejercita la que genera la
+    // app de verdad. Cuando `claveDeterminista` devolvía un texto legible en
+    // vez de un UUID, esta prueba pasaba en verde y el producto respondía 400
+    // a todas las acciones del bucle, porque aquí se sustituía justo el valor
+    // que fallaba.
     final Personaje personaje = await repos.personaje.crear(
       nombre: 'Prueba de contrato',
       arquetipo: Arquetipo.acero,
-      clave: claveIdempotencia(),
     );
     expect(personaje.nombre, isNotEmpty);
     expect(personaje.nivel, greaterThanOrEqualTo(1));
@@ -121,7 +125,7 @@ void main() {
     expect(leccion.titulo, isNotEmpty);
 
     final Actividad actividad =
-        await repos.leccion.empezar(leccion.id, clave: claveIdempotencia());
+        await repos.leccion.empezar(leccion.id);
     expect(actividad.preguntas, isNotEmpty);
     final Pregunta primera = actividad.preguntas.first;
     expect(primera.enunciado, isNotEmpty,
@@ -138,7 +142,6 @@ void main() {
         preguntaId: pregunta.id,
         tipo: pregunta.tipo,
         respuesta: _respuestaPara(pregunta),
-        clave: claveIdempotencia(),
       );
       expect(resultado.preguntaId, pregunta.id,
           reason: 'la corrección debe hablar de la pregunta enviada');
@@ -146,10 +149,7 @@ void main() {
           reason: 'el feedback explica, se acierte o se falle');
     }
 
-    final ReciboRecompensas recibo = await repos.leccion.completar(
-      actividad.id,
-      clave: claveIdempotencia(),
-    );
+    final ReciboRecompensas recibo = await repos.leccion.completar(actividad.id);
     expect(recibo.ordenPresentacion, isNotEmpty,
         reason: 'la cola de celebraciones necesita el orden');
 
@@ -164,8 +164,41 @@ void main() {
     final Pagina<ItemInventario> inventario =
         await repos.inventario.inventario(limite: 60);
     expect(inventario.elementos, isNotEmpty);
+
+    // El kit inicial de la Orden tiene que existir de verdad. Durante mucho
+    // tiempo no lo entregaba nadie y el personaje nacía sin nada que ponerse.
+    final List<ItemInventario> propios = inventario.elementos
+        .where((ItemInventario i) => i.poseido && i.itemUsuarioId != null)
+        .toList();
+    expect(propios, isNotEmpty, reason: 'la Orden entrega un kit al empezar');
+
+    // Equipar es la prueba de fuego del cuerpo de la petición: el mapa de
+    // ranuras viaja envuelto en `equipment`, y mandarlo plano daba 422.
+    final Map<RanuraItem, String?> equipo = <RanuraItem, String?>{
+      for (final ItemInventario i in propios) i.item.ranura: i.itemUsuarioId,
+    };
+    final Avatar avatar = await repos.personaje.cambiarEquipo(equipo);
+    expect(avatar.equipo, isNotEmpty, reason: 'lo equipado debe volver');
+
+    final Pagina<ItemInventario> despues =
+        await repos.inventario.inventario(limite: 60);
+    expect(
+      despues.elementos.where((ItemInventario i) => i.equipado),
+      isNotEmpty,
+      reason: 'el Vestidor tiene que ver puesto lo que se acaba de equipar',
+    );
+
     final Tienda tienda = await repos.tienda.tienda();
     expect(tienda.anuncios, isNotEmpty);
+
+    // El permiso de compra se deriva de `owned`, `locked` y `can_afford`, que
+    // son los campos que el Reino manda de verdad. Cuando se leía `can_buy`,
+    // que no existe, el botón de comprar no se activaba para nadie.
+    for (final Anuncio a in tienda.anuncios) {
+      if (a.poseido || a.bloqueado || !a.puedePagar) continue;
+      expect(a.puedeComprar, isTrue,
+          reason: 'se puede pagar, no está bloqueado y no se posee: ${a.item.codigo}');
+    }
 
     // 9 · Racha y misiones
     final Racha racha = await repos.gamificacion.racha();

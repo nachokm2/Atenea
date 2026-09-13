@@ -25,6 +25,7 @@ from app.models.enums import Currency, ItemOrigin, ItemRarity, ItemSlot, Require
 from app.models.identity import User
 from app.modules.economy import requisitos
 from app.modules.gamification.servicio_config import ServicioConfig
+from app.models.enums import CharacterArchetype
 from app.seeds.items import ITEMS, KITS_INICIALES, listados_tienda
 
 pytestmark = pytest.mark.db
@@ -207,7 +208,11 @@ def test_los_destacados_respetan_el_tope_del_escaparate(cfg: ServicioConfig) -> 
 def test_los_kits_iniciales_referencian_items_que_existen(db: Session) -> None:
     """Los cuatro arquetipos del MVP (06c §3.2) reparten ítems del catálogo."""
     codigos = {fila.code for fila in _items(db)}
-    assert set(KITS_INICIALES) == {"acero", "arcano", "bosque", "muro"}
+    # Las claves tienen que ser los valores del enum: si vuelven a escribirse
+    # con el nombre castellano de la Orden, la búsqueda del kit falla en
+    # silencio y el personaje nace desnudo.
+    assert set(KITS_INICIALES) == {a.value for a in CharacterArchetype if a.value in KITS_INICIALES}
+    assert set(KITS_INICIALES) == {"steel", "arcane", "forest", "wall"}
     for arquetipo, piezas in KITS_INICIALES.items():
         assert piezas, arquetipo
         for pieza in piezas:

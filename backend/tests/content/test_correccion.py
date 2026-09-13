@@ -258,12 +258,175 @@ def test_respuesta_abierta_demasiado_corta_no_llega_al_juez(cfg_falso):
     assert veredicto.evaluation_method == EvaluationMethod.DETERMINISTIC
 
 
-def test_ejercicio_sql_sin_sandbox_queda_pendiente(cfg_falso):
-    """Igual que el juez: sin sandbox la respuesta no cuenta para dominio."""
-    pregunta = _pregunta(QuestionType.SQL_EXERCISE, {"query": "select 1"})
+def test_el_ejercicio_sql_se_corrige_de_verdad(cfg_falso):
+    """El sandbox tiene que **ejecutarse**, no quedarse en pendiente.
 
-    veredicto = correccion.corregir(cfg_falso, pregunta, {"sql": "select 1"})
+    Esta prueba afirmaba lo contrario: daba por buena la respuesta pendiente
+    "porque no hay sandbox". El sandbox existía desde hacía tiempo; lo que
+    fallaba era el puente, que importaba el módulo `sandbox` cuando se llama
+    `sandbox_sql`. La prueba consagraba el fallo, así que ahora exige lo que
+    debe pasar: que el veredicto venga del sandbox y cuente para el dominio.
+    """
+    pregunta = _pregunta(
+        QuestionType.SQL_EXERCISE,
+        {"reference_sql": "SELECT nombre FROM reinos"},
+        {
+            "schema_sql": "CREATE TABLE reinos(nombre TEXT)",
+            "seed_data": ["INSERT INTO reinos VALUES ('Atenea')"],
+        },
+    )
+
+    acierto = correccion.corregir(cfg_falso, pregunta, {"sql": "SELECT nombre FROM reinos"})
+    fallo = correccion.corregir(cfg_falso, pregunta, {"sql": "SELECT 1"})
+
+    assert acierto.evaluation_method == EvaluationMethod.SANDBOX
+    assert acierto.is_correct is True
+    assert acierto.counts_for_mastery is True
+    assert fallo.evaluation_method == EvaluationMethod.SANDBOX
+    assert fallo.is_correct is False
+
+
+def test_el_puente_del_juez_apunta_a_una_funcion_que_existe(cfg_falso):
+    """El fallo histórico fue un `getattr` a un nombre inexistente.
+
+    No se comprueba el veredicto, que necesita base de datos y proveedor, sino
+    que el puente **encuentra** algo al otro lado. Un `None` aquí significa que
+    ninguna respuesta abierta ni ningún SQL se calificarán jamás, en silencio.
+    """
+    assert correccion._juez_disponible() is not None
+    assert correccion._sandbox_disponible() is not None
+
+
+# ---------------------------------------------------------------------------
+# Degradación: lo que pasa cuando el juez o el sandbox no pueden responder
+# ---------------------------------------------------------------------------
+#
+# Conectar los dos puentes al módulo `ai` fue un arreglo, pero abrió un camino
+# nuevo: ahora la corrección de una respuesta abierta puede fallar por cuota
+# agotada, por un proveedor caído o por un catálogo mal generado. Ninguna de esas
+# cosas es culpa del aprendiz, y ninguna puede costarle la respuesta que acaba de
+# escribir ni hundirle el dominio del tema.
+
+
+class _JuezQueRevienta:
+    """Sustituto del juez que falla como fallaría la cuota agotada."""
+
+    def __call__(self, *args, **kwargs):
+        raise RuntimeError("cuota agotada")
+
+
+def test_si_el_juez_falla_la_respuesta_queda_pendiente_y_no_se_pierde(
+    cfg_falso, monkeypatch
+) -> None:
+    """Un 429 o un proveedor caído no pueden tumbar el envío de la respuesta.
+
+    Si la excepción escapara, el intento no se escribiría, la pregunta quedaría
+    sin contestar y la lección no se podría cerrar.
+    """
+    monkeypatch.setattr(correccion, "_juez_disponible", lambda: _JuezQueRevienta())
+    monkeypatch.setattr(correccion, "_proveedor_disponible", lambda cfg: object())
+    pregunta = _pregunta(QuestionType.OPEN_SHORT, {"rubric": ["menciona claves foráneas"]})
+
+    veredicto = correccion.corregir(
+        cfg_falso,
+        pregunta,
+        {"text": "Una clave foránea enlaza la fila de una tabla con la de otra tabla."},
+        db=object(),
+    )
 
     assert veredicto.result == AttemptResult.NEEDS_REVIEW
     assert veredicto.evaluation_method == EvaluationMethod.PENDING
     assert veredicto.counts_for_mastery is False
+
+
+def test_un_veredicto_pendiente_no_cuenta_para_el_dominio(cfg_falso, monkeypatch) -> None:
+    """Sin presupuesto de IA el juez devuelve `PENDING`: eso no es un cero.
+
+    Contarlo hundiría el dominio de quien respondió bien el día que se agote el
+    presupuesto, y le sugeriría repasos que no necesita (§3.4).
+    """
+
+    class _VeredictoPendiente:
+        result = AttemptResult.NEEDS_REVIEW
+        is_correct = False
+        partial_score = 0.0
+        confidence = 0.0
+        evaluation_method = EvaluationMethod.PENDING
+        feedback = "Guardamos tu respuesta: la corregimos en cuanto podamos."
+
+        def como_dict(self) -> dict:
+            return {"reason": "ai_budget_exceeded"}
+
+    monkeypatch.setattr(
+        correccion, "_juez_disponible", lambda: lambda *a, **k: _VeredictoPendiente()
+    )
+    monkeypatch.setattr(correccion, "_proveedor_disponible", lambda cfg: object())
+    pregunta = _pregunta(QuestionType.OPEN_SHORT, {"rubric": ["define índice"]})
+
+    veredicto = correccion.corregir(
+        cfg_falso,
+        pregunta,
+        {"text": "Un índice acelera la búsqueda a cambio de ocupar espacio en disco."},
+        db=object(),
+    )
+
+    assert veredicto.evaluation_method == EvaluationMethod.PENDING
+    assert veredicto.counts_for_mastery is False
+    assert veredicto.correctness_weight == 0.0
+
+
+def test_un_ejercicio_sql_con_el_catalogo_roto_no_lo_paga_el_aprendiz(
+    cfg_falso, monkeypatch
+) -> None:
+    """Un `CREATE TABLE` con un tipo inventado revienta DuckDB, no al alumno."""
+
+    def _revienta(*args, **kwargs):
+        raise RuntimeError("Type with name TEXTO does not exist")
+
+    monkeypatch.setattr(correccion, "_sandbox_disponible", lambda: _revienta)
+    pregunta = _pregunta(
+        QuestionType.SQL_EXERCISE,
+        {"reference_sql": "SELECT 1"},
+        {"schema_sql": "CREATE TABLE reinos(nombre TEXTO)"},
+    )
+
+    veredicto = correccion.corregir(cfg_falso, pregunta, {"sql": "SELECT 1"})
+
+    assert veredicto.result == AttemptResult.NEEDS_REVIEW
+    assert veredicto.evaluation_method == EvaluationMethod.PENDING
+    assert veredicto.counts_for_mastery is False
+
+
+def test_un_ejercicio_sin_consulta_de_referencia_queda_pendiente(cfg_falso) -> None:
+    """Sin consulta de referencia no hay con qué comparar: es fallo del catálogo."""
+    pregunta = _pregunta(
+        QuestionType.SQL_EXERCISE,
+        {},
+        {"schema_sql": "CREATE TABLE reinos(nombre TEXT)"},
+    )
+
+    veredicto = correccion.corregir(cfg_falso, pregunta, {"sql": "SELECT 1"})
+
+    assert veredicto.evaluation_method == EvaluationMethod.PENDING
+    assert veredicto.counts_for_mastery is False
+
+
+def test_la_clave_que_escribe_el_generador_tambien_se_corrige(cfg_falso) -> None:
+    """El generador emite `correct_option`; el corrector tiene que leerlo.
+
+    Mientras no lo leía, la clave salía vacía y **toda** pregunta de selección
+    múltiple escrita por la IA puntuaba cero, acertara el aprendiz o no. Solo
+    funcionaban las de la Ruta semilla, que usan `correct_option_ids`.
+    """
+    pregunta = _pregunta(
+        QuestionType.MULTIPLE_CHOICE,
+        {"correct_option": "b"},
+        {"options": [{"key": "a", "text": "No"}, {"key": "b", "text": "Sí"}]},
+    )
+
+    acierto = correccion.corregir(cfg_falso, pregunta, {"option_ids": ["b"]})
+    fallo = correccion.corregir(cfg_falso, pregunta, {"option_ids": ["a"]})
+
+    assert acierto.is_correct is True
+    assert acierto.partial_score == 100.0
+    assert fallo.is_correct is False

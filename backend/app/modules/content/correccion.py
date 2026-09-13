@@ -31,7 +31,14 @@ from typing import Any
 
 from app.models.content import Question
 from app.models.enums import AttemptResult, EvaluationMethod, QuestionType
+from app.core.logging import get_logger
 from app.modules.gamification.servicio_config import ServicioConfig
+
+logger = get_logger("atenea.content")
+
+#: Códigos del sandbox que señalan un ejercicio mal generado, no una respuesta
+#: equivocada. No cuentan para el dominio del aprendiz.
+CULPA_DEL_CATALOGO: frozenset[str] = frozenset({"missing_reference", "broken_setup"})
 
 #: Tipos que el MVP corrige de forma determinista, sin llamar a ninguna IA.
 TIPOS_DETERMINISTAS: frozenset[QuestionType] = frozenset(
@@ -163,8 +170,20 @@ def corregir_multiple_choice(answer_key: dict, response: Any) -> tuple[float, An
     Con clave múltiple, cada opción errónea anula un acierto (evita que marcar todo
     puntúe): `score = max(0, aciertos − fallos) / |clave|`.
     """
+    # `correct_option` está en la lista a propósito: es la clave que emite el
+    # generador de preguntas, y sin ella toda selección múltiple escrita por la
+    # IA se corregía contra una clave vacía y puntuaba cero.
     clave = _primer_valor(
-        answer_key, ("correct_option_ids", "correct_option_id", "correct", "answer", "answers")
+        answer_key,
+        (
+            "correct_option_ids",
+            "correct_option_id",
+            "correct_option",
+            "correct_options",
+            "correct",
+            "answer",
+            "answers",
+        ),
     )
     esperadas = [normalizar_texto(v) for v in _como_lista(clave) if normalizar_texto(v)]
     dadas = [
@@ -306,21 +325,41 @@ def respuesta_vacia(response: Any) -> bool:
 
 
 def _juez_disponible():
-    """Devuelve `ai.juez.evaluar_respuesta_abierta` si el módulo `ai` ya existe."""
+    """Devuelve `ai.juez.juzgar_respuesta` si el módulo `ai` está construido.
+
+    El nombre importa: durante mucho tiempo este puente buscó
+    `evaluar_respuesta_abierta`, que no existe, de modo que `getattr` devolvía
+    `None` **siempre** y toda respuesta abierta quedaba en `NEEDS_REVIEW` con
+    método `PENDING` y puntaje cero. Ninguna prueba lo veía porque el propio
+    juez se probaba por separado y el fallo vivía en la costura.
+    """
     try:  # pragma: no cover - depende de que el módulo `ai` esté construido
         from app.modules.ai import juez  # noqa: PLC0415 - puente opcional
     except ImportError:
         return None
-    return getattr(juez, "evaluar_respuesta_abierta", None)
+    return getattr(juez, "juzgar_respuesta", None)
 
 
 def _sandbox_disponible():
-    """Devuelve `ai.sandbox.evaluar_ejercicio_sql` si el módulo `ai` ya existe."""
+    """Devuelve `ai.sandbox_sql.evaluar_ejercicio` si el módulo `ai` existe.
+
+    Mismo caso que el juez: el módulo se llama `sandbox_sql`, no `sandbox`, así
+    que el `import` fallaba en silencio y ningún ejercicio de SQL se corregía.
+    """
     try:  # pragma: no cover - depende de que el módulo `ai` esté construido
-        from app.modules.ai import sandbox  # noqa: PLC0415 - puente opcional
+        from app.modules.ai import sandbox_sql  # noqa: PLC0415 - puente opcional
     except ImportError:
         return None
-    return getattr(sandbox, "evaluar_ejercicio_sql", None)
+    return getattr(sandbox_sql, "evaluar_ejercicio", None)
+
+
+def _proveedor_disponible(cfg: ServicioConfig):
+    """Crea el proveedor de IA configurado, o `None` si el módulo no está."""
+    try:  # pragma: no cover - depende de que el módulo `ai` esté construido
+        from app.modules.ai.proveedor import crear_proveedor  # noqa: PLC0415
+    except ImportError:
+        return None
+    return crear_proveedor(cfg=cfg)
 
 
 def _pendiente(explicacion: str | None, motivo: str) -> ResultadoCorreccion:
@@ -339,20 +378,33 @@ def _pendiente(explicacion: str | None, motivo: str) -> ResultadoCorreccion:
 
 
 def corregir_abierta(
-    cfg: ServicioConfig, pregunta: Question, response: Any, *, attempt_no: int
+    cfg: ServicioConfig,
+    pregunta: Question,
+    response: Any,
+    *,
+    attempt_no: int,
+    db: Any = None,
+    usuario_id: Any = None,
+    activity_id: Any = None,
 ) -> ResultadoCorreccion:
     """Respuesta abierta: la juzga el módulo `ai` con la rúbrica de `questions.body`.
 
-    Guardas de coste y de calidad de §5.8 (`ai.judge`):
+    Las guardas de coste y de calidad de §5.8 (`ai.judge`) viven **dentro** del
+    juez: las palabras mínimas, los umbrales de acierto y parcial, el beneficio
+    de la duda por baja confianza y el escalado de modelo. Aquí no se repiten a
+    propósito, porque dos copias de los mismos umbrales acaban divergiendo.
 
-    * menos de `min_words` palabras → se descarta sin llamar al modelo;
-    * `score >= correct_score` → acierto; `>= partial_score` → parcial;
-    * confianza por debajo de `min_confidence` → se aplica `benefit_of_doubt_score`
-      como piso (el escalado a Sonnet es cosa del módulo `ai`, §5.9 D20).
+    Sin sesión de base de datos o sin el módulo `ai`, la respuesta queda
+    pendiente en vez de darse por incorrecta: no calificar es honesto,
+    suspender a quien acertó no lo es.
     """
-    parametros = dict(cfg.obtener_json("ai.judge"))
     texto = str(_primer_valor(response, ("text", "answer", "value")) or "").strip()
-    if len(texto.split()) < int(parametros["min_words"]):
+
+    # Un «no sé» no vale una llamada al modelo. El juez aplica la misma guarda
+    # leyendo la misma clave de configuración, así que no pueden divergir; esta
+    # copia existe para que la corrección siga siendo barata sin base de datos.
+    minimo = int(dict(cfg.obtener_json("ai.judge"))["min_words"])
+    if len(texto.split()) < minimo:
         return ResultadoCorreccion(
             result=AttemptResult.INCORRECT,
             is_correct=False,
@@ -363,41 +415,56 @@ def corregir_abierta(
             explanation=pregunta.explanation,
         )
 
-    juez = _juez_disponible()
-    if juez is None:
+    juzgar = _juez_disponible()
+    if juzgar is None or db is None:
+        return _pendiente(pregunta.explanation, "judge_unavailable")
+    proveedor = _proveedor_disponible(cfg)
+    if proveedor is None:
         return _pendiente(pregunta.explanation, "judge_unavailable")
 
-    veredicto = dict(
-        juez(
-            stem=pregunta.stem,
-            body=dict(pregunta.body or {}),
-            answer_key=dict(pregunta.answer_key or {}),
-            respuesta=texto,
+    try:
+        veredicto = juzgar(
+            db,
+            cfg,
+            proveedor,
+            question=pregunta,
+            texto=texto,
+            usuario_id=usuario_id,
+            activity_id=activity_id,
         )
-    )
-    confianza = float(veredicto.get("confidence") or 0.0)
-    puntaje = float(veredicto.get("score") or 0.0)
-    if confianza < float(parametros["min_confidence"]):
-        puntaje = max(puntaje, float(parametros["benefit_of_doubt_score"]))
+    except Exception as error:
+        # La respuesta del aprendiz vale más que el veredicto. Si la cuota está
+        # agotada, el proveedor no responde o la clave no está configurada, se
+        # guarda pendiente y se corrige después: dejar escapar el error haría
+        # que el intento no se escribiera y que la lección no se pudiera cerrar.
+        logger.warning(
+            "content.juez_no_disponible",
+            question_id=str(pregunta.id),
+            error=type(error).__name__,
+        )
+        return _pendiente(pregunta.explanation, "judge_unavailable")
 
-    correcta = puntaje >= float(parametros["correct_score"])
-    if correcta:
-        resultado = AttemptResult.CORRECT
-    elif puntaje >= float(parametros["partial_score"]):
-        resultado = AttemptResult.PARTIAL
-    else:
-        resultado = AttemptResult.INCORRECT
-
+    carga = veredicto.como_dict()
+    correcta = bool(veredicto.is_correct)
+    # Un veredicto pendiente no es un cero: es una respuesta sin corregir. Si
+    # contara para el dominio, agotar el presupuesto del día hundiría el dominio
+    # de quien respondió bien y le sugeriría repasos que no necesita (§3.4).
+    concluyente = veredicto.evaluation_method is not EvaluationMethod.PENDING
     return ResultadoCorreccion(
-        result=resultado,
+        result=veredicto.result,
         is_correct=correcta,
-        partial_score=round(puntaje, 2),
-        correctness_weight=peso_de_acierto(cfg, is_correct=correcta, attempt_no=attempt_no),
-        evaluation_method=EvaluationMethod.LLM_JUDGE,
-        correct_answer=veredicto.get("model_answer"),
-        explanation=veredicto.get("feedback") or pregunta.explanation,
-        judge_confidence=round(confianza, 2),
-        judge_payload=veredicto,
+        partial_score=round(float(veredicto.partial_score), 2),
+        correctness_weight=(
+            peso_de_acierto(cfg, is_correct=correcta, attempt_no=attempt_no)
+            if concluyente
+            else 0.0
+        ),
+        evaluation_method=veredicto.evaluation_method,
+        correct_answer=carga.get("model_answer") or carga.get("reference_answer"),
+        explanation=veredicto.feedback or pregunta.explanation,
+        judge_confidence=round(float(veredicto.confidence), 2),
+        judge_payload=carga,
+        counts_for_mastery=concluyente,
     )
 
 
@@ -409,30 +476,45 @@ def corregir_sql(
     Es determinista y de coste cero: se compara el conjunto de filas devuelto por la
     consulta del usuario con el de la consulta de la clave.
     """
-    sandbox = _sandbox_disponible()
-    if sandbox is None:
+    evaluar = _sandbox_disponible()
+    if evaluar is None:
         return _pendiente(pregunta.explanation, "sandbox_unavailable")
 
     consulta = str(_primer_valor(response, ("sql", "query", "text", "answer", "value")) or "")
-    veredicto = dict(
-        sandbox(
+    try:
+        veredicto = evaluar(
+            cfg,
             body=dict(pregunta.body or {}),
             answer_key=dict(pregunta.answer_key or {}),
-            consulta=consulta,
-            limites=dict(cfg.obtener_json("ai.sql_sandbox")),
+            consulta_usuario=consulta,
         )
-    )
-    correcta = bool(veredicto.get("is_correct"))
-    puntaje = float(veredicto.get("score") or (100.0 if correcta else 0.0))
+    except Exception as error:
+        # El sandbox promete no lanzar, pero prepara la base con el esquema que
+        # escribió el modelo: un tipo inventado en el `CREATE TABLE` revienta en
+        # DuckDB. Eso es un fallo del catálogo, no del aprendiz.
+        logger.warning(
+            "content.sandbox_sql_roto",
+            question_id=str(pregunta.id),
+            error=type(error).__name__,
+        )
+        return _pendiente(pregunta.explanation, "sandbox_unavailable")
+
+    # Cuando el ejercicio no tiene consulta de referencia utilizable, el veredicto
+    # habla del catálogo y no de la respuesta: tampoco puede contar para dominio.
+    if veredicto.error_code in CULPA_DEL_CATALOGO:
+        return _pendiente(pregunta.explanation, veredicto.error_code or "sandbox_unavailable")
+
+    correcta = bool(veredicto.is_correct)
+    puntaje = float(veredicto.partial_score)
     return ResultadoCorreccion(
         result=resultado_de_puntaje(puntaje),
         is_correct=correcta,
         partial_score=round(puntaje, 2),
         correctness_weight=peso_de_acierto(cfg, is_correct=correcta, attempt_no=attempt_no),
         evaluation_method=EvaluationMethod.SANDBOX,
-        correct_answer=veredicto.get("expected"),
-        explanation=veredicto.get("feedback") or pregunta.explanation,
-        judge_payload=veredicto,
+        correct_answer=(pregunta.answer_key or {}).get("reference_sql"),
+        explanation=veredicto.message or pregunta.explanation,
+        judge_payload=veredicto.como_dict(),
     )
 
 
@@ -442,7 +524,14 @@ def corregir_sql(
 
 
 def corregir(
-    cfg: ServicioConfig, pregunta: Question, response: Any, *, attempt_no: int = 1
+    cfg: ServicioConfig,
+    pregunta: Question,
+    response: Any,
+    *,
+    attempt_no: int = 1,
+    db: Any = None,
+    usuario_id: Any = None,
+    activity_id: Any = None,
 ) -> ResultadoCorreccion:
     """Corrige una respuesta y devuelve el veredicto completo.
 
@@ -477,7 +566,15 @@ def corregir(
     if tipo == QuestionType.SQL_EXERCISE:
         return corregir_sql(cfg, pregunta, response, attempt_no=attempt_no)
     if tipo == QuestionType.OPEN_SHORT:
-        return corregir_abierta(cfg, pregunta, response, attempt_no=attempt_no)
+        return corregir_abierta(
+            cfg,
+            pregunta,
+            response,
+            attempt_no=attempt_no,
+            db=db,
+            usuario_id=usuario_id,
+            activity_id=activity_id,
+        )
     # `case_study` y `code_exercise` están reservados para fases 2 y 3 (§2).
     return _pendiente(pregunta.explanation, "question_type_reserved")
 

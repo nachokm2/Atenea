@@ -45,22 +45,40 @@ Future<ResultadoFicha> mostrarFichaItem(
   BuildContext context, {
   required String itemId,
   bool enMercado = false,
+  Anuncio? anuncio,
+  int saldoOro = 0,
 }) async {
   final ResultadoFicha? resultado = await mostrarHoja<ResultadoFicha>(
     context,
     constructor: (BuildContext hoja) => _HojaFicha(
       itemId: itemId,
       enMercado: enMercado,
+      anuncio: anuncio,
+      saldoOro: saldoOro,
     ),
   );
   return resultado ?? const ResultadoFicha(AccionItem.ninguna);
 }
 
 class _HojaFicha extends StatefulWidget {
-  const _HojaFicha({required this.itemId, required this.enMercado});
+  const _HojaFicha({
+    required this.itemId,
+    required this.enMercado,
+    this.anuncio,
+    this.saldoOro = 0,
+  });
 
   final String itemId;
   final bool enMercado;
+
+  /// Oferta desde la que se abrió la ficha, si viene del Mercado.
+  ///
+  /// El precio, el listado y el saldo no están en `GET /items/{id}`: los tiene
+  /// la tienda. Se pasan de la mano para que la ficha pueda ofrecer la compra.
+  final Anuncio? anuncio;
+
+  /// Saldo de oro del héroe en el momento de abrir la ficha.
+  final int saldoOro;
 
   @override
   State<_HojaFicha> createState() => _HojaFichaState();
@@ -86,8 +104,11 @@ class _HojaFichaState extends State<_HojaFicha> {
     final ControladorPersonaje personaje = context.read<ControladorPersonaje>();
     final DetalleItem? detalle = await personaje.ficha(widget.itemId);
     if (!mounted) return;
+    final Anuncio? anuncio = widget.anuncio;
     setState(() {
-      _detalle = detalle;
+      _detalle = (detalle != null && anuncio != null)
+          ? detalle.conAnuncio(anuncio, saldo: widget.saldoOro)
+          : detalle;
       _error = detalle == null ? personaje.errorInventario : null;
       _cargando = false;
     });

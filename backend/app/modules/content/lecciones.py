@@ -293,15 +293,57 @@ def obtener_leccion(db: Session, usuario_id: uuid.UUID, lesson_id: uuid.UUID) ->
 
 
 def _actividad_por_clave(
-    db: Session, usuario_id: uuid.UUID, idempotency_key: str
+    db: Session,
+    cfg: ServicioConfig,
+    usuario_id: uuid.UUID,
+    idempotency_key: str,
+    *,
+    momento: datetime,
 ) -> StudyActivity | None:
-    """Actividad ya abierta con esa `Idempotency-Key` (§8.3, único por usuario)."""
-    return db.execute(
+    """Actividad **reutilizable** con esa `Idempotency-Key` (§8.3, única por usuario).
+
+    La idempotencia protege del doble toque y del reintento de red: si la misma
+    clave llega dos veces mientras la actividad sigue viva, se devuelve la misma
+    y no se abre otra. Lo que no puede hacer es resucitar un cadáver.
+
+    La app deriva la clave de la lección, así que es la misma de por vida. Cuando
+    se devolvía la actividad existente sin mirar su estado, abandonar una lección
+    y volver al día siguiente entregaba la actividad caducada: el aprendiz veía
+    las preguntas, respondía, y el servidor contestaba `409 ATTEMPT_NOT_OPEN`.
+    Desde ese momento la lección quedaba muerta, porque cada intento devolvía el
+    mismo cadáver. Con el repaso era peor: repetir un tema es justo su razón de
+    ser, y el segundo repaso devolvía siempre el primero.
+
+    Una actividad que ya no sirve se aparta: se le retira la clave (que pasa a
+    llevar su propio identificador) para que la unicidad siga valiendo y la
+    siguiente apertura empiece de cero.
+    """
+    actividad = db.execute(
         sa.select(StudyActivity).where(
             StudyActivity.user_id == usuario_id,
             StudyActivity.idempotency_key == idempotency_key,
         )
     ).scalar_one_or_none()
+    if actividad is None:
+        return None
+
+    viva = actividad.status == AttemptStatus.IN_PROGRESS and (
+        momento - ensure_utc(actividad.started_at) <= _ttl(cfg)
+    )
+    if viva:
+        return actividad
+
+    if actividad.status == AttemptStatus.IN_PROGRESS:
+        actividad.status = AttemptStatus.EXPIRED
+    actividad.idempotency_key = _clave_retirada(idempotency_key, actividad.id)
+    db.flush()
+    return None
+
+
+def _clave_retirada(clave: str, actividad_id: uuid.UUID) -> str:
+    """Clave apartada de una actividad agotada, dentro de los 120 caracteres."""
+    sufijo = f"#{actividad_id}"
+    return f"{clave[: 120 - len(sufijo)]}{sufijo}"
 
 
 def _preguntas_de_actividad(
@@ -340,7 +382,7 @@ def iniciar_leccion(
 ) -> ActividadAbierta:
     """Abre la actividad de una lección y entrega las preguntas **sin claves** (§7.6)."""
     instante = ensure_utc(momento) if momento else utcnow()
-    existente = _actividad_por_clave(db, usuario.id, idempotency_key)
+    existente = _actividad_por_clave(db, cfg, usuario.id, idempotency_key, momento=instante)
     if existente is not None:
         pool = _preguntas_de_actividad(db, cfg, existente)
         return ActividadAbierta(
@@ -437,7 +479,7 @@ def iniciar_repaso(
 ) -> ActividadAbierta:
     """Abre un repaso de 4–8 preguntas sobre un tema (§7.6, `mastery.review.questions`)."""
     instante = ensure_utc(momento) if momento else utcnow()
-    existente = _actividad_por_clave(db, usuario.id, idempotency_key)
+    existente = _actividad_por_clave(db, cfg, usuario.id, idempotency_key, momento=instante)
     if existente is not None:
         pool = _preguntas_de_actividad(db, cfg, existente)
         return ActividadAbierta(
@@ -575,7 +617,15 @@ def responder(
         raise AteneaError(code="ALREADY_ANSWERED", details={"question_id": str(question_id)})
     attempt_no = len(previos) + 1
 
-    veredicto = correccion.corregir(cfg, pregunta, response, attempt_no=attempt_no)
+    veredicto = correccion.corregir(
+        cfg,
+        pregunta,
+        response,
+        attempt_no=attempt_no,
+        db=db,
+        usuario_id=usuario.id,
+        activity_id=actividad.id,
+    )
     contexto_evidencia = CONTEXTO_POR_ACTIVIDAD[actividad.activity_type]
     tiempo_minimo_ms = cfg.obtener_int("xp.min_time.answer_ms")
     demasiado_rapida = 0 < int(response_ms) < tiempo_minimo_ms
