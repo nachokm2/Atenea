@@ -160,3 +160,59 @@ def test_en_pruebas_el_freno_esta_desactivado() -> None:
 
     for _ in range(5):
         comprobar(_Peticion())
+
+
+def test_la_salud_dice_quien_lleva_el_worker() -> None:
+    """En desarrollo el worker no corre dentro de la API, y eso se dice."""
+    with TestClient(_aplicacion()) as cliente:
+        cuerpo = cliente.get("/health").json()
+
+    # `externo` significa: lo corre otro proceso, o nadie; esta API no puede
+    # opinar sobre su salud y no finge que sí.
+    assert cuerpo["worker"] in {"externo", "ok", "arrancando"}
+
+
+def test_un_worker_muerto_dentro_de_la_api_es_un_503(monkeypatch) -> None:
+    """Un hilo puede morirse sin llevarse la API por delante.
+
+    Hasta ahora el servicio seguía contestando 200 mientras la ingesta y la
+    generación se quedaban encoladas para siempre. Nadie se enteraba hasta que
+    un aprendiz preguntaba por qué su ruta llevaba dos días preparándose.
+    """
+    from app import main as modulo
+
+    class _HiloMuerto:
+        def is_alive(self) -> bool:
+            return False
+
+    aplicacion = _aplicacion()
+    with TestClient(aplicacion) as cliente:
+        monkeypatch.setattr(modulo.settings, "worker_en_proceso", True)
+        monkeypatch.setattr(aplicacion.state, "hilo_worker", _HiloMuerto(), raising=False)
+
+        respuesta = cliente.get("/health")
+
+    assert respuesta.status_code == 503
+    assert respuesta.json()["worker"] == "detenido"
+    assert respuesta.json()["status"] == "degraded"
+
+
+def test_un_almacen_que_no_se_puede_escribir_para_el_arranque(tmp_path, monkeypatch) -> None:
+    """Mejor caerse al arrancar que dar un 500 en la primera subida.
+
+    En Railway el volumen se monta como root y el contenedor corre sin
+    privilegios: sin `RAILWAY_RUN_UID=0` el directorio existe y no se puede
+    escribir. `ensure_storage_dir()` llevaba desde el principio sin que la
+    llamara nadie.
+    """
+    from app import main as modulo
+
+    def _no_se_puede(self) -> None:
+        raise PermissionError(13, "Permission denied")
+
+    # Sobre la clase y no sobre la instancia: `Settings` es un modelo de Pydantic
+    # y no deja añadirle atributos que no sean campos suyos.
+    monkeypatch.setattr(type(modulo.settings), "ensure_storage_dir", _no_se_puede)
+
+    with pytest.raises(RuntimeError, match="RAILWAY_RUN_UID"):
+        modulo._comprobar_almacen()

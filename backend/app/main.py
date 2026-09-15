@@ -56,13 +56,15 @@ Reglas que atraviesan toda la API:
 
 
 @asynccontextmanager
-async def ciclo_de_vida(app: FastAPI):  # noqa: ARG001 - firma fijada por quien llama
+async def ciclo_de_vida(app: FastAPI):
     """Comprobaciones de arranque y cierre ordenado."""
     duplicadas = rutas_duplicadas()
     if duplicadas:
         # Un duplicado significa que dos módulos reclaman la misma ruta: es un
         # error de montaje, no una condición de ejecución.
         raise RuntimeError(f"Rutas duplicadas en la API v1: {duplicadas}")
+
+    _comprobar_almacen()
 
     total = len(rutas_registradas())
     try:
@@ -103,6 +105,10 @@ async def ciclo_de_vida(app: FastAPI):  # noqa: ARG001 - firma fijada por quien 
         hilo_worker.start()
         log.info("worker_en_proceso_arrancado")
 
+    # El chequeo de salud necesita saber si este hilo sigue vivo. Sin esto, el
+    # worker podía morir y la API seguir respondiendo 200 tan tranquila.
+    app.state.hilo_worker = hilo_worker
+
     yield
 
     if hilo_worker is not None:
@@ -111,6 +117,33 @@ async def ciclo_de_vida(app: FastAPI):  # noqa: ARG001 - firma fijada por quien 
         log.info("worker_en_proceso_detenido", vivo=hilo_worker.is_alive())
     engine.dispose()
     log.info("atenea_detenida")
+
+
+def _comprobar_almacen() -> None:
+    """Crea el directorio del material y comprueba que se puede escribir en él.
+
+    `Settings.ensure_storage_dir()` existía desde el principio y no la llamaba
+    nadie. El resultado era que un directorio sin permisos —el caso normal en
+    Railway, donde el volumen se monta como root y el contenedor corre sin
+    privilegios— no se notaba hasta que un aprendiz subía su primer PDF y recibía
+    un 500 sin ninguna pista.
+
+    Mejor fallar aquí, al arrancar, con el error del sistema operativo delante:
+    el despliegue se detiene, la versión anterior sigue sirviendo y el registro
+    dice exactamente qué ruta no se puede escribir.
+    """
+    try:
+        destino = settings.ensure_storage_dir()
+        sonda = destino / ".atenea-escritura"
+        sonda.write_text("ok", encoding="utf-8")
+        sonda.unlink()
+    except OSError as error:
+        raise RuntimeError(
+            f"No se puede escribir en el almacén de material ({settings.storage_dir}): {error}. "
+            "En Railway suele significar que falta RAILWAY_RUN_UID=0, porque el volumen se "
+            "monta como root y el contenedor corre sin privilegios."
+        ) from error
+    log.info("almacen_comprobado", ruta=str(settings.storage_path))
 
 
 app = FastAPI(
@@ -228,6 +261,14 @@ def salud(response: Response) -> dict[str, Any]:
 
     Si la base no responde, esto **no** es un 200: un servicio que no puede leer
     ni una fila no está vivo, y decir que sí impide que nadie se entere.
+
+    Lo mismo vale para el procesador de trabajos. Con `WORKER_EN_PROCESO` corre
+    como un hilo de este mismo proceso, y un hilo puede morirse sin llevarse la
+    API por delante: el servicio seguiría contestando 200 mientras la ingesta de
+    documentos y la generación de rutas se quedan encoladas para siempre. Nadie
+    se enteraría hasta que un aprendiz preguntara por qué su ruta lleva dos días
+    preparándose. Por eso un worker caído también es un 503: la plataforma
+    reinicia el contenedor, que es exactamente lo que hace falta.
     """
     try:
         with engine.connect() as conexion:
@@ -235,14 +276,31 @@ def salud(response: Response) -> dict[str, Any]:
         base = "ok"
     except Exception:
         base = "error"
-    if base != "ok":
+
+    worker = _estado_del_worker()
+    sano = base == "ok" and worker != "detenido"
+    if not sano:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     return {
-        "status": "ok" if base == "ok" else "degraded",
+        "status": "ok" if sano else "degraded",
         "database": base,
+        "worker": worker,
         "version": app.version,
         "environment": settings.environment,
     }
+
+
+def _estado_del_worker() -> str:
+    """`ok`, `detenido`, o `externo` si el worker no corre dentro de esta API."""
+    if not settings.worker_en_proceso:
+        # Lo corre otro servicio (o nadie, en desarrollo): esta API no puede
+        # opinar sobre su salud y no debe fingir que sí.
+        return "externo"
+    hilo = getattr(app.state, "hilo_worker", None)
+    if hilo is None:
+        # El ciclo de vida todavía no ha llegado a arrancarlo.
+        return "arrancando"
+    return "ok" if hilo.is_alive() else "detenido"
 
 
 @app.get("/", include_in_schema=False)

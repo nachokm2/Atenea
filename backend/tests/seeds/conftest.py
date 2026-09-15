@@ -12,6 +12,7 @@ que demostrar).
 
 from __future__ import annotations
 
+import os
 import uuid
 from collections.abc import Iterator
 
@@ -24,7 +25,13 @@ from app.modules.gamification import servicio_config
 from app.modules.gamification.servicio_config import ServicioConfig
 from app.seeds.ejecutar import Resumen, sembrar
 
-URL_BASE_PRUEBAS = "postgresql+psycopg://atenea:atenea_dev@localhost:55432/atenea_test"
+#: La base de pruebas la fija `tests/conftest.py`, que corre siempre antes que
+#: este archivo y deja la URL definitiva en `DATABASE_URL`. Escribirla a mano
+#: aquí era lo que mantenía en rojo la integración continua: el valor de reserva
+#: apunta al puerto del Docker de desarrollo, que en el runner no existe.
+URL_BASE_PRUEBAS = os.environ.get(
+    "DATABASE_URL", "postgresql+psycopg://atenea:atenea_dev@localhost:55432/atenea_test"
+)
 
 
 @pytest.fixture(scope="session")
