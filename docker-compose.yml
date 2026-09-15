@@ -55,7 +55,7 @@ services:
     volumes:
       - atenea_storage:/app/storage
     # Migra y arranca: en desarrollo es comodo; en produccion la migracion es un paso
-    # propio del despliegue (ver railway.toml).
+    # propio del despliegue (ver .railway/railway.ts).
     command: >
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers"

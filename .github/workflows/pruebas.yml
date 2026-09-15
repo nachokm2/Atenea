@@ -41,8 +41,13 @@ jobs:
           --health-retries 20
 
     env:
-      # La suite crea y usa `atenea_test`; esta apunta a la base de partida.
+      # Las migraciones corren sobre la base de partida.
       DATABASE_URL: postgresql+psycopg://atenea:atenea_dev@localhost:5432/atenea
+      # Las pruebas usan la suya, y `tests/conftest.py` la crea si no existe. Sin
+      # esta variable el conftest cae a su valor por defecto, que es el puerto 55432
+      # del Docker de desarrollo: aquí no hay nada escuchando ahí, y por eso el
+      # trabajo de backend llevaba rojo desde el primer día.
+      ATENEA_TEST_DATABASE_URL: postgresql+psycopg://atenea:atenea_dev@localhost:5432/atenea_test
       ENVIRONMENT: test
       AI_PROVIDER: mock
       EMBEDDINGS_PROVIDER: mock
@@ -86,6 +91,12 @@ jobs:
 
       - uses: subosito/flutter-action@v2
         with:
+          # Fijada a propósito. `channel: stable` trae la última versión del día, y
+          # el cliente se escribió contra la 3.38.2: el análisis pasa en local y
+          # fallaba aquí por lints que esa versión todavía no tenía. Una integración
+          # continua que no reproduce la máquina de quien programa no sirve de nada.
+          # Subirla es una decisión deliberada, con su propio cambio.
+          flutter-version: "3.38.2"
           channel: stable
           cache: true
 

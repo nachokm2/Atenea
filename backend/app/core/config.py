@@ -61,6 +61,21 @@ class Settings(BaseSettings):
     # Base de datos (psycopg3 síncrono; prohibido async en la capa de datos)
     # ------------------------------------------------------------------
     database_url: str = "postgresql+psycopg://atenea:atenea_dev@localhost:55432/atenea"
+    """URL de la base. Se acepta también la forma estándar, sin el driver.
+
+    Toda plataforma que provisiona un PostgreSQL entrega su URL como
+    `postgresql://…` (Railway, Fly, Supabase) o como `postgres://…` (la forma
+    antigua de Heroku, que SQLAlchemy ya no reconoce). Atenea usa psycopg3
+    síncrono, así que necesita `postgresql+psycopg://`.
+
+    Antes había que reescribir esa URL a mano en la configuración del despliegue,
+    componiéndola pieza a pieza a partir de usuario, contraseña y dominio
+    privado. Eso es exactamente donde se coló un fallo que no se veía en local:
+    la URL compuesta acababa siendo literalmente
+    `postgresql+psycopg://[object Object]:[object Object]@…`. Normalizar aquí
+    permite pasar la referencia de la plataforma tal cual, sin componer nada.
+    """
+
     db_pool_size: int = 5
     db_max_overflow: int = 10
     db_echo: bool = False
@@ -182,6 +197,21 @@ class Settings(BaseSettings):
     def _upper_log_level(cls, value: str) -> str:
         """Normaliza el nivel de log a mayúsculas."""
         return value.upper()
+
+    @field_validator("database_url")
+    @classmethod
+    def _con_driver(cls, value: str) -> str:
+        """Le pone el driver a una URL estándar de PostgreSQL.
+
+        `postgresql://` y `postgres://` se convierten en `postgresql+psycopg://`.
+        Cualquier otra cosa se deja intacta: si alguien pone un driver distinto a
+        propósito, sabrá lo que hace, y si pone una barbaridad, es mejor que falle
+        al conectar con su propio texto delante que con uno reescrito por aquí.
+        """
+        for prefijo in ("postgresql://", "postgres://"):
+            if value.startswith(prefijo):
+                return "postgresql+psycopg://" + value[len(prefijo) :]
+        return value
 
     @field_validator("embeddings_dim")
     @classmethod

@@ -23,18 +23,23 @@ from typing import Any
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
+from app.core.logging import get_logger
 from app.core.time import day_start_utc, utcnow
 from app.models.enums import (
     EventType,
     GoalType,
+    KnowledgeAreaStatus,
     MissionMetricType,
     MissionScope,
     MissionStatus,
     MissionTier,
+    ModuleStatus,
 )
 from app.models.gamification import MissionTemplate, UserMission
 from app.modules.gamification import reglas
 from app.modules.gamification.servicio_config import ServicioConfig
+
+logger = get_logger("atenea.misiones")
 
 #: Perfiles de recompensa y las claves de `game_configs` de cada nivel (§5.7).
 CLAVES_RECOMPENSA: dict[str, dict[str, tuple[str, str]]] = {
@@ -127,10 +132,11 @@ def _semilla(usuario_id: uuid.UUID, fecha: date_type) -> int:
 def _elegible(plantilla: MissionTemplate, contexto: dict[str, Any]) -> bool:
     """Evalúa los predicados de `eligibility` contra el contexto disponible.
 
-    Los predicados los alimenta quien pide la asignación (normalmente el propio
-    módulo al leer el estado del usuario). Un predicado del que no se sabe nada
-    se considera cumplido: el MVP prefiere asignar una misión de más a dejar al
-    usuario sin misiones del día.
+    Los predicados los alimenta `contexto_de`. Uno del que no se sabe nada se
+    sigue considerando cumplido —es preferible una misión de más a dejar a alguien
+    sin misiones del día—, pero ya no en silencio: se registra, porque esa
+    tolerancia fue justo lo que dejó pasar ocho predicados sin evaluar durante
+    meses sin que nadie se enterara.
     """
     for predicado in list(plantilla.eligibility or []):
         if isinstance(predicado, dict):
@@ -139,12 +145,125 @@ def _elegible(plantilla: MissionTemplate, contexto: dict[str, Any]) -> bool:
         else:
             nombre, esperado = str(predicado), True
         if nombre not in contexto:
+            logger.warning("mision.predicado_desconocido", plantilla=plantilla.code, predicado=nombre)
             continue
         numerico = isinstance(esperado, int | float) and not isinstance(esperado, bool)
         operador = "gte" if numerico else "eq"
         if not reglas.comparar(contexto[nombre], operador, esperado):
             return False
     return True
+
+
+def contexto_de(db: Session, usuario_id: uuid.UUID, hoy: date_type) -> dict[str, Any]:
+    """Estado del aprendiz que necesitan los predicados de `eligibility`.
+
+    Ocho de las trece plantillas diarias llevan predicado, y nadie construía este
+    diccionario: `listar_misiones` llamaba a la asignación sin contexto, y
+    `_elegible` da por cumplido un predicado que no conoce. El resultado era que
+    el aprendiz del día uno recibía «repasa un tema que se te resiste» sin tener
+    ningún tema flojo, o «supera un desafío» cuando los desafíos ni existen
+    todavía. Misiones imposibles el primer día, justo donde más importa.
+
+    Son siete consultas de existencia o de cuenta, todas sobre índices que ya
+    existen, y se pagan una sola vez por apertura del tablón: las misiones del día
+    se instancian de forma perezosa y solo la primera vez.
+    """
+    from app.models.content import Assessment, Topic  # noqa: PLC0415 - evita el ciclo
+    from app.models.gamification import Streak  # noqa: PLC0415
+    from app.models.progress import (  # noqa: PLC0415
+        QuestionAttempt,
+        UserAreaProgress,
+        UserModuleProgress,
+        UserTopicProgress,
+    )
+
+    def _hay(consulta: sa.Select) -> bool:
+        return db.execute(sa.select(sa.literal(1)).where(consulta.exists())).scalar() is not None
+
+    # Módulos que el aprendiz ya puede tocar. Sirve de base a dos predicados.
+    desbloqueados = sa.select(UserModuleProgress.module_id).where(
+        UserModuleProgress.user_id == usuario_id,
+        UserModuleProgress.status != ModuleStatus.LOCKED,
+    )
+
+    hay_tema_flojo = _hay(
+        sa.select(UserTopicProgress.id).where(
+            UserTopicProgress.user_id == usuario_id,
+            UserTopicProgress.is_weak.is_(True),
+        )
+    )
+
+    # Una prueba «disponible» es la de un módulo abierto que todavía no se aprobó.
+    # Vale para las dos misiones que cuelgan de este predicado: enfrentarla (D05) y
+    # aprobarla (D06).
+    hay_prueba = _hay(
+        sa.select(Assessment.id)
+        .join(UserModuleProgress, UserModuleProgress.module_id == Assessment.module_id)
+        .where(
+            UserModuleProgress.user_id == usuario_id,
+            UserModuleProgress.status != ModuleStatus.LOCKED,
+            UserModuleProgress.assessment_passed_at.is_(None),
+        )
+    )
+
+    # Un tema sin empezar es uno de un módulo abierto sin ninguna evidencia.
+    avance_del_tema = sa.select(UserTopicProgress.id).where(
+        UserTopicProgress.user_id == usuario_id,
+        UserTopicProgress.topic_id == Topic.id,
+        UserTopicProgress.evidence_count > 0,
+    )
+    hay_tema_nuevo = _hay(
+        sa.select(Topic.id).where(
+            Topic.module_id.in_(desbloqueados),
+            ~avance_del_tema.exists(),
+        )
+    )
+
+    areas_activas = int(
+        db.execute(
+            sa.select(sa.func.count(UserAreaProgress.id)).where(
+                UserAreaProgress.user_id == usuario_id,
+                UserAreaProgress.status != KnowledgeAreaStatus.NO_EVIDENCE,
+            )
+        ).scalar_one()
+    )
+
+    preguntas_falladas = int(
+        db.execute(
+            sa.select(sa.func.count(sa.distinct(QuestionAttempt.question_id))).where(
+                QuestionAttempt.user_id == usuario_id,
+                QuestionAttempt.is_correct.is_(False),
+            )
+        ).scalar_one()
+    )
+
+    # La racha viva se deduce de la última fecha activa, nunca de `current_length`:
+    # ese contador no caduca solo y quien desapareció hace un mes sigue diciendo 30.
+    racha = db.execute(
+        sa.select(Streak.current_length, Streak.last_active_date).where(
+            Streak.user_id == usuario_id
+        )
+    ).one_or_none()
+    dias_de_racha = 0
+    if (
+        racha is not None
+        and racha.last_active_date is not None
+        and (hoy - racha.last_active_date).days <= 1
+    ):
+        dias_de_racha = int(racha.current_length or 0)
+
+    return {
+        "has_weak_topic": hay_tema_flojo,
+        "has_available_assessment": hay_prueba,
+        "has_unstarted_topic": hay_tema_nuevo,
+        "active_areas": areas_activas,
+        # Los desafíos están en el contrato y en los enums, pero no hay tabla ni
+        # mecánica: mientras no exista, la misión que los pide es imposible y este
+        # predicado es justo lo que impide asignarla.
+        "has_available_challenge": False,
+        "has_failed_questions": preguntas_falladas,
+        "streak": dias_de_racha,
+    }
 
 
 def plantillas_candidatas(
@@ -534,6 +653,7 @@ __all__ = [
     "asignar_misiones_de_ruta",
     "asignar_misiones_diarias",
     "avanzar_por_evento",
+    "contexto_de",
     "expirar_vencidas",
     "instanciar",
     "marcar_reclamada",

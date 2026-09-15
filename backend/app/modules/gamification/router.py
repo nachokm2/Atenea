@@ -252,6 +252,9 @@ def listar_misiones(db: DbSession, usuario: CurrentUser) -> MissionsOut:
         fecha_local=hoy,
         timezone=zona,
         goal_type=objetivo.goal_type,
+        # Sin esto, los predicados de elegibilidad no se evalúan y el tablón se
+        # llena de encargos que el aprendiz no puede cumplir.
+        contexto=misiones.contexto_de(db, usuario.id, hoy),
     )
     especiales = list(
         db.execute(

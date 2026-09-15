@@ -354,6 +354,7 @@ def crear_plantilla_mision(db: Session):
         rewards: dict[str, Any] | None = None,
         weight: int = 1,
         is_active: bool = True,
+        eligibility: list[Any] | None = None,
     ):
         plantilla = MissionTemplate(
             code=code,
@@ -365,6 +366,7 @@ def crear_plantilla_mision(db: Session):
             rewards=rewards or {},
             weight=weight,
             is_active=is_active,
+            eligibility=eligibility or [],
         )
         db.add(plantilla)
         db.flush()

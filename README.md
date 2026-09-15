@@ -60,12 +60,19 @@ sustituye al antiguo `railway.toml`: Railway declaró obsoleto aquel formato y n
 admite servicios nuevos con él.
 
 ```bash
-npm install             # el SDK que evalúa .railway/railway.ts
+npm install                        # el SDK que evalúa .railway/railway.ts
 railway login
 railway link
-railway config plan     # enseña qué cambiaría, sin tocar nada
-railway config apply    # lo aplica tras confirmar
+railway config plan --show-values  # enseña qué cambiaría, sin tocar nada
+railway config apply               # lo aplica tras confirmar
+railway domain                     # pide la URL pública: no puede ir en el archivo
 ```
+
+Sin `--show-values`, el plan enseña los valores como «hidden» y no se puede
+comprobar lo que de verdad va a subir. Merece la pena mirar tres cosas antes de
+aplicar: que `build.builder` diga `DOCKERFILE`, que `source.rootDirectory` diga
+`backend`, y que nada aparezca marcado como destructivo sobre la base o el
+volumen.
 
 Hace falta la CLI **5.42.1 o superior** (`npm i -g @railway/cli`). En Windows,
 usa [scripts/railway.ps1](scripts/railway.ps1) en vez de `railway` a secas: el
@@ -73,11 +80,20 @@ SDK comprueba la versión de la CLI buscando un ejecutable llamado `railway`, qu
 en Windows no existe como tal, y responde que la CLI es vieja aunque esté al día.
 El envoltorio le señala el `railway.exe` de verdad.
 
-Los secretos no viven en ese archivo. Se cargan una vez en el panel de Railway:
-`JWT_SECRET`, `ANTHROPIC_API_KEY` y `VOYAGE_API_KEY`. Si falta alguno, o si el
-secreto de firma sigue siendo el de desarrollo, **la aplicación no arranca** y
-dice exactamente qué falta. Es a propósito: un servidor mal configurado no falla,
-responde 200 y hace daño en silencio.
+Los secretos no viven en ese archivo: `preserve()` conserva lo que ya está en
+Railway, no lo crea. Hay que cargarlos **antes** del primer despliegue, en el
+panel del servicio `api`:
+
+| Variable | Para qué |
+|---|---|
+| `JWT_SECRET` | Firma de las sesiones. Mínimo 32 caracteres y nunca el de desarrollo. |
+| `ANTHROPIC_API_KEY` | Generación de rutas, lecciones y preguntas. |
+| `OPENAI_API_KEY` | Embeddings del material (`EMBEDDINGS_PROVIDER=openai`). |
+| `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD` | Recuperación de contraseña. |
+
+Si falta alguno, o si el secreto de firma sigue siendo el de desarrollo, **la
+aplicación no arranca** y dice exactamente cuál falta. Es a propósito: un
+servidor mal configurado no falla, responde 200 y hace daño en silencio.
 
 Un detalle que conviene conocer antes de escalar: el material que sube el
 aprendiz vive en disco, y en Railway un volumen se monta en un solo servicio. Por
@@ -114,8 +130,8 @@ le sirve a nadie, y desde Android 9 el tráfico sin cifrar está bloqueado.
 ## Comprobar que todo sigue en pie
 
 ```powershell
-.\scripts\dev.ps1 test        # 498 pruebas del backend
-cd app; flutter test          # 29 pruebas del cliente
+.\scripts\dev.ps1 test        # las pruebas del backend
+cd app; flutter test          # las pruebas del cliente
 python scripts\recorrido_mvp.py   # recorrido completo del primer día contra la API
 python scripts\probar_ia.py       # genera una ruta con Claude de verdad (cuesta dinero)
 ```

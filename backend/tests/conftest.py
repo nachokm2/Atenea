@@ -10,6 +10,9 @@ Por eso aquí se fija `DATABASE_URL` a `atenea_test`, se crea el esquema una sol
 vez por ejecución y cada prueba recibe una sesión envuelta en una transacción que
 siempre se revierte. La base de desarrollo queda intacta.
 
+La base se crea sola si no existe, así que la suite arranca igual en una máquina
+recién clonada que en el runner de integración continua.
+
 Para apuntar a otra base, exporta `ATENEA_TEST_DATABASE_URL` antes de ejecutar.
 """
 
@@ -38,6 +41,37 @@ from sqlalchemy.orm import Session  # noqa: E402
 import app.models  # noqa: E402,F401  (puebla Base.metadata con las 52 tablas)
 from app.core.db import Base, engine  # noqa: E402
 from app.modules.gamification import servicio_config  # noqa: E402
+
+
+def _asegurar_base() -> None:
+    """Crea la base de pruebas si todavía no existe.
+
+    `create_all` necesita que la base ya esté ahí. En local la creó alguien a mano
+    una vez y el asunto quedó olvidado; en integración continua el servicio de
+    PostgreSQL solo trae la base de partida, así que la suite entera se caía al
+    conectar y el flujo llevaba rojo desde el primer día sin que nadie mirara.
+
+    `CREATE DATABASE` no puede ir dentro de una transacción: de ahí el aislamiento
+    en autocommit y la conexión aparte contra la base de mantenimiento.
+    """
+    url = sa.engine.make_url(URL_PRUEBAS)
+    nombre = url.database
+    if not nombre:
+        return
+    mantenimiento = sa.create_engine(url.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    try:
+        with mantenimiento.connect() as conexion:
+            existe = conexion.execute(
+                sa.text("SELECT 1 FROM pg_database WHERE datname = :nombre"),
+                {"nombre": nombre},
+            ).scalar_one_or_none()
+            if existe is None:
+                # El nombre sale de una variable de entorno nuestra, no de nadie de
+                # fuera; se entrecomilla como identificador porque es lo correcto,
+                # no porque haya nada que filtrar aquí.
+                conexion.execute(sa.text(f'CREATE DATABASE "{nombre}"'))
+    finally:
+        mantenimiento.dispose()
 
 
 def _crear_esquema() -> None:
@@ -78,7 +112,8 @@ def _limites_de_espera(dbapi_conexion, _registro) -> None:
 
 @pytest.fixture(scope="session", autouse=True)
 def esquema_de_pruebas() -> None:
-    """Crea el esquema una vez por ejecución completa de la suite."""
+    """Crea la base y el esquema una vez por ejecución completa de la suite."""
+    _asegurar_base()
     _crear_esquema()
 
 
