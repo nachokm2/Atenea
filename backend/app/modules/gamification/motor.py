@@ -32,6 +32,7 @@ from sqlalchemy.orm import Session
 
 from app.core.time import utcnow
 from app.models.enums import (
+    EventStatus,
     EventType,
     GoldSource,
     LedgerDirection,
@@ -268,11 +269,24 @@ def _emitir_derivado(
     if derivado is None:
         return None
     if ctx.agregador.puede_descender():
-        ctx.profundidad += 1
+        # El contador que se incrementa tiene que ser **el que mira la guarda**.
+        # Antes se subía `ctx.profundidad` y `puede_descender()` leía el del
+        # agregador, que se quedaba en cero: la cascada podía descender sin
+        # límite y lo único que la frenaba era que no se repitiera una clave.
+        ctx.agregador.profundidad += 1
+        ctx.profundidad = ctx.agregador.profundidad
         try:
             _procesar(db, ctx, derivado)
+            # El evento derivado se acaba de procesar aquí mismo. Dejarlo en
+            # `PENDING` hacía que el estado mintiera: hay cien logros y cincuenta
+            # y seis pagos de XP marcados como pendientes que sí se pagaron. Con
+            # eso, cualquier reprocesador alimentado por `PENDING` pagaría dos
+            # veces la historia entera.
+            derivado.processing_status = EventStatus.PROCESSED
+            derivado.processed_at = utcnow()
         finally:
-            ctx.profundidad -= 1
+            ctx.agregador.profundidad -= 1
+            ctx.profundidad = ctx.agregador.profundidad
     return derivado
 
 

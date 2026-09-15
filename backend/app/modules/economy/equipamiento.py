@@ -211,6 +211,7 @@ def equipar(
         ),
         local_date=user_local_date(instante, usuario.timezone),
         momento=instante,
+        procesar=True,
     )
     db.flush()
 
@@ -261,6 +262,7 @@ def desequipar(
         ),
         local_date=user_local_date(instante, usuario.timezone),
         momento=instante,
+        procesar=True,
     )
     db.flush()
 

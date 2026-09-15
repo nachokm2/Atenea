@@ -260,3 +260,76 @@ def test_un_arma_a_dos_manos_libera_la_mano_secundaria(
 
     assert [capa["key"] for capa in avatar["layers"]] == ["espadon"]
     assert set(avatar["equipment"]) == {"weapon", "offhand"}
+
+
+def test_equipar_llama_al_motor(
+    db, configuracion, usuario, personaje, crear_item, monkeypatch
+):
+    """Equipar tiene que llegar al motor, no quedarse en la tabla.
+
+    Los eventos de `economy` se escribían con `processing_status = PENDING` y
+    nadie los drenaba nunca: en la base de desarrollo había ochenta
+    `ITEM_ACQUIRED` y cuarenta y cuatro `ITEM_EQUIPPED` sin procesar. Cinco
+    logros del catálogo cuelgan de esos dos eventos y eran inalcanzables.
+
+    Se comprueba la llamada y no el veredicto porque el motor necesita la
+    configuración de juego entera, que esta suite no siembra a propósito: aquí
+    se prueba economía, no gamificación. Que el premio llegue de verdad lo
+    comprueba el recorrido contra la API viva.
+    """
+    from app.models.enums import EventType
+    from app.modules.gamification import motor
+
+    vistos: list[EventType] = []
+    original = motor.procesar_evento
+
+    def _espiar(db_, evento, **kwargs):
+        vistos.append(evento.event_type)
+        return original(db_, evento, **kwargs)
+
+    monkeypatch.setattr(motor, "procesar_evento", _espiar)
+    item = crear_item(
+        name="Capa de prueba",
+        slot=ItemSlot.CAPE,
+        render_manifest={"layers": [{"key": "capa_prueba", "z": 20}]},
+    )
+    propio = _otorgar(db, usuario, item)
+
+    equipamiento.equipar(db, usuario.id, propio.id)
+
+    assert EventType.ITEM_EQUIPPED in vistos, "equipar tiene que pasar por el motor"
+
+
+def test_si_el_motor_falla_equipar_sigue_funcionando(
+    db, configuracion, usuario, personaje, crear_item, monkeypatch
+):
+    """La acción del aprendiz vale más que el logro que la acompaña.
+
+    Si el motor no puede calcular la recompensa, el objeto se equipa igual y el
+    evento queda pendiente para cobrarse después. Lo contrario seria que el
+    Vestidor dejara de funcionar por un fallo de gamificación.
+    """
+    from app.models.enums import EventStatus, EventType
+    from app.models.gamification import DomainEvent
+    from app.modules.gamification import motor
+
+    def _revienta(*args, **kwargs):
+        raise RuntimeError("el motor no esta disponible")
+
+    monkeypatch.setattr(motor, "procesar_evento", _revienta)
+    item = crear_item(
+        name="Capa tozuda",
+        slot=ItemSlot.CAPE,
+        render_manifest={"layers": [{"key": "capa_tozuda", "z": 20}]},
+    )
+
+    propio = _otorgar(db, usuario, item)
+    equipamiento.equipar(db, usuario.id, propio.id)
+
+    evento = db.execute(
+        sa.select(DomainEvent)
+        .where(DomainEvent.event_type == EventType.ITEM_EQUIPPED)
+        .order_by(DomainEvent.occurred_at.desc())
+    ).scalars().first()
+    assert evento is not None
+    assert evento.processing_status == EventStatus.PENDING

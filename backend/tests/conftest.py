@@ -37,6 +37,7 @@ from sqlalchemy.orm import Session  # noqa: E402
 
 import app.models  # noqa: E402,F401  (puebla Base.metadata con las 52 tablas)
 from app.core.db import Base, engine  # noqa: E402
+from app.modules.gamification import servicio_config  # noqa: E402
 
 
 def _crear_esquema() -> None:
@@ -79,6 +80,29 @@ def _limites_de_espera(dbapi_conexion, _registro) -> None:
 def esquema_de_pruebas() -> None:
     """Crea el esquema una vez por ejecución completa de la suite."""
     _crear_esquema()
+
+
+@pytest.fixture(autouse=True)
+def _config_sin_herencia():
+    """Ninguna prueba puede heredar la configuración de juego de otra.
+
+    `ServicioConfig` cachea los valores de `game_configs` en una variable global
+    del proceso, con caducidad por tiempo. Es lo correcto en producción, donde
+    hay una sola base y la caché ahorra una consulta por lectura.
+
+    En las pruebas hace daño: cada suite siembra sus propios valores dentro de su
+    transacción, que las demás no ven. Si una suite cachea que `time.heartbeat_s`
+    no existe, la siguiente hereda esa respuesta y falla con
+    `ConfiguracionAusente` aunque la tenga sembrada. Y como la caché caduca por
+    tiempo, el fallo aparecía o no según lo que hubiera tardado la ejecución
+    entera: verde al correr una suite sola, roja una de cada cinco veces al
+    correrlas todas.
+
+    Limpiarla antes y después de cada prueba cuesta un `dict.clear()`.
+    """
+    servicio_config.invalidar_cache()
+    yield
+    servicio_config.invalidar_cache()
 
 
 @pytest.fixture()

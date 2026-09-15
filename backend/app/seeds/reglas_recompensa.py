@@ -24,7 +24,15 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.models.enums import EventType, GoldSource, XPSource
+from app.models.enums import AssessmentOutcome, EventType, GoldSource, XPSource
+
+#: Desenlaces de evaluación que cuentan como aprobada. Se derivan del enum a
+#: propósito: escribir estos valores a mano fue lo que dejó la regla sin pagar.
+DESENLACES_APROBADOS: tuple[AssessmentOutcome, ...] = (
+    AssessmentOutcome.PASSED,
+    AssessmentOutcome.PASSED_DISTINCTION,
+    AssessmentOutcome.PASSED_PERFECT,
+)
 
 #: ``code`` estable → definición de la regla.
 REGLAS: tuple[dict[str, Any], ...] = (
@@ -81,7 +89,12 @@ REGLAS: tuple[dict[str, Any], ...] = (
     {
         "code": "assessment_passed",
         "event_type": EventType.ASSESSMENT_COMPLETED,
-        "condition": {"outcome_in": ["PASSED", "EXCELLENT", "PERFECT"]},
+        # Los valores salen del enum, no escritos a mano. La versión anterior
+        # decía `["PASSED", "EXCELLENT", "PERFECT"]`, y `AssessmentOutcome` vale
+        # `passed`, `passed_distinction` y `passed_perfect`: ni el caso ni dos de
+        # los tres nombres casaban, así que aprobar una evaluación pagaba cero.
+        # La pantalla ya había prometido la recompensa.
+        "condition": {"outcome_in": [o.value for o in DESENLACES_APROBADOS]},
         "xp_config_key": "xp.assessment_passed",
         "xp_source": XPSource.ASSESSMENT,
         "gold_config_key": "gold.assessment_passed",
@@ -91,6 +104,38 @@ REGLAS: tuple[dict[str, Any], ...] = (
         "respects_repeat_multiplier": True,
         "respects_daily_cap": True,
         "priority": 90,
+    },
+    {
+        # Bonificación por aprobar con distinción (≥ 90 %). Se suma a la regla
+        # anterior: el motor aplica todas las que casan.
+        "code": "assessment_distinction",
+        "event_type": EventType.ASSESSMENT_COMPLETED,
+        "condition": {"outcome": AssessmentOutcome.PASSED_DISTINCTION.value},
+        "xp_config_key": "xp.assessment_bonus_90",
+        "xp_source": XPSource.ASSESSMENT,
+        "gold_config_key": "gold.assessment_bonus_90",
+        "gold_source": GoldSource.ASSESSMENT,
+        "is_educational": True,
+        "first_time_only": True,
+        "respects_repeat_multiplier": True,
+        "respects_daily_cap": True,
+        "priority": 89,
+    },
+    {
+        # Bonificación por evaluación perfecta. Las claves de `game_configs`
+        # existían desde el principio y ninguna regla las usaba.
+        "code": "assessment_perfect",
+        "event_type": EventType.ASSESSMENT_COMPLETED,
+        "condition": {"outcome": AssessmentOutcome.PASSED_PERFECT.value},
+        "xp_config_key": "xp.assessment_bonus_100",
+        "xp_source": XPSource.ASSESSMENT,
+        "gold_config_key": "gold.assessment_bonus_100",
+        "gold_source": GoldSource.ASSESSMENT,
+        "is_educational": True,
+        "first_time_only": True,
+        "respects_repeat_multiplier": True,
+        "respects_daily_cap": True,
+        "priority": 88,
     },
     {
         "code": "module_completed",

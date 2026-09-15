@@ -436,6 +436,30 @@ def adoptar_ruta(
         )
     servicio = ServicioProgreso(db)
     servicio.asegurar_progreso_ruta(usuario_id, ruta.id, ahora=momento)
+
+    # Adoptar también es empezar una Ruta, y el motor solo se entera por eventos.
+    # Sin esto, el camino del día uno (que es adoptar la Ruta del Reino, no crear
+    # una propia) no desbloqueaba el primer logro ni avanzaba ninguna misión: el
+    # aprendiz hacía lo que la app le proponía y el juego no reaccionaba.
+    #
+    # La clave lleva la ruta y el usuario, así que adoptarla dos veces no paga dos
+    # veces, que es justo lo que promete la idempotencia del §4.1.
+    registrar_evento(
+        db,
+        usuario_id=usuario_id,
+        tipo=EventType.PATH_CREATED,
+        payload={
+            "path_id": str(ruta.id),
+            "knowledge_area_id": str(ruta.knowledge_area_id),
+            "source_mode": ruta.source_mode.value if ruta.source_mode else None,
+            "origin": PathOrigin.SEED.value,
+            "declared_level": ruta.declared_level.value if ruta.declared_level else None,
+            "adopted": True,
+        },
+        idempotency_key=f"path-adopt:{usuario_id}:{ruta.id}",
+        occurred_at=momento,
+        source_module="content",
+    )
     return detalle_ruta(db, usuario_id, ruta.id)
 
 

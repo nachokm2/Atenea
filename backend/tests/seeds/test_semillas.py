@@ -163,3 +163,65 @@ def test_el_xp_delta_es_coherente_con_el_acumulado(db: Session) -> None:
             assert int(fila.xp_delta) == int(fila.xp_required) - anterior
             assert int(fila.xp_delta) >= 0
             anterior = int(fila.xp_required)
+
+
+# ---------------------------------------------------------------------------
+# Las condiciones de las reglas hablan el idioma de los enums
+# ---------------------------------------------------------------------------
+
+
+def test_la_regla_de_evaluacion_reconoce_los_desenlaces_reales() -> None:
+    """Aprobar una evaluación tiene que pagar.
+
+    La condición decía `["PASSED", "EXCELLENT", "PERFECT"]` y `AssessmentOutcome`
+    vale `passed`, `passed_distinction` y `passed_perfect`. Ni el caso ni dos de
+    los tres nombres casaban, así que la regla nunca se aplicaba: el aprendiz
+    aprobaba su primera evaluación, la pantalla le prometía XP y oro, y el motor
+    no le daba nada.
+    """
+    from app.models.enums import AssessmentOutcome
+    from app.seeds.reglas_recompensa import REGLAS
+
+    regla = next(r for r in REGLAS if r["code"] == "assessment_passed")
+    admitidos = set(regla["condition"]["outcome_in"])
+    reales = {o.value for o in AssessmentOutcome if o is not AssessmentOutcome.FAILED}
+
+    assert admitidos == reales, "la condición y el enum tienen que decir lo mismo"
+    assert AssessmentOutcome.FAILED.value not in admitidos
+
+
+def test_las_bonificaciones_de_evaluacion_tienen_regla() -> None:
+    """Las claves de bonificación existían y ninguna regla las usaba."""
+    from app.seeds.reglas_recompensa import REGLAS
+
+    por_codigo = {r["code"]: r for r in REGLAS}
+
+    assert por_codigo["assessment_distinction"]["xp_config_key"] == "xp.assessment_bonus_90"
+    assert por_codigo["assessment_perfect"]["xp_config_key"] == "xp.assessment_bonus_100"
+    assert por_codigo["assessment_distinction"]["gold_config_key"] == "gold.assessment_bonus_90"
+    assert por_codigo["assessment_perfect"]["gold_config_key"] == "gold.assessment_bonus_100"
+
+
+def test_toda_condicion_de_regla_usa_valores_que_existen() -> None:
+    """Una condición que no casa nunca es una recompensa que no se paga jamás.
+
+    Se comprueban todas, no solo la de evaluación, porque el fallo es del tipo
+    que no se ve: la regla existe, el evento llega, y simplemente no pasa nada.
+    """
+    from app.models.enums import AssessmentOutcome, ItemRarity
+    from app.seeds.reglas_recompensa import REGLAS
+
+    vocabularios = {
+        "outcome": {o.value for o in AssessmentOutcome},
+        "rarity": {r.value for r in ItemRarity},
+    }
+
+    for regla in REGLAS:
+        for clave, esperado in (regla.get("condition") or {}).items():
+            campo = clave.rsplit("_", 1)[0] if clave.endswith(("_in", "_gte", "_gt", "_lte", "_lt")) else clave
+            vocabulario = vocabularios.get(campo)
+            if vocabulario is None:
+                continue
+            valores = esperado if isinstance(esperado, list) else [esperado]
+            fuera = [v for v in valores if v not in vocabulario]
+            assert not fuera, f"{regla['code']}: {clave} usa valores que no existen: {fuera}"

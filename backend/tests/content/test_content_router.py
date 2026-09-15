@@ -382,3 +382,43 @@ def test_el_recibo_de_la_evaluacion_es_json_serializable(cliente, contenido):
     assert recibo["assessment_result"]["passed"] is True
     assert recibo["assessment_result"]["per_topic"]
     assert recibo["presentation_order"]
+
+
+def test_adoptar_la_ruta_del_reino_emite_su_evento(cliente, db, contenido):
+    """Adoptar es empezar una Ruta, y el motor solo se entera por eventos.
+
+    Es el camino del día uno: la app propone la Ruta del Reino, no crear una
+    propia. Sin este evento el primer logro no se desbloqueaba y ninguna misión
+    avanzaba: el aprendiz hacía justo lo que se le pedía y el juego no
+    reaccionaba.
+    """
+    from app.models.enums import EventType
+    from app.models.gamification import DomainEvent
+
+    respuesta = cliente.post(f"/api/v1/paths/{contenido.ruta.id}/adopt")
+    assert respuesta.status_code == 200, respuesta.text
+
+    eventos = db.execute(
+        sa.select(DomainEvent).where(DomainEvent.event_type == EventType.PATH_CREATED)
+    ).scalars().all()
+
+    assert len(eventos) == 1
+    assert eventos[0].payload["path_id"] == str(contenido.ruta.id)
+    assert eventos[0].payload["adopted"] is True
+
+
+def test_adoptar_dos_veces_no_emite_dos_eventos(cliente, db, contenido):
+    """La idempotencia del §4.1: adoptar de nuevo no vuelve a pagar."""
+    from app.models.enums import EventType
+    from app.models.gamification import DomainEvent
+
+    cliente.post(f"/api/v1/paths/{contenido.ruta.id}/adopt")
+    cliente.post(f"/api/v1/paths/{contenido.ruta.id}/adopt")
+
+    cuantos = db.execute(
+        sa.select(sa.func.count())
+        .select_from(DomainEvent)
+        .where(DomainEvent.event_type == EventType.PATH_CREATED)
+    ).scalar_one()
+
+    assert cuantos == 1

@@ -32,6 +32,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.errors import Conflict, InternalError, NotFound, ValidationFailed
+from app.core.logging import get_logger
 from app.core.time import user_local_date, utcnow
 from app.models.economy import GoldTransaction, Wallet
 from app.models.enums import (
@@ -44,6 +45,8 @@ from app.models.enums import (
 )
 from app.models.gamification import DomainEvent, GameConfig
 from app.models.identity import User
+
+logger = get_logger("atenea.economy")
 
 #: Nombre del módulo productor que se estampa en `domain_events.source_module`.
 SOURCE_MODULE = "economy"
@@ -168,8 +171,22 @@ def registrar_evento(
     momento: dt.datetime,
     correlation_id: uuid.UUID | None = None,
     causation_id: uuid.UUID | None = None,
+    procesar: bool = False,
 ) -> DomainEvent:
-    """Inserta (o reutiliza) el evento de dominio que acompaña al movimiento de oro."""
+    """Inserta (o reutiliza) el evento de dominio que acompaña al movimiento de oro.
+
+    Con ``procesar=True`` el evento pasa además por el motor de gamificación, que
+    es lo que hace que avancen misiones y se desbloqueen logros.
+
+    No está activado por defecto y la razón importa. Los eventos de oro
+    (``GOLD_AWARDED``, ``GOLD_SPENT``) los emite este módulo **desde dentro** del
+    propio motor, cuando el motor paga: procesarlos ahí lo llamaría a sí mismo.
+    Los eventos de objeto, en cambio, nacen de una acción del aprendiz (equipar,
+    quitarse algo, mirar una ficha) y ahí no hay motor corriendo.
+
+    Sin esto, equipar un objeto no desbloqueaba nada: cinco logros del catálogo
+    dependen de ``ITEM_EQUIPPED`` o ``ITEM_ACQUIRED`` y eran inalcanzables.
+    """
     clave = recortar_clave(clave)
     existente = db.execute(
         sa.select(DomainEvent).where(DomainEvent.idempotency_key == clave)
@@ -194,6 +211,30 @@ def registrar_evento(
     )
     db.add(evento)
     db.flush()
+
+    if procesar:
+        from app.modules.gamification import motor  # noqa: PLC0415 - cruce perezoso (§1.3)
+        from app.modules.gamification.servicio_config import ServicioConfig  # noqa: PLC0415
+
+        try:
+            motor.procesar_evento(
+                db, evento, cfg=ServicioConfig(db), timezone=usuario.timezone
+            )
+        except Exception as error:
+            # Equipar un objeto no puede fallar porque el motor no consiga
+            # calcular una recompensa. La acción del aprendiz vale más que el
+            # logro que la acompaña: el evento queda pendiente y su premio se
+            # cobra cuando alguien lo drene.
+            logger.warning(
+                "economy.evento_sin_procesar",
+                event_type=evento.event_type.value,
+                error=type(error).__name__,
+            )
+        else:
+            evento.processing_status = EventStatus.PROCESSED
+            evento.processed_at = momento
+        db.flush()
+
     return evento
 
 

@@ -6,10 +6,12 @@ esta prueba lo detecta antes que la app.
 
 from __future__ import annotations
 
+import uuid
 from decimal import Decimal
 
 import pytest
 
+from app.core.time import utcnow
 from app.models.enums import LevelScope
 from app.modules.gamification import niveles
 
@@ -81,3 +83,41 @@ def test_titulo_de_conocimiento_exige_dominio_para_maestro(db, cfg) -> None:
     assert niveles.titulo_de_conocimiento(30, 85, cfg) == "Maestro/a de"
     assert niveles.titulo_de_conocimiento(30, 40, cfg) == "Veterano/a de"
     assert niveles.titulo_de_conocimiento(10, 10, cfg) == "Competente en"
+
+
+# ---------------------------------------------------------------------------
+# Guarda de la cascada de eventos derivados
+# ---------------------------------------------------------------------------
+
+
+def test_la_guarda_de_profundidad_frena_de_verdad() -> None:
+    """El contador que sube y el que mira la guarda tienen que ser el mismo.
+
+    `_emitir` incrementaba `ctx.profundidad` y `puede_descender()` leía el del
+    agregador, que se quedaba en cero para siempre: la cascada podía descender
+    sin límite y lo único que la frenaba era no repetir una clave. Un logro que
+    paga XP, que sube de nivel, que desbloquea otro logro, podía encadenarse sin
+    tope.
+    """
+    from app.modules.gamification.recompensas import MAX_PROFUNDIDAD_CASCADA, AgregadorRecibo
+
+    agregador = AgregadorRecibo(
+        receipt_id=uuid.uuid4(), event_type="TEST", occurred_at=utcnow()
+    )
+
+    assert agregador.puede_descender() is True
+    for _ in range(MAX_PROFUNDIDAD_CASCADA):
+        agregador.profundidad += 1
+    assert agregador.puede_descender() is False, "al llegar al tope hay que parar"
+
+
+def test_el_motor_sube_el_contador_que_mira_la_guarda() -> None:
+    """Se lee el código porque el fallo era justo de qué variable se tocaba."""
+    import inspect
+
+    from app.modules.gamification import motor
+
+    fuente = inspect.getsource(motor._emitir_derivado)
+
+    assert "ctx.agregador.profundidad += 1" in fuente
+    assert "ctx.agregador.profundidad -= 1" in fuente
