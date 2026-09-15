@@ -41,6 +41,25 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- El esquema `atenea://`, el mismo que declara el manifiesto de Android.
+	     La pantalla de contraseña nueva solo se alcanza por el enlace del correo
+	     (`atenea://password/reset?token=…`): sin esto, en iPhone ese enlace no
+	     abre nada y quien olvida su contraseña se queda fuera para siempre.
+	     `CFBundleURLName` usa el identificador del paquete por convención de
+	     Apple, para no chocar con otra app que declare el mismo esquema. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>cl.atenea.atenea</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>atenea</string>
+			</array>
+		</dict>
+	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
