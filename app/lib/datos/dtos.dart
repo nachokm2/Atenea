@@ -2439,8 +2439,17 @@ class Trabajo {
   bool get termino => estado == EstadoTrabajo.logrado;
 
   /// ¿Falló de forma definitiva?
+  ///
+  /// `requiereAtencion` cuenta como fallo: es el estado en el que queda un
+  /// trabajo que agotó sus reintentos. Sin contarlo, la pantalla de generación
+  /// no mostraba el error con su botón de reintentar, sino el aviso de cobertura
+  /// con la lista vacía: el aprendiz subía su PDF, esperaba, y la app le decía
+  /// que su material no cubría el objetivo. Culpar al usuario de un fallo del
+  /// servidor es el punto exacto donde se abandona.
   bool get fallo =>
-      estado == EstadoTrabajo.fallido || estado == EstadoTrabajo.cancelado;
+      estado == EstadoTrabajo.fallido ||
+      estado == EstadoTrabajo.cancelado ||
+      estado == EstadoTrabajo.requiereAtencion;
 }
 
 /// Una etapa con nombre de la pantalla de generación (P06).
@@ -2546,8 +2555,12 @@ class EstadoGeneracion {
   bool get termino => estado == EstadoTrabajo.logrado;
 
   /// ¿Falló?
+  ///
+  /// Incluye `requiereAtencion`, que es donde acaba un trabajo sin reintentos.
   bool get fallo =>
-      estado == EstadoTrabajo.fallido || estado == EstadoTrabajo.cancelado;
+      estado == EstadoTrabajo.fallido ||
+      estado == EstadoTrabajo.cancelado ||
+      estado == EstadoTrabajo.requiereAtencion;
 }
 
 /// Respuesta de `POST /paths`: la Ruta recién creada y su trabajo (`PathCreatedOut`).

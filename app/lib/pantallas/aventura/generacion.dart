@@ -174,9 +174,11 @@ class _PantallaGeneracionState extends State<PantallaGeneracion> {
     final bool fallo = generacion?.fallo ?? false;
     final bool termino = generacion?.termino ?? false;
     final bool listo = aventura.primerModuloListo;
-    final bool pideDecision =
-        generacion?.estado == EstadoTrabajo.requiereAtencion ||
-            (detalle?.puedeConfirmar ?? false);
+    // El aviso de cobertura es para cuando el material de verdad no alcanza,
+    // no para cuando la forja se rompió. `requiereAtencion` es el estado de un
+    // trabajo que agotó sus reintentos, y tratarlo como una decisión de
+    // cobertura le echaba al aprendiz la culpa de un fallo del servidor.
+    final bool pideDecision = detalle?.puedeConfirmar ?? false;
 
     return PantallaAtenea(
       titulo: 'Construyendo tu ruta',

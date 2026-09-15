@@ -753,12 +753,15 @@ class _HojaExplicacion extends StatelessWidget {
 class _HojaReporte extends StatelessWidget {
   const _HojaReporte();
 
-  static const List<(String, String, IconData)> _motivos =
-      <(String, String, IconData)>[
-    ('contenido_incorrecto', 'La información es incorrecta', Icons.error_outline_rounded),
-    ('fuera_de_tema', 'No corresponde al tema', Icons.explore_off_outlined),
-    ('incompleto', 'Está incompleto o confuso', Icons.help_outline_rounded),
-    ('otro', 'Otro motivo', Icons.more_horiz_rounded),
+  /// Las claves salen de `motivosDeReporte`, que es el vocabulario que el Reino
+  /// admite. Antes estaban escritas aquí en español y la API las rechazaba todas.
+  static const List<(String, IconData)> _motivos = <(String, IconData)>[
+    ('incorrect', Icons.error_outline_rounded),
+    ('not_in_material', Icons.explore_off_outlined),
+    ('ambiguous', Icons.help_outline_rounded),
+    ('poorly_written', Icons.edit_note_rounded),
+    ('too_hard', Icons.trending_up_rounded),
+    ('other', Icons.more_horiz_rounded),
   ];
 
   @override
@@ -785,7 +788,7 @@ class _HojaReporte extends StatelessWidget {
               ),
             ),
             const SizedBox(height: Espacio.md),
-            for (final (String clave, String texto, IconData icono) in _motivos)
+            for (final (String clave, IconData icono) in _motivos)
               Padding(
                 padding: const EdgeInsets.only(bottom: Espacio.xs),
                 child: TarjetaAtenea(
@@ -799,7 +802,10 @@ class _HojaReporte extends StatelessWidget {
                       Icon(icono, size: 20, color: context.paleta.textoSecundario),
                       const SizedBox(width: Espacio.sm),
                       Expanded(
-                        child: Text(texto, style: context.textos.bodyLarge),
+                        child: Text(
+                          motivosDeReporte[clave] ?? clave,
+                          style: context.textos.bodyLarge,
+                        ),
                       ),
                     ],
                   ),

@@ -239,13 +239,36 @@ class AjusteTema {
   final bool eliminado;
 
   /// Cuerpo que espera `POST /paths/{id}/confirm`.
+  ///
+  /// El campo se llama `remove`, no `removed`. Con el nombre equivocado Pydantic
+  /// descartaba la clave sin decir nada y quitar un tema del esquema no hacía
+  /// absolutamente nada: el aprendiz lo borraba, confirmaba, y el tema seguía ahí.
   Map<String, dynamic> aJson() => _cuerpo(<String, Object?>{
         'topic_id': temaId,
         'title': titulo,
         'position': posicion,
-        'removed': eliminado ? true : null,
+        'remove': eliminado ? true : null,
       });
 }
+
+/// Motivos de reporte que acepta el Reino, con su etiqueta en español.
+///
+/// La clave es la que viaja; el texto es el que lee el aprendiz. Estaban
+/// separados y en idiomas distintos, así que la pantalla ofrecía motivos que la
+/// API rechazaba.
+const Map<String, String> motivosDeReporte = <String, String>{
+  'incorrect': 'La información es incorrecta',
+  'not_in_material': 'No corresponde al material',
+  'ambiguous': 'Es ambiguo o confuso',
+  'poorly_written': 'Está mal redactado',
+  'too_easy': 'Demasiado fácil',
+  'too_hard': 'Demasiado difícil',
+  'other': 'Otro motivo',
+};
+
+/// Devuelve un motivo que la API acepta, cayendo a `other` si no lo reconoce.
+String motivoDeReporte(String motivo) =>
+    motivosDeReporte.containsKey(motivo) ? motivo : 'other';
 
 // ---------------------------------------------------------------------------
 // §7.1 Autenticación y cuenta
@@ -970,6 +993,11 @@ class RepoLeccion {
   }
 
   /// Reporta un bloque o una pregunta con problemas.
+  ///
+  /// `POST /content/report` acepta un vocabulario cerrado y estrecho: el tipo es
+  /// `block` o `question`, no el `lesson_block` que usa el resto de la app, y
+  /// los motivos son siete palabras en inglés. Enviar cualquier otra cosa da 422
+  /// y la pantalla se lo tragaba: reportar contenido no funcionó nunca.
   Future<void> reportar({
     required TipoContenido tipoContenido,
     required String contenidoId,
@@ -979,12 +1007,16 @@ class RepoLeccion {
       cliente.enviar(
         '/content/report',
         cuerpo: _cuerpo(<String, Object?>{
-          'content_type': tipoContenido.api,
+          'content_type': _tipoReportable(tipoContenido),
           'content_id': contenidoId,
-          'reason': motivo,
+          'reason': motivoDeReporte(motivo),
           'comment': comentario,
         }),
       );
+
+  /// Traduce el tipo de contenido al vocabulario de `ContentReportIn`.
+  static String _tipoReportable(TipoContenido tipo) =>
+      tipo == TipoContenido.pregunta ? 'question' : 'block';
 }
 
 // ---------------------------------------------------------------------------

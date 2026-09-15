@@ -806,18 +806,37 @@ def reexplicar_tema(
 
     Si la capa de IA no está disponible se responde `503 AI_BUDGET_EXCEEDED`: la
     corrección determinista sigue funcionando, que es la garantía de §8.1.
+
+    El puente importaba `app.modules.ai.reexplicacion`, que no existe: la función
+    vive en `adaptativo` y se llama `reexplicar`. El `except` lo convertía en un
+    503 educado, así que "explícamelo de otra forma" respondía siempre que el
+    servicio no estaba disponible, en un servidor perfectamente sano.
     """
     contexto = servicio_modulos.contexto_de_tema(db, user.id, topic_id)
     servicio_modulos.asegurar_desbloqueado(db, user.id, contexto)
     try:  # pragma: no cover - depende de que el módulo `ai` esté construido
-        from app.modules.ai import reexplicacion  # noqa: PLC0415 - puente opcional
-
-        generar = reexplicacion.generar_reexplicacion
-    except (ImportError, AttributeError) as exc:
+        from app.modules.ai import adaptativo  # noqa: PLC0415 - puente opcional
+        from app.modules.ai.proveedor import crear_proveedor  # noqa: PLC0415
+    except ImportError as exc:
         raise AteneaError(code="AI_BUDGET_EXCEEDED", details={"topic_id": str(topic_id)}) from exc
 
-    resultado = generar(db, usuario_id=user.id, topic_id=topic_id, approach=cuerpo.approach)
-    return ExplanationOut.model_validate(resultado)
+    cfg = ServicioConfig(db)
+    # `approach` es opcional: cuando no viene, el módulo elige el enfoque que
+    # todavía no se ha probado con este aprendiz.
+    decision = (
+        adaptativo.Decision(topic_id=topic_id, accion="reexplain", approach=cuerpo.approach)
+        if cuerpo.approach
+        else None
+    )
+    resultado = adaptativo.reexplicar(
+        db,
+        cfg,
+        crear_proveedor(cfg=cfg),
+        topic_id=topic_id,
+        usuario_id=user.id,
+        decision=decision,
+    )
+    return ExplanationOut.model_validate(resultado.como_dict())
 
 
 @router.post(

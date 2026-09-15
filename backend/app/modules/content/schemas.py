@@ -46,9 +46,24 @@ T = TypeVar("T")
 
 
 class EsquemaBase(BaseModel):
-    """Base común: construible desde atributos de objetos del dominio."""
+    """Base común de **salida**: construible desde atributos del dominio."""
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class EntradaBase(BaseModel):
+    """Base de las **entradas**: rechaza campos no declarados.
+
+    Sin esto, un nombre de campo equivocado no da error: Pydantic descarta la
+    clave y la petición sigue como si nada. Fue justo lo que pasó con quitar un
+    tema al confirmar una Ruta: el cliente mandaba `removed`, el esquema declara
+    `remove`, y borrar un tema no hacía absolutamente nada en silencio.
+
+    `identity` ya tenía esta guarda desde el principio; `content` no, y por eso
+    el fallo se coló aquí y no allí.
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class PageMeta(BaseModel):
@@ -194,7 +209,7 @@ class PathSummaryOut(EsquemaBase):
     created_at: datetime | None = None
 
 
-class PathCreateIn(EsquemaBase):
+class PathCreateIn(EntradaBase):
     """Cuerpo de `POST /paths` (§7.5 · P05)."""
 
     goal_text: str = Field(min_length=1, max_length=2000)
@@ -208,14 +223,14 @@ class PathCreateIn(EsquemaBase):
     title: str | None = Field(default=None, max_length=120)
 
 
-class PathUpdateIn(EsquemaBase):
+class PathUpdateIn(EntradaBase):
     """Cuerpo de `PATCH /paths/{id}`: renombrar o archivar (§7.5)."""
 
     title: str | None = Field(default=None, max_length=120)
     archived: bool | None = None
 
 
-class TopicChangeIn(EsquemaBase):
+class TopicChangeIn(EntradaBase):
     """Una edición del esquema revisado en `POST /paths/{id}/confirm`."""
 
     topic_id: uuid.UUID
@@ -224,7 +239,7 @@ class TopicChangeIn(EsquemaBase):
     remove: bool = False
 
 
-class PathConfirmIn(EsquemaBase):
+class PathConfirmIn(EntradaBase):
     """Cuerpo de `POST /paths/{id}/confirm` (§7.5)."""
 
     topics: list[TopicChangeIn] = Field(default_factory=list)
@@ -385,7 +400,7 @@ class ActivityOut(EsquemaBase):
     questions: list[QuestionOut] = Field(default_factory=list)
 
 
-class AnswerIn(EsquemaBase):
+class AnswerIn(EntradaBase):
     """Cuerpo de `POST /activities/{id}/answers` (§7.6).
 
     El cliente informa **qué respondió**, nunca cuánto vale: ni XP, ni puntaje, ni
@@ -416,7 +431,7 @@ class AnswerResultOut(EsquemaBase):
     context: ActivityContext
 
 
-class HeartbeatIn(EsquemaBase):
+class HeartbeatIn(EntradaBase):
     """Cuerpo de `POST /activities/{id}/heartbeat` (§7.6, ≤ 60 s)."""
 
     seconds: int = Field(ge=0, le=60)
@@ -431,7 +446,7 @@ class HeartbeatOut(EsquemaBase):
     reason: str | None = None
 
 
-class ReviewStartIn(EsquemaBase):
+class ReviewStartIn(EntradaBase):
     """Cuerpo de `POST /reviews/start` (§7.6)."""
 
     topic_id: uuid.UUID
@@ -451,7 +466,7 @@ class ReviewSuggestionOut(EsquemaBase):
     estimated_seconds: int
 
 
-class ExplanationIn(EsquemaBase):
+class ExplanationIn(EntradaBase):
     """Cuerpo de `POST /topics/{id}/explain` (§7.6)."""
 
     approach: str | None = Field(default=None, max_length=32)
@@ -473,7 +488,7 @@ class ExplanationOut(EsquemaBase):
     citations: list[CitationOut] = Field(default_factory=list)
 
 
-class ContentReportIn(EsquemaBase):
+class ContentReportIn(EntradaBase):
     """Cuerpo de `POST /content/report` (§7.6)."""
 
     content_type: str = Field(pattern="^(block|question)$")
@@ -529,7 +544,7 @@ class AssessmentAttemptOut(EsquemaBase):
     questions: list[QuestionOut] = Field(default_factory=list)
 
 
-class AssessmentAnswerIn(EsquemaBase):
+class AssessmentAnswerIn(EntradaBase):
     """Cuerpo de `POST /assessment-attempts/{id}/answers` (§7.7)."""
 
     question_id: uuid.UUID

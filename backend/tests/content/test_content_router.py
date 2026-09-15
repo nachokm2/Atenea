@@ -422,3 +422,60 @@ def test_adoptar_dos_veces_no_emite_dos_eventos(cliente, db, contenido):
     ).scalar_one()
 
     assert cuantos == 1
+
+
+# ---------------------------------------------------------------------------
+# Promesas de la interfaz que fallaban en silencio
+# ---------------------------------------------------------------------------
+
+
+def test_el_puente_de_reexplicacion_apunta_a_algo_que_existe():
+    """`POST /topics/{id}/explain` respondía 503 siempre.
+
+    El router importaba `app.modules.ai.reexplicacion`, que no existe: la función
+    vive en `adaptativo` y se llama `reexplicar`. El `except` lo convertía en un
+    503 educado, así que "explícamelo de otra forma" decía siempre que el
+    servicio no estaba disponible, en un servidor perfectamente sano.
+
+    Es el mismo fallo que el juez y el sandbox, y por eso se comprueba igual: que
+    al otro lado del puente haya algo.
+    """
+    from app.modules.ai import adaptativo
+
+    assert hasattr(adaptativo, "reexplicar")
+    assert hasattr(adaptativo, "Decision")
+
+
+def test_un_campo_desconocido_en_una_entrada_falla_y_dice_cual(cliente, contenido):
+    """Descartar una clave mal escrita en silencio esconde el fallo entero.
+
+    Quitar un tema al confirmar no hacía nada porque el cliente mandaba
+    `removed` y el esquema declara `remove`. Pydantic tiraba la clave sin decir
+    palabra. Ahora las entradas de `content` rechazan lo que no declaran, igual
+    que las de `identity`, que siempre lo hicieron.
+    """
+    respuesta = cliente.post(
+        f"/api/v1/paths/{contenido.ruta.id}/confirm",
+        json={"topics": [{"topic_id": str(uuid.uuid4()), "removed": True}]},
+    )
+
+    assert respuesta.status_code == 422
+    campos = [f["field"] for f in respuesta.json()["error"]["field_errors"]]
+    assert any("removed" in c for c in campos), campos
+
+
+def test_todas_las_entradas_de_content_rechazan_lo_que_no_declaran():
+    """La red vale poco si solo cubre un esquema de diez."""
+    from app.modules.content import schemas
+
+    entradas = [
+        getattr(schemas, n)
+        for n in dir(schemas)
+        if n.endswith("In") and isinstance(getattr(schemas, n), type)
+    ]
+    assert entradas, "no se encontró ninguna entrada"
+
+    permisivas = [
+        e.__name__ for e in entradas if e.model_config.get("extra") != "forbid"
+    ]
+    assert permisivas == [], f"estas entradas todavía se tragan campos ajenos: {permisivas}"
