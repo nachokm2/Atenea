@@ -97,6 +97,7 @@ class DashboardContinueOut(SalidaBase):
     path_id: uuid.UUID | None = None
     module_id: uuid.UUID | None = None
     lesson_id: uuid.UUID | None = None
+    topic_id: uuid.UUID | None = None
     title: str
     breadcrumb: str
     reward_preview: dict[str, int] = Field(default_factory=dict)
@@ -159,6 +160,7 @@ class DashboardOut(SalidaBase):
     missions_summary: list[DashboardMissionOut] = Field(default_factory=list)
     week_stats: DashboardWeekStatsOut
     generation_banner: DashboardGenerationBannerOut | None = None
+    unread_notifications: int = 0
 
 
 # ---------------------------------------------------------------------------

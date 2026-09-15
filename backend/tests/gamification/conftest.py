@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterator
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -142,6 +143,17 @@ SEMILLAS_CONFIG: dict[str, tuple[Any, str, bool]] = {
         "map",
         True,
     ),
+    "goal.adapt.window_days": (14, "int", False),
+    # §5.7 Avisos
+    "notifications.reminder.default_hour": ("19:00", "string", True),
+    "notifications.reminder.offset_min": (45, "int", False),
+    "notifications.reminder.window": ({"start": "08:00", "end": "21:30"}, "map", False),
+    "notifications.last_call.hour": ("21:30", "string", True),
+    "notifications.last_call.min_streak": (7, "int", False),
+    "notifications.quiet_hours": ({"start": "22:00", "end": "08:00"}, "map", True),
+    "notifications.max_per_day.streak_goal": (2, "int", False),
+    "notifications.max_per_day.total": (3, "int", False),
+    "notifications.reactivation_days": ([3, 7, 30], "list", False),
     "goal.default": ({"type": "minutos", "target": 20}, "map", True),
     "goal.minutes.options": ([10, 20, 30, 45], "list", True),
     "goal.activities.options": ([1, 3, 5, 8], "list", True),
@@ -200,7 +212,15 @@ def semillas(conexion: sa.Connection) -> Iterator[None]:
     """Siembra `game_configs` y `level_definitions` dentro de la transacción de prueba."""
     servicio_config.invalidar_cache()
     sesion = Session(bind=conexion, join_transaction_mode="create_savepoint")
-    ahora = utcnow()
+    # Un día atrás a propósito. `valid_from <= now()` se evalúa con
+    # `transaction_timestamp()`, que es el instante en que **empezó** la
+    # transacción externa de la conexión de pruebas, no el de la consulta. Si esa
+    # transacción arrancó antes que esta siembra —y quién la arranca depende de
+    # qué fixture toque la conexión primero, o sea del orden de la ejecución—,
+    # una marca de «ahora» queda en el futuro y la configuración entera se vuelve
+    # invisible para la suite completa. De ahí venían los fallos intermitentes
+    # con `ConfiguracionAusente` y respuestas 500 en suites que pasaban solas.
+    ahora = utcnow() - timedelta(days=1)
     for clave, (valor, tipo, publico) in SEMILLAS_CONFIG.items():
         version = sesion.execute(sa.text("SELECT nextval('game_config_version_seq')")).scalar()
         sesion.add(

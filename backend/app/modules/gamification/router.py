@@ -24,7 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.deps import CurrentUser, DbSession, IdempotencyDep
 from app.core.errors import Conflict, NotFound, ValidationFailed
-from app.core.time import utcnow
+from app.core.time import isoformat_z, utcnow
 from app.models.enums import (
     GoalType,
     LevelScope,
@@ -33,7 +33,7 @@ from app.models.enums import (
     NotificationStatus,
 )
 from app.models.gamification import Notification, UserMission
-from app.modules.gamification import eventos, logros, misiones, niveles, rachas
+from app.modules.gamification import avisos, eventos, logros, misiones, niveles, rachas
 from app.modules.gamification.recompensas import ReciboRecompensas
 from app.modules.gamification.servicio_config import ServicioConfig
 
@@ -195,6 +195,7 @@ class NotificationOut(_Out):
     scheduled_for: datetime | None = None
     sent_at: datetime | None = None
     read_at: datetime | None = None
+    dismissed_at: datetime | None = None
     created_at: datetime
 
 
@@ -528,23 +529,65 @@ def listar_notificaciones(
     db: DbSession,
     usuario: CurrentUser,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    cursor: Annotated[str | None, Query()] = None,
 ) -> PageNotifications:
-    """Notificaciones del usuario, de la más reciente a la más antigua."""
-    filas = list(
-        db.execute(
-            sa.select(Notification)
-            .where(Notification.user_id == usuario.id)
-            .order_by(Notification.created_at.desc(), Notification.id)
-            .limit(limit + 1)
+    """Notificaciones **entregadas**, de la más reciente a la más antigua.
+
+    Lo que sigue `PENDING` está programado para más tarde y no se enseña: un
+    recordatorio de las siete de la tarde leído a las diez de la mañana deja de
+    ser un recordatorio. Lo que quedó `FAILED` nunca se entregó.
+
+    Se ordena y se pagina por `sent_at`, que es cuando el aviso llegó de verdad,
+    y no por `created_at`, que es cuando se decidió mandarlo.
+    """
+    consulta = (
+        sa.select(Notification)
+        .where(
+            Notification.user_id == usuario.id,
+            Notification.status.in_(avisos.ESTADOS_VISIBLES),
         )
-        .scalars()
-        .all()
+        .order_by(Notification.sent_at.desc().nullslast(), Notification.id.desc())
+        .limit(limit + 1)
     )
+    corte = _corte_de_bandeja(avisos.decodificar_cursor(cursor))
+    if corte is not None:
+        # La comparación va con los tipos ya resueltos en Python: pasar el
+        # instante como texto hace que PostgreSQL lo tome por `varchar` y no
+        # encuentre ningún operador contra un `timestamptz`.
+        consulta = consulta.where(sa.tuple_(Notification.sent_at, Notification.id) < corte)
+
+    filas = list(db.execute(consulta).scalars().all())
     hay_mas = len(filas) > limit
+    filas = filas[:limit]
+
+    siguiente = None
+    if hay_mas and filas:
+        ultima = filas[-1]
+        siguiente = avisos.codificar_cursor(
+            {
+                "sent_at": isoformat_z(ultima.sent_at) if ultima.sent_at else None,
+                "id": str(ultima.id),
+            }
+        )
     return PageNotifications(
-        items=[NotificationOut.model_validate(fila) for fila in filas[:limit]],
-        page=PageInfo(limit=limit, next_cursor=None, has_more=hay_mas, total=None),
+        items=[NotificationOut.model_validate(fila) for fila in filas],
+        page=PageInfo(limit=limit, next_cursor=siguiente, has_more=hay_mas, total=None),
     )
+
+
+def _corte_de_bandeja(clave: dict[str, Any] | None) -> tuple[datetime, uuid.UUID] | None:
+    """Traduce el cursor de la bandeja al par `(sent_at, id)` que ordena la página."""
+    if not clave or not clave.get("sent_at") or not clave.get("id"):
+        return None
+    try:
+        momento = datetime.fromisoformat(str(clave["sent_at"]).replace("Z", "+00:00"))
+        identificador = uuid.UUID(str(clave["id"]))
+    except ValueError as exc:
+        raise ValidationFailed(
+            "El cursor de paginación no es válido.",
+            field_errors=[{"field": "cursor", "message": "Cursor ilegible."}],
+        ) from exc
+    return momento, identificador
 
 
 @router.post("/notifications/{notification_id}/read", status_code=204, summary="Marca como leída")
@@ -566,11 +609,19 @@ def marcar_leida(notification_id: uuid.UUID, db: DbSession, usuario: CurrentUser
 
 @router.post("/notifications/read-all", status_code=204, summary="Marca todas como leídas")
 def marcar_todas_leidas(db: DbSession, usuario: CurrentUser) -> Response:
-    """Marca como leídas todas las notificaciones pendientes del usuario."""
+    """Marca como leídas las notificaciones **entregadas** que siguen sin leer.
+
+    El filtro por estado no es cosmético: sin él, «marcar todas como leídas»
+    daría por leídos los avisos aún programados, que el aprendiz no ha visto.
+    """
     ahora = utcnow()
     db.execute(
         sa.update(Notification)
-        .where(Notification.user_id == usuario.id, Notification.read_at.is_(None))
+        .where(
+            Notification.user_id == usuario.id,
+            Notification.status == NotificationStatus.SENT,
+            Notification.read_at.is_(None),
+        )
         .values(read_at=ahora, status=NotificationStatus.READ)
     )
     db.flush()

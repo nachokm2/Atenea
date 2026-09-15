@@ -46,7 +46,7 @@ import sqlalchemy as sa
 from sqlalchemy.orm import Session, aliased
 
 from app.core.time import ensure_utc, to_zone, user_local_date, utcnow
-from app.models.content import KnowledgeArea, LearningPath, Lesson, PathModule
+from app.models.content import KnowledgeArea, LearningPath, Lesson, PathModule, Topic
 from app.models.economy import Wallet
 from app.models.enums import (
     Currency,
@@ -60,7 +60,7 @@ from app.models.enums import (
 )
 from app.models.gamification import DailyGoal, LevelDefinition, Streak, StreakDay, UserMission
 from app.models.identity import Character
-from app.models.progress import UserAreaProgress, UserPathProgress
+from app.models.progress import UserAreaProgress, UserPathProgress, UserTopicProgress
 from app.modules.progress import LectorConfiguracion, a_float
 from app.modules.progress.estadisticas import ServicioEstadisticas
 
@@ -72,6 +72,9 @@ CLAVES_PANEL: tuple[str, ...] = (
     "streak.grace_per_month",
     "xp.lesson_completed",
     "gold.lesson_completed",
+    "xp.review_completed",
+    "gold.review_completed",
+    "mastery.threshold.at_risk",
 )
 
 #: Estados visibles de la racha (§6.10, «Estado visible»). Son nombres de estado, no
@@ -91,6 +94,7 @@ HORA_NOCHE = 20
 
 #: Tipos de la tarjeta «continuar tu aventura».
 CONTINUAR_LECCION = "lesson"
+CONTINUAR_REPASO = "review"
 CONTINUAR_EVALUACION = "assessment"
 CONTINUAR_CREAR_RUTA = "create_path"
 CONTINUAR_RUTA_COMPLETA = "path_completed"
@@ -144,6 +148,9 @@ class PanelContinuar:
     path_id: uuid.UUID | None
     module_id: uuid.UUID | None
     lesson_id: uuid.UUID | None
+    #: Solo lo trae un `continue_action` de tipo `review`: es el tema que se va a
+    #: repasar, y sin él la app no sabe a qué pantalla llevar al aprendiz.
+    topic_id: uuid.UUID | None
     title: str
     breadcrumb: str
     reward_preview: dict[str, int]
@@ -211,6 +218,10 @@ class Panel:
     missions_summary: list[PanelMision] = field(default_factory=list)
     week_stats: PanelSemana = field(default_factory=lambda: PanelSemana(0, 0, 0))
     generation_banner: PanelGeneracion | None = None
+    #: Avisos entregados y sin leer. Sin este número la campana del Inicio nunca
+    #: se enciende hasta que el aprendiz abre la bandeja por su cuenta, que es
+    #: justo lo contrario de lo que una campana sirve.
+    unread_notifications: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -316,6 +327,7 @@ class ServicioPanel:
         misiones = self._misiones(user_id, hoy)  # (9)
         semana = self.estadisticas.resumen_semana(user_id, timezone_name)  # (10)
         banner = self._banner_generacion(user_id)  # (11)
+        sin_leer = self._sin_leer(user_id)  # (12)
 
         return Panel(
             greeting_key=clave_de_saludo(to_zone(momento, timezone_name)),
@@ -332,6 +344,7 @@ class ServicioPanel:
                 achievements=int(semana["achievements"]),
             ),
             generation_banner=banner,
+            unread_notifications=sin_leer,
         )
 
     # -- piezas -----------------------------------------------------------
@@ -501,6 +514,7 @@ class ServicioPanel:
                 path_id=None,
                 module_id=None,
                 lesson_id=None,
+                topic_id=None,
                 title="Crea tu primera ruta",
                 breadcrumb="",
                 reward_preview=recompensa,
@@ -508,6 +522,12 @@ class ServicioPanel:
 
         path_id, module_id, lesson_id, estado, titulo_ruta, titulo_modulo, titulo_leccion = fila
         if estado == ProgressState.COMPLETED:
+            # La ruta se terminó: la tarjeta «continuar» no tiene nada que
+            # proponer y se queda en un callejón sin salida. Si hay algún tema
+            # flojo, un repaso es una salida mejor que una felicitación.
+            repaso = self._repaso_pendiente(user_id, cfg)
+            if repaso is not None:
+                return repaso
             tipo = CONTINUAR_RUTA_COMPLETA
             titulo = titulo_ruta
         elif lesson_id is not None:
@@ -523,10 +543,66 @@ class ServicioPanel:
             path_id=path_id,
             module_id=module_id,
             lesson_id=lesson_id,
+            topic_id=None,
             title=titulo,
             breadcrumb=migas,
             reward_preview=recompensa,
         )
+
+    def _repaso_pendiente(self, user_id: uuid.UUID, cfg: dict) -> PanelContinuar | None:
+        """El tema más flojo que merece repaso, o `None` si no hay ninguno.
+
+        Mismo criterio que `GET /reviews/recommended` (§7.6): por debajo del
+        umbral de riesgo o marcado como débil, y con evidencias. La consulta vive
+        aquí porque `progress` **lee** tablas de otros módulos pero no importa sus
+        servicios; el criterio es una comparación contra una clave de
+        configuración, no una regla escondida.
+        """
+        fila = self.db.execute(
+            sa.select(
+                UserTopicProgress.topic_id,
+                Topic.title,
+                PathModule.title,
+                LearningPath.title,
+            )
+            .select_from(UserTopicProgress)
+            .join(Topic, Topic.id == UserTopicProgress.topic_id)
+            .outerjoin(PathModule, PathModule.id == Topic.module_id)
+            .outerjoin(LearningPath, LearningPath.id == PathModule.learning_path_id)
+            .where(
+                UserTopicProgress.user_id == user_id,
+                UserTopicProgress.evidence_count > 0,
+                sa.or_(
+                    UserTopicProgress.is_weak.is_(True),
+                    UserTopicProgress.mastery < a_float(cfg["mastery.threshold.at_risk"]),
+                ),
+            )
+            .order_by(UserTopicProgress.mastery, UserTopicProgress.topic_id)
+            .limit(1)
+        ).one_or_none()
+        if fila is None:
+            return None
+
+        topic_id, titulo_tema, titulo_modulo, titulo_ruta = fila
+        return PanelContinuar(
+            type=CONTINUAR_REPASO,
+            path_id=None,
+            module_id=None,
+            lesson_id=None,
+            topic_id=topic_id,
+            title=titulo_tema,
+            breadcrumb=" · ".join(p for p in (titulo_ruta, titulo_modulo) if p),
+            reward_preview={
+                "xp": int(cfg["xp.review_completed"]),
+                "gold": int(cfg["gold.review_completed"]),
+            },
+        )
+
+    def _sin_leer(self, user_id: uuid.UUID) -> int:
+        """(12) Avisos entregados y sin leer: el número de la campana."""
+        from app.modules.gamification import avisos  # noqa: PLC0415 - evita el ciclo
+
+        return avisos.sin_leer(self.db, user_id)
 
     def _conocimientos(self, user_id: uuid.UUID) -> list[PanelConocimiento]:
         """(8) Conocimientos del usuario con su dominio, ordenados por dominio."""
@@ -614,6 +690,7 @@ __all__ = [
     "CONTINUAR_CREAR_RUTA",
     "CONTINUAR_EVALUACION",
     "CONTINUAR_LECCION",
+    "CONTINUAR_REPASO",
     "CONTINUAR_RUTA_COMPLETA",
     "MAX_CONOCIMIENTOS_PANEL",
     "RACHA_ACTIVA_HOY",

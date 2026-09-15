@@ -66,7 +66,7 @@ from app.modules.ai.proveedor import (
     modelo_para_tarea,
     plantilla_para_tarea,
 )
-from app.modules.gamification import eventos as bus
+from app.modules.gamification import avisos, eventos as bus
 from app.modules.gamification.servicio_config import ServicioConfig
 
 logger = get_logger(__name__)
@@ -356,6 +356,13 @@ def generar_modulo(
             idempotency_key=f"generation-failed:{job.id}",
             source_module="ai",
         )
+        avisos.al_fallar_generacion(
+            db,
+            usuario_id=usuario_id or path.user_id,
+            path_id=path.id,
+            job_id=job.id,
+            cfg=cfg,
+        )
         raise
 
     _armar_banco_evaluacion(db, cfg, modulo)
@@ -392,6 +399,16 @@ def generar_modulo(
         idempotency_key=f"module-content-ready:{modulo.id}:{job.id}",
         source_module="ai",
     )
+    if _es_el_primer_modulo(db, modulo):
+        avisos.al_terminar_primer_modulo(
+            db,
+            usuario_id=usuario_id or path.user_id,
+            path_id=path.id,
+            module_id=modulo.id,
+            titulo=path.title,
+            job_id=job.id,
+            cfg=cfg,
+        )
     logger.info(
         "ai.fase_b",
         module_id=str(modulo.id),
@@ -685,6 +702,24 @@ def _armar_banco_evaluacion(db: Session, cfg: ServicioConfig, modulo: PathModule
     )
     db.flush()
     return agregadas
+
+
+def _es_el_primer_modulo(db: Session, modulo: PathModule) -> bool:
+    """¿Es este el módulo de menor posición de su ruta?
+
+    Solo el primero merece aviso: los demás terminan de escribirse cuando el
+    aprendiz ya está dentro, y una ruta de seis módulos gastaría el tope diario
+    de avisos en anunciarse a sí misma.
+    """
+    anterior = db.execute(
+        sa.select(PathModule.id)
+        .where(
+            PathModule.learning_path_id == modulo.learning_path_id,
+            PathModule.position < modulo.position,
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    return anterior is None
 
 
 __all__ = [

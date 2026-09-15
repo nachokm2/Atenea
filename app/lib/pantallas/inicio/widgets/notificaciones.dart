@@ -28,7 +28,16 @@ Future<void> abrirBandejaNotificaciones(BuildContext context) async {
     context,
     constructor: (BuildContext hoja) => const HojaNotificaciones(),
   );
-  if (destino != null && destino.isNotEmpty) enrutador.go(destino);
+  if (destino == null || destino.isEmpty) return;
+  // Inicio es el suelo de la pila y no se apila sobre sí mismo. Todo lo demás es
+  // un destino concreto —una ruta, un repaso, una lección— y se apila encima,
+  // para que el botón de volver devuelva al aprendiz a donde estaba en vez de
+  // dejarlo sin salida.
+  if (destino == Rutas.inicio) {
+    enrutador.go(destino);
+  } else {
+    unawaited(enrutador.push<void>(destino));
+  }
 }
 
 /// Campana con su contador de mensajes sin leer.
@@ -109,7 +118,10 @@ class _HojaNotificacionesState extends State<HojaNotificaciones> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((Duration _) {
       if (!mounted) return;
-      context.read<ControladorGamificacion>().cargarNotificaciones();
+      // Siempre a la fuente: la bandeja es el sitio donde el aprendiz descubre
+      // lo nuevo, y enseñarle la lista que ya tenía en memoria de la vez
+      // anterior haría justo lo contrario.
+      context.read<ControladorGamificacion>().cargarNotificaciones(forzar: true);
     });
   }
 

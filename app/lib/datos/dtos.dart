@@ -46,6 +46,20 @@ int _ent(Object? valor, [int porDefecto = 0]) {
 
 int? _entN(Object? valor) => valor == null ? null : _ent(valor);
 
+/// Minutos de un repaso, vengan en segundos o en minutos.
+///
+/// `ReviewSuggestionOut` manda `estimated_seconds`; las sugerencias que llegan
+/// con el resultado de una evaluación no mandan duración ninguna. Se redondea
+/// hacia arriba porque un repaso de noventa segundos son dos minutos de la vida
+/// de quien lo hace, no uno.
+int _minutosDeRepaso(Map<String, dynamic> json) {
+  final int? segundos = _entN(json['estimated_seconds']);
+  if (segundos != null && segundos > 0) {
+    return (segundos + 59) ~/ 60;
+  }
+  return _ent(_alguna(json, <String>['estimated_minutes', 'duration_minutes']), 5);
+}
+
 double _dec(Object? valor, [double porDefecto = 0]) {
   if (valor is double) return valor;
   if (valor is num) return valor.toDouble();
@@ -3611,10 +3625,10 @@ class SugerenciaRepaso {
             _txtN(_alguna(json, <String>['knowledge_area_name', 'area_name'])),
         dominio: _dec(_alguna(json, <String>['mastery', 'mastery_pct'])),
         estado: EstadoDominio.desdeApi(json['status']),
-        minutosEstimados: _ent(
-          _alguna(json, <String>['estimated_minutes', 'duration_minutes']),
-          5,
-        ),
+        // El servidor manda `estimated_seconds` (`ReviewSuggestionOut`). Leer solo
+        // los campos en minutos hacía que toda sugerencia dijera «5 minutos»,
+        // viniera la duración que viniera.
+        minutosEstimados: _minutosDeRepaso(json),
         preguntas: _ent(_alguna(json, <String>['question_count', 'questions'])),
         motivo: _txtN(_alguna(json, <String>['reason', 'reason_text'])),
         rutaId: _txtN(_alguna(json, <String>['learning_path_id', 'path_id'])),
@@ -5530,6 +5544,7 @@ class Notificacion {
     this.enviadaEn,
     this.leidaEn,
     this.descartadaEn,
+    this.creadaEn,
   });
 
   /// Lee `NotificationOut`.
@@ -5547,6 +5562,7 @@ class Notificacion {
         enviadaEn: fechaHora(json['sent_at']),
         leidaEn: fechaHora(json['read_at']),
         descartadaEn: fechaHora(json['dismissed_at']),
+        creadaEn: fechaHora(json['created_at']),
       );
 
   /// Identificador de la notificación.
@@ -5585,8 +5601,14 @@ class Notificacion {
   /// ¿Ya la leyó el usuario?
   bool get estaLeida => leidaEn != null || estado == EstadoNotificacion.leida;
 
+  /// Cuándo se decidió mandarla (último recurso para la marca de tiempo).
+  final DateTime? creadaEn;
+
   /// Momento que se muestra en la lista.
-  DateTime? get fechaVisible => enviadaEn ?? programadaPara ?? leidaEn;
+  ///
+  /// `creadaEn` cierra la cadena: sin ella, un aviso sin `sent_at` aparecía en
+  /// la bandeja sin ninguna marca de tiempo, como si no hubiera pasado nunca.
+  DateTime? get fechaVisible => enviadaEn ?? programadaPara ?? leidaEn ?? creadaEn;
 }
 
 /// Una fila de la tabla de niveles (`level_definitions`).

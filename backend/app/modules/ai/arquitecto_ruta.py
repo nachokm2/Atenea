@@ -53,7 +53,7 @@ from app.modules.ai.proveedor import (
     modelo_para_tarea,
     plantilla_para_tarea,
 )
-from app.modules.gamification import eventos as bus
+from app.modules.gamification import avisos, eventos as bus
 from app.modules.gamification.servicio_config import ServicioConfig
 
 logger = get_logger(__name__)
@@ -665,6 +665,13 @@ def disenar_ruta(
             idempotency_key=f"generation-failed:{job.id}",
             source_module="ai",
         )
+        avisos.al_fallar_generacion(
+            db,
+            usuario_id=usuario_id or path.user_id,
+            path_id=path.id,
+            job_id=job.id,
+            cfg=cfg,
+        )
         raise
 
     costos.registrar_uso(db, job, respuesta.uso)
@@ -717,6 +724,14 @@ def disenar_ruta(
         },
         idempotency_key=f"path-generated:{path.id}:{job.id}",
         source_module="ai",
+    )
+    avisos.al_disenar_ruta(
+        db,
+        usuario_id=usuario_id or path.user_id,
+        path_id=path.id,
+        titulo=path.title,
+        job_id=job.id,
+        cfg=cfg,
     )
     logger.info(
         "ai.fase_a",

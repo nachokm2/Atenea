@@ -1902,6 +1902,9 @@ Estado materializado de la racha. Siempre recomputable desde `streak_days`.
 | `previous_length` | `sa.Integer` | No | `0` | Longitud de la racha anterior ("Última racha: 21 días"). |
 
 Únicos: `uq_streaks_user_id`.
+Índices: `ix_streaks_last_active_date` (el planificador de avisos barre por aquí:
+la racha viva se deduce de la última fecha activa, nunca de `current_length`, que
+no caduca sola).
 
 ### `streak_days`
 Agregado por usuario y **fecha local**: fuente de verdad del calendario, del día activo y del objetivo diario.
@@ -2100,7 +2103,7 @@ Notificaciones in-app y push, con programación y antifatiga.
 | `status` | `E(NotificationStatus)` | No | `PENDING` | Estado. |
 | `title` | `sa.String(120)` | No | — | Título (español, tono de recuperación, sin culpa). |
 | `body` | `sa.String(400)` | No | — | Cuerpo. |
-| `deep_link` | `sa.String(160)` | Sí | — | `home`, `streak`, `missions`, `route/{id}`. |
+| `deep_link` | `sa.String(160)` | Sí | — | `home`, `streak`, `missions`, `route/{id}`, `route/{id}/generation`, `review/{topic_id}`. |
 | `payload` | `JSONB` | No | `'{}'::jsonb` | Datos extra para el cliente. |
 | `scheduled_for` | `sa.DateTime(timezone=True)` | Sí | — | Envío programado (respeta horas de silencio). |
 | `sent_at` | `sa.DateTime(timezone=True)` | Sí | — | Envío efectivo. |
@@ -2110,7 +2113,15 @@ Notificaciones in-app y push, con programación y antifatiga.
 | `idempotency_key` | `sa.String(120)` | No | — | Evita duplicados del programador. |
 
 Únicos: `uq_notifications_idempotency_key`.
-Índices: `ix_notifications_user_id_status`, `ix_notifications_scheduled_for`.
+Índices: `ix_notifications_user_id_status`, `ix_notifications_scheduled_for`,
+`ix_notifications_user_id_local_date` (los topes por día se cuentan sobre la fecha
+local del usuario).
+
+**Programar no es entregar.** Una fila nace `PENDING` con `scheduled_for` en el
+futuro, o `SENT` si es para ahora mismo. El despachador del worker es quien la pasa
+a `SENT`; mientras siga `PENDING` **no aparece en la bandeja**. Una que lleve más de
+seis horas vencida sin entregarse pasa a `FAILED` en vez de entregarse tarde.
+`GET /notifications` solo devuelve `SENT` y `READ`.
 
 ---
 
@@ -3105,7 +3116,7 @@ Convenciones de la columna "Respuesta": los nombres en `PascalCase` son esquemas
 
 | Método | Ruta | Auth | Descripción | Respuesta |
 |---|---|---|---|---|
-| GET | `/api/v1/dashboard` | Sí | Todo lo que P04 necesita en una sola llamada. | `DashboardOut` `{greeting_key, character{level, rank_title, xp_total, xp_to_next, progress_pct}, gold_balance, streak{current, best, status, day_status}, daily_goal{type, target, progress, met, bonus_gold}, continue_action{type, path_id, module_id, lesson_id, title, breadcrumb, reward_preview}, knowledge_summary[], missions_summary[], week_stats{active_seconds, lessons, achievements}, generation_banner}` |
+| GET | `/api/v1/dashboard` | Sí | Todo lo que P04 necesita en una sola llamada. | `DashboardOut` `{greeting_key, character{level, rank_title, xp_total, xp_to_next, progress_pct}, gold_balance, streak{current, best, status, day_status}, daily_goal{type, target, progress, met, bonus_gold}, continue_action{type, path_id, module_id, lesson_id, topic_id, title, breadcrumb, reward_preview}, knowledge_summary[], missions_summary[], week_stats{active_seconds, lessons, achievements}, generation_banner, unread_notifications}` |
 | GET | `/api/v1/profile` | Sí | Perfil de videojuego (P17). | `ProfileOut` `{character, avatar_layers, stats{xp_total, streak_current, study_seconds, areas_mastered, achievements_unlocked, items_owned}, knowledge[], last_7_days[]}` |
 | GET | `/api/v1/profile/stats` | Sí | Estadísticas ampliadas con rango de fechas (`from`, `to`). | `StatsOut` `{daily[], totals, accuracy_pct, lessons, assessments}` |
 | GET | `/api/v1/streak` | Sí | Racha actual, mejor, estado, próximo hito y su recompensa (P18). | `StreakOut` `{current, best, status, total_active_days, grace_available, next_milestone{days, remaining, reward}}` |
@@ -3122,7 +3133,7 @@ Convenciones de la columna "Respuesta": los nombres en `PascalCase` son esquemas
 | GET | `/api/v1/missions` | Sí | Misiones diarias y especiales (P19); genera las del día de forma perezosa y determinista. | `MissionsOut` `{daily[], special[], weekly[], resets_in_seconds}` |
 | POST | `/api/v1/missions/{user_mission_id}/claim` | Sí (**Idempotency-Key**) | Reclama la recompensa de una misión completada. | **`RewardsReceipt`** |
 | GET | `/api/v1/achievements` | Sí | Sala de trofeos (P20) con progreso por nivel y filtros (`state=all|unlocked|in_progress`). | `Page<AchievementOut>` `{code, name, category, visibility, highest_tier, tiers[], progress_pct, unlocked_at}` |
-| GET | `/api/v1/notifications` | Sí | Bandeja in-app. | `Page<NotificationOut>` |
+| GET | `/api/v1/notifications` | Sí | Bandeja in-app: solo lo ya entregado (`SENT`, `READ`), de lo más reciente a lo más antiguo. Pagina con `limit` y `cursor` sobre `sent_at`. | `Page<NotificationOut>` `{id, notification_type, channel, status, title, body, deep_link, payload, scheduled_for, sent_at, read_at, dismissed_at, created_at}` |
 | POST | `/api/v1/notifications/{notification_id}/read` | Sí | Marca como leída. | `204` |
 | POST | `/api/v1/notifications/read-all` | Sí | Marca todas como leídas. | `204` |
 | POST | `/api/v1/devices/push-token` | Sí | Registra o actualiza el token de push. | `204` |

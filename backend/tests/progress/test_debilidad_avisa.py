@@ -1,0 +1,116 @@
+"""Cuando un tema se marca débil, alguien tiene que enterarse.
+
+`WEAKNESS_DETECTED` estaba en el catálogo de eventos (§4.2) y en el contrato, con
+`REVIEW_RECOMMENDED` colgando de él, pero no se emitía en ninguna parte: el
+recálculo de dominio escribía `is_weak` en la tabla y ahí se quedaba. La
+consecuencia práctica era que el repaso espaciado solo tenía una puerta —la
+pantalla de resultado de una evaluación—, y quien no pasaba por ahí no volvía a
+ver ese tema nunca.
+"""
+
+from __future__ import annotations
+
+from datetime import timedelta
+
+import sqlalchemy as sa
+from sqlalchemy.orm import Session
+
+from app.core.time import utcnow
+from app.models.enums import EventType, NotificationType
+from app.models.gamification import DomainEvent, Notification
+from app.models.identity import User
+from app.models.progress import UserTopicProgress
+from app.modules.progress.dominio import ServicioDominio
+
+from .conftest import registrar_respuesta
+
+
+def _fallar_muchas_veces(db: Session, usuario: User, contenido, veces: int = 6) -> None:
+    """Evidencias suficientes y todas malas: la regla R2 se cumple sin discusión."""
+    for _ in range(veces):
+        registrar_respuesta(db, usuario, contenido, correcta=False)
+
+
+def _eventos(db: Session, tipo: EventType) -> list[DomainEvent]:
+    return list(
+        db.execute(sa.select(DomainEvent).where(DomainEvent.event_type == tipo)).scalars().all()
+    )
+
+
+def _avisos(db: Session) -> list[Notification]:
+    return list(
+        db.execute(
+            sa.select(Notification).where(
+                Notification.notification_type == NotificationType.REVIEW_RECOMMENDED
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+def test_marcar_un_tema_debil_emite_el_evento(
+    db: Session, config_sembrada: None, usuario: User, contenido
+) -> None:
+    _fallar_muchas_veces(db, usuario, contenido)
+
+    resultado = ServicioDominio(db).recalcular_cascada(usuario.id, topic_id=contenido.tema.id)
+
+    assert resultado.weakness_detected is True
+    assert EventType.WEAKNESS_DETECTED in resultado.eventos
+    evento = _eventos(db, EventType.WEAKNESS_DETECTED)
+    assert len(evento) == 1
+    assert evento[0].payload["topic_id"] == str(contenido.tema.id)
+
+
+def test_marcar_un_tema_debil_propone_un_repaso(
+    db: Session, config_sembrada: None, usuario: User, contenido
+) -> None:
+    """El enlace lleva directo al repaso de ese tema: el cliente ya sabe abrirlo."""
+    _fallar_muchas_veces(db, usuario, contenido)
+
+    ServicioDominio(db).recalcular_cascada(usuario.id, topic_id=contenido.tema.id)
+
+    creados = _avisos(db)
+    assert len(creados) == 1
+    assert creados[0].deep_link == f"review/{contenido.tema.id}"
+    assert contenido.tema.title in creados[0].title
+    assert creados[0].payload["topic_id"] == str(contenido.tema.id)
+
+
+def test_seguir_fallando_no_repite_el_aviso(
+    db: Session, config_sembrada: None, usuario: User, contenido
+) -> None:
+    """Es la transición la que avisa, no el estado: si no, avisaría por respuesta."""
+    _fallar_muchas_veces(db, usuario, contenido)
+    servicio = ServicioDominio(db)
+    # Los dos recálculos van en segundos distintos: la clave de `MASTERY_UPDATED`
+    # lleva la marca de tiempo en segundos y dos seguidos chocarían entre sí por
+    # un motivo que no tiene nada que ver con lo que se prueba aquí.
+    primero = utcnow()
+    servicio.recalcular_cascada(usuario.id, topic_id=contenido.tema.id, ahora=primero)
+
+    registrar_respuesta(db, usuario, contenido, correcta=False)
+    segundo = servicio.recalcular_cascada(
+        usuario.id, topic_id=contenido.tema.id, ahora=primero + timedelta(seconds=5)
+    )
+
+    assert segundo.weakness_detected is False
+    assert len(_avisos(db)) == 1
+
+
+def test_un_tema_sano_no_avisa_de_nada(
+    db: Session, config_sembrada: None, usuario: User, contenido
+) -> None:
+    for _ in range(6):
+        registrar_respuesta(db, usuario, contenido, correcta=True)
+
+    resultado = ServicioDominio(db).recalcular_cascada(usuario.id, topic_id=contenido.tema.id)
+
+    assert resultado.weakness_detected is False
+    assert _eventos(db, EventType.WEAKNESS_DETECTED) == []
+    assert _avisos(db) == []
+    fila = db.execute(
+        sa.select(UserTopicProgress).where(UserTopicProgress.topic_id == contenido.tema.id)
+    ).scalar_one()
+    assert fila.is_weak is False

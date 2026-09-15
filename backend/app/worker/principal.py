@@ -65,8 +65,18 @@ logger = get_logger("atenea.worker")
 #: Segundos de espera cuando no hay trabajo en la cola (sondeo barato sobre un índice).
 SEGUNDOS_SONDEO = 2.0
 
-#: Cada cuántos segundos se reclaman los trabajos huérfanos y se purga lo vencido.
+#: Cada cuántos segundos se reclaman los trabajos huérfanos, se purga lo vencido
+#: y se entregan los avisos que ya vencieron.
 SEGUNDOS_MANTENIMIENTO = 60.0
+
+#: Cada cuántos segundos el planificador repasa a quién le toca un aviso. El
+#: diseño pide un cuarto de hora: es la resolución con la que se puede acertar la
+#: hora local de cualquier zona sin barrer la base cada minuto.
+SEGUNDOS_BARRIDO = 900.0
+
+#: Instante monotónico del próximo barrido. Arranca en cero para que la primera
+#: vuelta del worker ya lo haga.
+_proximo_barrido = 0.0
 
 #: Identidad del proceso en los registros: permite seguir a un worker concreto.
 NOMBRE_WORKER = os.environ.get("WORKER_NAME") or f"worker-{uuid.uuid4().hex[:8]}"
@@ -368,16 +378,74 @@ def drenar(
 
 
 def mantenimiento(db: Session) -> dict[str, int]:
-    """Reclama trabajos huérfanos y purga el material cuyo plazo de retención venció."""
+    """Tareas periódicas del worker: la cola, el material y los avisos.
+
+    Las cuatro comparten una sesión y un único commit (lo hace `bucle`), así que
+    cada una va dentro de su propio punto de guardado: una que falle deja un
+    rastro en el registro y no se lleva por delante el trabajo de las otras. Sin
+    el punto de guardado no bastaría con capturar la excepción, porque una
+    sentencia fallida deja la transacción de PostgreSQL abortada entera.
+    """
+    resumen: dict[str, int] = {}
+    resumen.update(_tarea(db, "cola", lambda: {"reclamados": cola.reclamar_atascados(db)}))
+    resumen.update(_tarea(db, "material", lambda: {"purgados": _purgar(db)}))
+    resumen.update(_tarea(db, "avisos", lambda: _entregar_avisos(db)))
+    resumen.update(_tarea(db, "planificador", lambda: _barrido_de_avisos(db)))
+    if any(resumen.values()):
+        logger.info("mantenimiento", worker=NOMBRE_WORKER, **resumen)
+    return resumen
+
+
+def _tarea(db: Session, nombre: str, trabajo: Callable[[], dict[str, int]]) -> dict[str, int]:
+    """Ejecuta una tarea de mantenimiento aislada en su propio punto de guardado."""
+    punto = db.begin_nested()
+    try:
+        resultado = trabajo()
+    except Exception:
+        punto.rollback()
+        logger.exception("mantenimiento_tarea_fallida", worker=NOMBRE_WORKER, tarea=nombre)
+        return {}
+    punto.commit()
+    return resultado
+
+
+def _purgar(db: Session) -> int:
+    """Material cuyo plazo de retención venció."""
     from app.modules.ingestion import servicio  # noqa: PLC0415
 
-    reclamados = cola.reclamar_atascados(db)
-    purgados = servicio.purgar_documentos(db)
-    if reclamados or purgados:
-        logger.info(
-            "mantenimiento", worker=NOMBRE_WORKER, reclamados=reclamados, purgados=purgados
-        )
-    return {"reclamados": reclamados, "purgados": purgados}
+    return servicio.purgar_documentos(db)
+
+
+def _entregar_avisos(db: Session) -> dict[str, int]:
+    """Pasa a entregados los avisos programados que ya vencieron.
+
+    Hasta que esto corre, una notificación programada existe pero no está en la
+    bandeja de nadie: `scheduled_for` sin despachador es una promesa sin cumplir.
+    """
+    from app.modules.gamification import avisos  # noqa: PLC0415
+
+    return avisos.despachar_pendientes(db)
+
+
+def _barrido_de_avisos(db: Session) -> dict[str, int]:
+    """Crea los avisos que dependen del reloj, a su propia cadencia.
+
+    El mantenimiento corre cada minuto y este barrido no lo necesita: mira a
+    todos los aprendices activos del último mes y la hora local de nadie cambia
+    tanto. Lleva su propio contador para no repasar la misma lista sesenta veces
+    por hora.
+    """
+    global _proximo_barrido
+
+    ahora = time.monotonic()
+    if ahora < _proximo_barrido:
+        return {}
+    _proximo_barrido = ahora + SEGUNDOS_BARRIDO
+
+    from app.modules.gamification import planificador  # noqa: PLC0415
+    from app.modules.gamification.servicio_config import obtener_servicio_config  # noqa: PLC0415
+
+    return planificador.planificar(db, obtener_servicio_config(db))
 
 
 # ---------------------------------------------------------------------------
@@ -542,6 +610,7 @@ def main(argv: list[str] | None = None) -> int:
 __all__ = [
     "MANEJADORES",
     "NOMBRE_WORKER",
+    "SEGUNDOS_BARRIDO",
     "SEGUNDOS_MANTENIMIENTO",
     "SEGUNDOS_SONDEO",
     "Manejador",

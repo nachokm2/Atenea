@@ -370,7 +370,12 @@ class Streak(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         # Longitud de la racha anterior: "Última racha: 21 días".
     )
 
-    __table_args__ = (sa.UniqueConstraint("user_id"),)
+    __table_args__ = (
+        sa.UniqueConstraint("user_id"),
+        # El planificador barre por aquí: la racha viva se deduce de la última
+        # fecha activa, nunca de `current_length`, que no caduca sola.
+        sa.Index("ix_streaks_last_active_date", "last_active_date"),
+    )
 
 
 class StreakDay(UUIDPrimaryKeyMixin, TimestampMixin, Base):
@@ -1118,6 +1123,8 @@ class Notification(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         sa.UniqueConstraint("idempotency_key"),
         sa.Index("ix_notifications_user_id_status", "user_id", "status"),
         sa.Index("ix_notifications_scheduled_for", "scheduled_for"),
+        # Los topes por día se cuentan sobre la fecha local del usuario.
+        sa.Index("ix_notifications_user_id_local_date", "user_id", "local_date"),
     )
 
 

@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 from collections.abc import Iterator
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -233,7 +234,15 @@ def semillas(conexion: sa.Connection) -> Iterator[None]:
             sa.select(GameConfig.key).where(GameConfig.key.in_(list(SEMILLAS_CONFIG)))
         ).all()
     }
-    ahora = utcnow()
+    # Un día atrás a propósito. `valid_from <= now()` se evalúa con
+    # `transaction_timestamp()`, que es el instante en que **empezó** la
+    # transacción externa de la conexión de pruebas, no el de la consulta. Si esa
+    # transacción arrancó antes que esta siembra —y quién la arranca depende de
+    # qué fixture toque la conexión primero, o sea del orden de la ejecución—,
+    # una marca de «ahora» queda en el futuro y la configuración entera se vuelve
+    # invisible para la suite completa. De ahí venían los fallos intermitentes
+    # con `ConfiguracionAusente` y respuestas 500 en suites que pasaban solas.
+    ahora = utcnow() - timedelta(days=1)
     for clave, (valor, tipo, publico) in SEMILLAS_CONFIG.items():
         if clave in existentes:
             continue

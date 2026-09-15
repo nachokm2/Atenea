@@ -582,6 +582,11 @@ class ResultadoRecalculo:
     module_status: ModuleStatus | None = None
     area_status: KnowledgeAreaStatus | None = None
     topics_mastered: int = 0
+    #: El tema acaba de cruzar el umbral de debilidad en **este** recálculo. Es la
+    #: transición, no el estado: un tema que ya estaba débil no la vuelve a
+    #: levantar, o el aprendiz recibiría el mismo aviso de repaso en cada
+    #: respuesta que diera.
+    weakness_detected: bool = False
     eventos: list[EventType] = field(default_factory=list)
 
 
@@ -677,8 +682,13 @@ class ServicioDominio:
         topic_id: uuid.UUID,
         *,
         ahora: datetime | None = None,
-    ) -> tuple[UserTopicProgress, float, float]:
-        """Recalcula `user_topic_progress` de un tema. Devuelve `(fila, antes, después)`."""
+    ) -> tuple[UserTopicProgress, float, float, bool]:
+        """Recalcula `user_topic_progress` de un tema.
+
+        Devuelve `(fila, antes, después, debilidad_nueva)`. El último valor es la
+        **transición** a débil, no el estado: solo es cierto en el recálculo que
+        cruza el umbral, que es cuando `WEAKNESS_DETECTED` tiene algo que contar.
+        """
         topic = self.db.get(Topic, topic_id)
         if topic is None:
             raise LookupError(f"El tema {topic_id} no existe.")
@@ -718,12 +728,13 @@ class ServicioDominio:
             requisito_cumplido=aprobada,
             cfg=self.cfg,
         )
-        if resultado.is_weak and not fila.is_weak:
+        debilidad_nueva = bool(resultado.is_weak) and not bool(fila.is_weak)
+        if debilidad_nueva:
             fila.weak_detected_at = ensure_utc(ahora) if ahora else utcnow()
             fila.weak_rule = "R2"
         fila.is_weak = resultado.is_weak
         self.db.flush()
-        return fila, antes, resultado.mastery
+        return fila, antes, resultado.mastery, debilidad_nueva
 
     def recalcular_modulo(
         self, user_id: uuid.UUID, module_id: uuid.UUID, *, ahora: datetime | None = None
@@ -877,7 +888,10 @@ class ServicioDominio:
             tema = self.db.get(Topic, topic_id)
             if tema is not None:
                 module_id = module_id or tema.module_id
-            fila_tema, antes, despues = self.recalcular_tema(user_id, topic_id, ahora=momento)
+            fila_tema, antes, despues, debil = self.recalcular_tema(
+                user_id, topic_id, ahora=momento
+            )
+            resultado.weakness_detected = debil
             resultado.topic_id = topic_id
             resultado.topic_before = antes
             resultado.topic_after = despues
@@ -1085,6 +1099,46 @@ class ServicioDominio:
                 permitir_duplicado=True,
             )
             resultado.eventos.append(EventType.AREA_MASTERED)
+
+        if resultado.weakness_detected and resultado.topic_id:
+            self._insertar_evento(
+                EventType.WEAKNESS_DETECTED,
+                user_id,
+                {
+                    "topic_id": str(resultado.topic_id),
+                    "knowledge_area_id": (
+                        str(resultado.knowledge_area_id) if resultado.knowledge_area_id else None
+                    ),
+                    "rule": "R2",
+                    "evidence": {"mastery": resultado.topic_after},
+                },
+                clave=f"weakness-detected:{user_id}:{resultado.topic_id}:{marca}",
+                momento=momento,
+                correlation_id=correlation_id,
+                timezone_name=timezone_name,
+            )
+            resultado.eventos.append(EventType.WEAKNESS_DETECTED)
+            self._proponer_repaso(user_id, resultado.topic_id, marca)
+
+    def _proponer_repaso(self, user_id: uuid.UUID, topic_id: uuid.UUID, marca: int) -> None:
+        """Aviso de repaso del tema que acaba de marcarse débil (§4.2).
+
+        Es la puerta que le faltaba al repaso espaciado: hasta ahora las
+        sugerencias solo existían en la pantalla de resultado de una evaluación,
+        y quien no llegaba hasta ahí no las veía jamás.
+        """
+        from app.modules.gamification import avisos  # noqa: PLC0415 - evita el ciclo de importación
+
+        tema = self.db.get(Topic, topic_id)
+        if tema is None:
+            return
+        avisos.al_detectar_debilidad(
+            db=self.db,
+            usuario_id=user_id,
+            topic_id=topic_id,
+            titulo=tema.title,
+            marca=marca,
+        )
 
     def _insertar_evento(
         self,
