@@ -118,6 +118,13 @@ filterwarnings = [
     "ignore:Cannot correctly sort tables:sqlalchemy.exc.SAWarning",
     # Ruido de librerías de terceros que no controlamos.
     "ignore::DeprecationWarning:pkg_resources.*",
+    # `starlette.testclient` usa `anyio.abc.BlockingPortal`, que anyio 4.12
+    # marcó como obsoleto. Es una deuda entre dos dependencias nuestras y no hay
+    # nada que podamos hacer salvo esperar a que starlette la salde. Convertirla
+    # en error rompía la recolección de seis archivos de prueba —y solo en una
+    # instalación recién hecha, así que pasaba en la integración continua y no en
+    # la máquina de nadie.
+    "ignore:.*BlockingPortal alias is deprecated.*:DeprecationWarning",
     "ignore::PendingDeprecationWarning",
 ]
 asyncio_mode = "strict"
