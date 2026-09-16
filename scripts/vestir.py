@@ -149,19 +149,25 @@ SOLO_LA_PIEZA = (
     "nada que no se te haya pedido."
 )
 
-#: Y esto, solo a lo que no va en los pies.
+#: Lo que sobra alrededor, dicho por partes.
 #:
-#: Iba dentro de `SOLO_LA_PIEZA`, junto al resto, y se volvió contra sí mismo:
-#: estaba ahí para que las capas dejaran de traer botas de regalo, pero también
-#: se lo decía a las botas. Pidiéndole unas botas de camino sobre la figura
-#: femenina devolvió los pies descalzos, obedeciendo. Dos de los cuatro pares
-#: salieron así y un tercero con una sola bota.
-DESCALZO = (
-    " Sigue DESCALZO, sin botas ni sandalias, y con los brazos y las piernas "
-    "desnudos."
-)
+#: Estas frases están para que una pieza no venga acompañada de otras: sin ellas,
+#: pedir una capa devolvía además túnica, cinturón y botas. Pero cada una se
+#: vuelve contra la pieza a la que contradice, y eso ha pasado dos veces:
+#:
+#:   - «sigue DESCALZO» iba también en las botas, y el modelo obedecía: dos de
+#:     los cuatro pares de la familia femenina volvieron con los pies desnudos y
+#:     un tercero con una sola bota.
+#:
+#:   - «con los brazos desnudos» iba también en las armas, y una espada se
+#:     empuña con la mano, que está al final de un brazo. Tres piezas de la
+#:     familia femenina volvieron con el brazo vacío, cuatro intentos cada una.
+#:
+#: Por eso van separadas, y cada banda recibe solo lo que no le contradice.
+SIN_CALZADO = " Sigue DESCALZO, sin botas ni sandalias."
+SIN_MANGAS = " Deja los brazos y las piernas desnudos, sin mangas ni perneras."
 
-#: Lo que se le añade solo al desnudar.
+#: Lo que se le añade solo al desnudar.#: Lo que se le añade solo al desnudar.
 #:
 #: Quitar ropa le invita a mejorar el cuerpo que aparece debajo, y lo hace: el
 #: masculino 003 salió 30 px más ancho de pecho por lado que sus dos hermanos,
@@ -946,12 +952,22 @@ def main(argv: list[str] | None = None) -> int:
         + (
             f" {DESNUDEZ}"
             if args.ranura.startswith("base")
-            else f" {SOLO_LA_PIEZA}" + ("" if args.ranura == "botas" else DESCALZO)
+            else f" {SOLO_LA_PIEZA}" + _lo_que_no_contradice(args.ranura)
         )
         + f" El fondo, {FONDO}.",
     )
     (destino / f"bruto_{nombre}.png").write_bytes(bruto)
     return _componer(args, destino, nombre, figura, zona, pieza)
+
+
+def _lo_que_no_contradice(ranura: str) -> str:
+    """De las dos advertencias, las que no chocan con lo que se está pidiendo."""
+    sobra: list[str] = []
+    if ranura != "botas":
+        sobra.append(SIN_CALZADO)
+    if ranura not in ("manos", "empunado", "arma", "escudo"):
+        sobra.append(SIN_MANGAS)
+    return "".join(sobra)
 
 
 def _componer(
