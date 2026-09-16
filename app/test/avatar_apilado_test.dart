@@ -11,10 +11,11 @@
 ///
 /// Lo que se prueba aquí es el interruptor entre las dos formas de dibujar, que
 /// es donde está el riesgo de verdad: el arte por capas llega figura a figura y
-/// pieza a pieza, así que las dos formas conviven durante meses. Nada de esto lo
-/// tocaba ninguna prueba: la figura por defecto de `avatar_equipo_test.dart` es
-/// `base_masculino_002`, que no tiene cuerpo desnudo, así que el camino apilado
-/// entero se quedaba sin ejecutar.
+/// pieza a pieza, así que las dos formas conviven durante meses.
+///
+/// Nada de esto lo tocaba ninguna prueba cuando se escribió. La única que rozaba
+/// el widget, `avatar_equipo_test.dart`, usa la figura por defecto, y ese día no
+/// tenía cuerpo desnudo: el camino apilado entero se quedaba sin ejecutar.
 library;
 
 import 'package:atenea/datos/dtos.dart';
@@ -40,8 +41,13 @@ void main() {
   );
 
   /// Rasgos que resuelven a una figura **sin** cuerpo desnudo todavía.
+  ///
+  /// Femenina: la familia masculina ya tiene sus tres cuerpos. El día que la
+  /// femenina los tenga también, esta prueba dejará de tener figura que usar, y
+  /// entonces habrá que borrarla en vez de arreglarla: los dos caminos habrán
+  /// dejado de convivir.
   const RasgosAvatar sinCapas = RasgosAvatar(
-    formaTrato: FormaTrato.masculino,
+    formaTrato: FormaTrato.femenino,
     rostro: 'face_01',
   );
 
@@ -85,8 +91,8 @@ void main() {
       // emergencia: es el camino normal mientras no llegue su arte.
       await pintar(tester, const <CapaAvatar>[], rasgos: sinCapas);
 
-      expect(imagen('assets/arte/personajes/base_masculino_002.webp'), findsOneWidget);
-      expect(imagen('assets/arte/capas/cuerpos/base_masculino_002.webp'), findsNothing);
+      expect(imagen('assets/arte/personajes/base_femenino_002.webp'), findsOneWidget);
+      expect(imagen('assets/arte/capas/cuerpos/base_femenino_002.webp'), findsNothing);
     });
   });
 
@@ -222,6 +228,17 @@ void main() {
   });
 
   group('el catálogo de rutas', () {
+    test('queda alguna figura sin cuerpo desnudo, o esta prueba miente', () {
+      // `sinCapas` tiene que resolver de verdad a una figura sin cuerpo: si
+      // algún día entran las seis en el conjunto, las pruebas del camino viejo
+      // pasarían a probar el nuevo sin decírselo a nadie.
+      expect(
+        Arte.conCuerpoDesnudo.length,
+        lessThan(Arte.personajes.length),
+        reason: 'ya no queda figura con la que probar el camino sin capas',
+      );
+    });
+
     test('toda figura declarada con cuerpo desnudo es una figura real', () {
       // Un error de dedo aquí no rompe nada visible: la imagen falla, cae al
       // `errorBuilder` y sale el muñeco vectorial. Se vería raro sin que nadie

@@ -5,10 +5,14 @@
 /// esa imagen: como las seis figuras existen en disco, esa rama no se ejecutaba
 /// jamás. El oro del Mercado compraba algo invisible.
 ///
-/// No se arregla pintando las piezas encima: la ilustración ya viene vestida y
-/// cada pieza está dibujada en su propio encuadre, así que superponerlas daría
-/// un collage. Se muestran alrededor, que es lo que prescribe la documentación
-/// del propio catálogo de arte.
+/// Entonces no se podía arreglar pintando las piezas encima: la ilustración venía
+/// vestida y cada pieza estaba dibujada en su propio encuadre, así que
+/// superponerlas daba un collage. De ahí las fichas alrededor.
+///
+/// Hoy ya hay arte por capas y las piezas que lo tienen sí se pintan encima; eso
+/// lo prueba `avatar_apilado_test.dart`. Lo de aquí sigue en pie y sigue siendo
+/// necesario: es lo que ve una pieza **sin** capa, que son casi todas, y lo que
+/// seguirá viéndose mientras quede una sola sin arte.
 ///
 /// Ninguna prueba tocaba este widget antes de esta.
 library;

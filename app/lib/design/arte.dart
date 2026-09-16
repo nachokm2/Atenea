@@ -95,6 +95,8 @@ abstract final class Arte {
   /// emergencia sino lo que se ve hoy.
   static const Set<String> conCuerpoDesnudo = <String>{
     'base_masculino_001',
+    'base_masculino_002',
+    'base_masculino_003',
   };
 
   /// Cuerpo desnudo de una figura: el fondo de la pila de dibujado.

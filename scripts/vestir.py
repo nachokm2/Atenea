@@ -106,6 +106,50 @@ ESTILO = (
 )
 
 
+#: Sobre qué figura se generan las piezas de cada familia.
+#:
+#: Una sola, porque dentro de una familia el cuerpo es casi el mismo y hacer tres
+#: juegos sería pagar tres veces por el mismo dibujo. La elegida es la **mediana**
+#: de su familia, no la primera.
+#:
+#: Está medido sobre los cuerpos ya desnudos, y midiendo el **torso solo**: a la
+#: altura del pecho los brazos se funden con él, y un brazo más separado infla el
+#: número sin que la pechera cambie de talla. Estas son las filas donde los tres
+#: cuerpos tienen los brazos sueltos, en anchura de torso:
+#:
+#:     dy          001    002    003
+#:     hombros     238    256    281
+#:     cintura     158    177    180
+#:     cadera      183    193    198
+#:
+#: La 002 es la mediana en las tres. Generando sobre ella, ninguna figura se
+#: desvía más de unos 12 px por lado —unos 3 dp en pantalla—; generando sobre un
+#: extremo se dobla. Y el sentido del error importa: una pieza estrecha deja
+#: asomar el cuerpo por los hombros, que es el fallo que se ve.
+#:
+#: Aparte de esto, el modelo tiende a mejorar el cuerpo que destapa: la 003 salió
+#: primero con 34 px más de hombro por lado que sus hermanas. `DESNUDEZ` se lo
+#: pide expresamente y lo baja, pero no lo quita del todo.
+CANONICA: dict[str, str] = {
+    "masculino": "base_masculino_002",
+    "femenino": "base_femenino_002",
+}
+
+#: Lo que se le añade solo al desnudar.
+#:
+#: Quitar ropa le invita a mejorar el cuerpo que aparece debajo, y lo hace: el
+#: masculino 003 salió 30 px más ancho de pecho por lado que sus dos hermanos,
+#: la misma diferencia que hay entre familias. Eso rompe lo que abarata el
+#: catálogo entero —un juego de piezas por familia, porque dentro de una familia
+#: el cuerpo es el mismo—, y obligaría a tres juegos por familia en vez de uno.
+DESNUDEZ = (
+    "Conserva EXACTAMENTE la misma complexión y la misma anchura de hombros, "
+    "pecho, cintura y piernas que tiene la figura vestida. No lo hagas más "
+    "musculoso, ni más ancho, ni más atlético: debajo de la ropa hay el mismo "
+    "cuerpo, ni uno mejor ni uno distinto."
+)
+
+
 @dataclass(frozen=True, slots=True)
 class Banda:
     """Franja vertical donde puede pintar una ranura, medida desde la coronilla.
@@ -411,7 +455,9 @@ def main(argv: list[str] | None = None) -> int:
     bruto = pedir_edicion(
         (destino / f"partida_{nombre}.png").read_bytes(),
         (destino / f"mascara_{nombre}.png").read_bytes(),
-        f"{args.prompt}. {ESTILO} El fondo, {FONDO}.",
+        f"{args.prompt}. {ESTILO}"
+        + (f" {DESNUDEZ}" if args.ranura.startswith("base") else "")
+        + f" El fondo, {FONDO}.",
     )
     (destino / f"bruto_{nombre}.png").write_bytes(bruto)
     return _componer(args, destino, nombre, figura, zona)
