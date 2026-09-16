@@ -8,6 +8,8 @@ y la baja de cuenta.
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 import sqlalchemy as sa
 
@@ -295,3 +297,56 @@ def test_borrar_cuenta_elimina_de_verdad(cliente, db, correo, password, registra
         ).status_code
         == 201
     )
+
+
+def test_borrar_cuenta_tambien_borra_el_material(cliente, db, registrado, autorizacion):
+    """Irse del Reino se lleva lo que uno subió.
+
+    No pasaba. `borrar_cuenta` emitía `USER_DELETED` y su propio docstring
+    afirmaba que «`ingestion` consume para purgar sus documentos», pero ese
+    consumidor no existía en ninguna parte: los archivos del aprendiz se quedaban
+    en el disco y en la base para siempre aunque hubiera pedido irse. Con una ley
+    de datos personales encima, eso no es una deuda técnica cualquiera.
+
+    El binario no se borra en este instante: se marca el borrado lógico y se fija
+    `purge_after`, y el mantenimiento del worker lo retira del disco al vencer el
+    plazo. Es el mismo camino que borrar un documento a mano, para que el plazo de
+    retención sea uno solo.
+    """
+    from app.models.ingestion import Document
+    from app.modules.ingestion import servicio as ingestion
+
+    usuario_id = uuid.UUID(registrado["user"]["id"])
+    biblioteca = ingestion.biblioteca_por_defecto(db, usuario_id)
+    documento = ingestion.pegar_texto(
+        db,
+        usuario_id=usuario_id,
+        titulo="Apuntes de SQL",
+        texto="SELECT * FROM alumnos; " * 60,
+        idempotency_key=f"pegar:{uuid.uuid4()}",
+        knowledge_base_id=biblioteca.id,
+    ).document
+    db.flush()
+    assert documento.deleted_at is None
+
+    respuesta = cliente.delete("/api/v1/auth/account", headers=autorizacion)
+    assert respuesta.status_code == 204
+
+    db.refresh(documento)
+    assert documento.deleted_at is not None, "el material sigue vivo tras la baja"
+    assert documento.purge_after is not None, "sin plazo, el worker no lo borrará nunca"
+
+    # Y el evento cuenta cuántos se llevó por delante, para que la baja sea
+    # auditable sin tener que mirar la tabla de documentos.
+    evento = db.execute(
+        sa.select(DomainEvent).where(
+            DomainEvent.user_id == usuario_id,
+            DomainEvent.event_type == EventType.USER_DELETED,
+        )
+    ).scalar_one()
+    assert evento.payload["documents_deleted"] == 1
+    assert db.execute(
+        sa.select(sa.func.count(Document.id)).where(
+            Document.user_id == usuario_id, Document.deleted_at.is_(None)
+        )
+    ).scalar_one() == 0

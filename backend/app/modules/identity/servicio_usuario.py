@@ -275,17 +275,33 @@ def borrar_cuenta(db: Session, usuario: User, *, reason: str | None = None) -> U
     (`is_active = false`, `deleted_at`), pierde su hash de contraseña y su token
     de push, todos sus refresh tokens quedan revocados y el correo se libera
     (se sustituye por un alias irreversible) para que la persona pueda volver a
-    registrarse. Emite `USER_DELETED`, que es lo que `ingestion` consume para
-    purgar sus documentos.
+    registrarse.
+
+    Y su material se marca para purga. Esto último lo daba por hecho el docstring
+    de antes —decía que `ingestion` consumía `USER_DELETED` para purgar los
+    documentos—, pero ese consumidor no existía: el evento se emitía y nadie lo
+    escuchaba, así que los archivos que el aprendiz había subido se quedaban en el
+    disco y en la base para siempre aunque hubiera pedido irse.
+
+    Se llama directamente en vez de colgarlo del evento porque `USER_DELETED` se
+    escribe con una inserción cruda en `domain_events` (no otorga recompensas, así
+    que no pasa por el motor) y no hay nadie al otro lado que lo procese. Colgar de
+    él un efecto que tiene consecuencias legales habría sido construir el mismo
+    silencio otra vez.
     """
     from app.modules.identity.servicio_auth import (  # noqa: PLC0415 - cruce perezoso entre módulos (§1.3)
         revocar_todos_los_refresh,
     )
+    from app.modules.ingestion import servicio as ingestion  # noqa: PLC0415 - §1.3
 
     instante = utcnow()
     dominio = usuario.email.split("@")[-1] if "@" in usuario.email else None
 
     revocar_todos_los_refresh(db, usuario.id, momento=instante)
+    # Antes de tocar la fila del usuario: `borrar_documento` valida que el
+    # material sea suyo, y prefiero que lo compruebe sobre una cuenta todavía
+    # intacta.
+    documentos = ingestion.borrar_material_del_usuario(db, usuario.id, momento=instante)
 
     ajustes = db.execute(
         sa.select(UserSettings).where(UserSettings.user_id == usuario.id)
@@ -305,7 +321,11 @@ def borrar_cuenta(db: Session, usuario: User, *, reason: str | None = None) -> U
         db,
         usuario=usuario,
         tipo=EventType.USER_DELETED,
-        payload={"reason": reason or "user_request", "email_domain": dominio},
+        payload={
+            "reason": reason or "user_request",
+            "email_domain": dominio,
+            "documents_deleted": documentos,
+        },
         sufijo=instante.isoformat(),
         momento=instante,
     )

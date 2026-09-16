@@ -1273,6 +1273,49 @@ def estado_generacion(
 # ---------------------------------------------------------------------------
 
 
+def borrar_material_del_usuario(
+    db: Session,
+    usuario_id: uuid.UUID,
+    *,
+    cfg: Any | None = None,
+    momento: dt.datetime | None = None,
+) -> int:
+    """Marca para purga **todo** el material de un aprendiz. Devuelve cuántos.
+
+    Es lo que ocurre cuando alguien da de baja su cuenta. Hasta ahora no ocurría:
+    `borrar_cuenta` emitía `USER_DELETED` y su propio docstring afirmaba que
+    «`ingestion` consume para purgar sus documentos», pero ese consumidor no
+    existía en ninguna parte. El resultado era que los archivos que el aprendiz
+    había subido se quedaban en el disco y en la base para siempre, aunque
+    hubiera pedido irse.
+
+    No borra aquí el binario: hace exactamente lo mismo que borrar un documento a
+    mano —marca el borrado lógico y fija `purge_after`— y deja que el
+    mantenimiento del worker lo borre del disco cuando venza el plazo. Así el
+    plazo de retención es uno solo, el de §3.3, en vez de dos reglas distintas
+    según por dónde se pidiera el borrado.
+    """
+    documentos = list(
+        db.execute(
+            sa.select(Document.id).where(
+                Document.user_id == usuario_id, Document.deleted_at.is_(None)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for document_id in documentos:
+        borrar_documento(db, usuario_id, document_id, cfg=cfg, momento=momento)
+
+    if documentos:
+        logger.info(
+            "material.borrado_por_baja",
+            usuario_id=str(usuario_id),
+            documentos=len(documentos),
+        )
+    return len(documentos)
+
+
 def purgar_documentos(db: Session, *, momento: dt.datetime | None = None, tope: int = 200) -> int:
     """Purga física de los documentos cuyo plazo de retención venció (§3.3, 30 días).
 
@@ -1331,6 +1374,7 @@ __all__ = [
     "ResultadoIngesta",
     "biblioteca_por_defecto",
     "borrar_documento",
+    "borrar_material_del_usuario",
     "codificar_cursor",
     "decodificar_cursor",
     "documentos_de_ruta",
