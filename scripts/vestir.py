@@ -300,9 +300,12 @@ BANDAS: dict[str, Banda] = {
     "empunado": Banda(desde=400, hasta=600, holgura=14, solo_extremos=True, ancho_maximo=48),
     # Lo que se empuña de verdad: un arma en la diestra y un escudo en la zurda.
     # Sus límites son relativos al centro de la mano, no a la coronilla, porque
-    # es la mano la que sostiene la pieza. Una espada sube más de lo que baja: la
-    # hoja va hacia arriba y el pomo queda apenas por debajo del puño.
-    "arma": Banda(desde=-330, hasta=230, mano="diestra"),
+    # es la mano la que sostiene la pieza. Una espada sube mucho más de lo que
+    # baja: la hoja va hacia arriba y el pomo queda apenas por debajo del puño.
+    # Cuatrocientos píxeles por arriba, que con la mano a la altura de la cadera
+    # deja la punta por encima de la cabeza; con trescientos treinta la hoja
+    # llegaba al techo de la banda y salía cortada a ras.
+    "arma": Banda(desde=-400, hasta=230, mano="diestra"),
     "escudo": Banda(desde=-200, hasta=200, mano="zurda"),
     # La cara, y solo para los anteojos, que son la única pieza del catálogo que
     # la toca. Iba de 150 a 215, que sobre el cuerpo desnudo es el cuello y los
@@ -399,6 +402,15 @@ def zona_editable(figura: Image.Image, ranura: str) -> np.ndarray:
     return zona
 
 
+def _de_borde_a_borde(mascara: np.ndarray) -> np.ndarray:
+    """Cada fila, del primer píxel al último; lo de en medio se da por dentro."""
+    lleno = np.zeros_like(mascara)
+    for y in np.where(mascara.any(axis=1))[0]:
+        xs = np.where(mascara[y])[0]
+        lleno[y, xs.min() : xs.max() + 1] = True
+    return lleno
+
+
 def _centro_de_la_mano(alfa: np.ndarray, top: int, cual: str) -> tuple[int, int]:
     """Dónde cae una mano, medido sobre la propia figura.
 
@@ -436,31 +448,25 @@ def _centro_de_la_mano(alfa: np.ndarray, top: int, cual: str) -> tuple[int, int]
 
 
 def _junto_a_la_mano(alfa: np.ndarray, top: int, banda: Banda) -> np.ndarray:
-    """Un rectángulo alrededor de una mano, sin el cuerpo dentro.
+    """Un rectángulo alrededor de una mano, con el cuerpo dentro.
 
-    El cuerpo se descuenta —si no, pedir una espada acabaría repintando la
-    cadera— salvo un disco alrededor de la propia mano, que es lo que hace que la
-    empuñadura se vea agarrada y no flotando al lado.
+    Con el cuerpo dentro **a propósito**, aunque la primera versión lo
+    descontaba. Un arma no está solo al lado de la figura: se empuña, y la hoja
+    sube por delante del brazo y a veces del torso. Descontando el cuerpo, de una
+    espada de entrenamiento solo sobrevivía el trozo que caía en lienzo vacío, y
+    de un arco de fresno la punta. El modelo las había dibujado enteras.
+
+    Lo que descontaba el cuerpo era el miedo a que pedir una espada acabara
+    repintando la cadera. De eso se encarga ya `_lo_que_cambio`, que compara con
+    la figura de partida tolerando desplazamiento: lo que el modelo no toca no
+    entra en la capa, esté donde esté.
     """
     cx, cy = _centro_de_la_mano(alfa, top, banda.mano or "diestra")
     zona = np.zeros_like(alfa)
     x0, x1 = max(0, cx - 95), min(LIENZO, cx + 95)
     y0, y1 = max(0, cy + banda.desde), min(LIENZO, cy + banda.hasta)
     zona[y0:y1, x0:x1] = True
-
-    yy, xx = np.ogrid[:LIENZO, :LIENZO]
-    empunadura = (yy - cy) ** 2 + (xx - cx) ** 2 <= 55**2
-    cuerpo = ndimage.binary_dilation(alfa, structure=np.ones((3, 3)), iterations=8)
-    return zona & (~cuerpo | empunadura)
-
-
-def _de_borde_a_borde(mascara: np.ndarray) -> np.ndarray:
-    """Cada fila, del primer píxel al último; lo de en medio se da por dentro."""
-    lleno = np.zeros_like(mascara)
-    for y in np.where(mascara.any(axis=1))[0]:
-        xs = np.where(mascara[y])[0]
-        lleno[y, xs.min() : xs.max() + 1] = True
-    return lleno
+    return zona
 
 
 def _solo_los_extremos(alfa: np.ndarray, banda: Banda) -> np.ndarray:
@@ -661,6 +667,25 @@ MOTA = 400
 #: trozos parecidos.
 PARTE_MINIMA = 0.15
 
+#: Agujeros interiores más pequeños que esto se tapan, en píxeles.
+#:
+#: La comparación tolerante tiene un precio: el contorno de tinta de una bota
+#: cae a unos píxeles del contorno de la pierna, y como los dos son casi negros
+#: se dan por «lo mismo». La capa salía acribillada a lo largo de todo el
+#: perfil.
+#:
+#: Se tapan solo los pequeños, y ahí está la gracia. El hueco entre los paños de
+#: una capa también queda encerrado, y ese **no** se puede tapar: rellenarlo mete
+#: en la capa una copia de la camiseta y del pantalón. Los dos tamaños no se
+#: solapan, medidos sobre las piezas de verdad:
+#:
+#:     unas botas      huecos de 80, 62, 60, 45, 36, 35, 30, 30 px
+#:     una capa        huecos de 11456, 5292, 4919, 1021, 286, 170 px
+#:
+#: Trescientos cae con holgura entre los ochenta de un contorno y los mil de un
+#: paño.
+AGUJERO = 300
+
 #: Cuántos píxeles tarda una capa en desaparecer contra el borde de su banda.
 #:
 #: La banda acaba donde acaba, pero el modelo pinta hasta el último píxel que le
@@ -707,6 +732,21 @@ def _lo_que_cambio(figura: Image.Image, nuevo: Image.Image) -> np.ndarray:
     return (parecido > CAMBIO) | vacio
 
 
+def _tapar_agujeros(mascara: np.ndarray) -> np.ndarray:
+    """Cierra los huecos pequeños que quedan dentro de la pieza."""
+    huecos, cuantos = ndimage.label(~mascara)
+    if cuantos == 0:
+        return mascara
+    # El fondo de verdad es el trozo de «no pieza» que toca el borde del lienzo.
+    fuera = set(np.unique(huecos[0, :])) | set(np.unique(huecos[-1, :]))
+    fuera |= set(np.unique(huecos[:, 0])) | set(np.unique(huecos[:, -1]))
+    tamanos = ndimage.sum_labels(~mascara, huecos, range(1, cuantos + 1))
+    pequenos = [
+        i + 1 for i, t in enumerate(tamanos) if t <= AGUJERO and (i + 1) not in fuera
+    ]
+    return mascara | np.isin(huecos, pequenos)
+
+
 def _sin_motas(mascara: np.ndarray) -> np.ndarray:
     """Tira los trozos sueltos que son ruido, o cuerpo movido, y no pieza."""
     etiquetas, cuantos = ndimage.label(mascara)
@@ -729,7 +769,8 @@ def extraer_capa(nuevo: Image.Image, zona: np.ndarray, figura: Image.Image) -> I
     """
     fondo = solo_fondo(nuevo)
     util = zona & ~fondo & _lo_que_cambio(figura, nuevo)
-    util = _sin_motas(ndimage.binary_closing(util, structure=np.ones((5, 5))))
+    util = _tapar_agujeros(ndimage.binary_closing(util, structure=np.ones((5, 5))))
+    util = _sin_motas(util)
 
     # Se desvanece contra el borde de la banda, que si no se ve el corte.
     borde = np.clip(ndimage.distance_transform_edt(zona) / FUNDIDO, 0, 1)

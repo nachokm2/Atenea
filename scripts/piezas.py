@@ -22,6 +22,17 @@ el corte se hace después por geometría —lo que queda fuera de la silueta del
 cuerpo cuelga por detrás, lo que queda dentro es el embozo y el broche—, que es
 gratis y no se puede equivocar.
 
+## Tres que el modelo no quiso dibujar
+
+En la figura femenina se niega a poner en la mano el bastón de aprendiz, la
+espada de obsidiana y la espada del SQL: devuelve el brazo desnudo y el fondo,
+cuatro intentos y con el prompt reescrito para insistir en cerrar los dedos
+alrededor de la empuñadura. Las mismas tres salen a la primera en la masculina,
+así que no es la banda ni el catálogo.
+
+No se fuerzan. Una pieza sin capa sigue saliendo de ficha al margen, que es
+exactamente para lo que se dejó ese camino, y el aprendiz ve su objeto igual.
+
 ## Lo que se empuña
 
 Las armas y los escudos no se llevan puestos: se sostienen, y su sitio no es una
