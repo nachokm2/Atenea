@@ -62,3 +62,24 @@ que si algún día se encarga una pieza más, que sea esa.
 
 Quedan sin asignar y disponibles: bolso, cinturón, poción, pergamino y los seis
 peinados. El mapa vive en `app/lib/design/arte.dart`.
+
+## `capas/` es el taller, y no entra al repositorio
+
+`scripts/vestir.py` escribe aquí las capas del avatar y `scripts/exportar_capas.py`
+lleva a `app/assets/arte/capas/` lo que de verdad viaja. La carpeta entera está
+en `.gitignore`: son 325 MB entre PNG de origen y respuestas crudas del modelo,
+contra 2,3 MB de WebP empaquetado.
+
+**El WebP es el registro, no una copia.** De él se puede volver a sacar un PNG.
+Lo que no se puede recuperar de ningún sitio son los `bruto_*.png`, que son lo
+que devolvió el modelo y lo que se pagó: sin ellos, recomponer una pieza con
+`--reusar` exige generarla otra vez. Viven solo en la máquina donde se generaron.
+
+### Un aviso que costó un susto
+
+`git filter-branch` **rehace el árbol de trabajo**, no solo la historia. Al
+sacar `arte/capas/` de los commits, borró de disco todos los archivos de esa
+carpeta que estuvieran rastreados: los seis `base.png` y las capas de cada pieza.
+Sobrevivió lo que ya estaba ignorado —los crudos, las máscaras, las partidas—,
+que resultó ser justo lo irrecuperable, así que todo lo borrado se reconstruyó
+con `--reusar` sin pagar nada. Pudo salir muy distinto.

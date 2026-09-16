@@ -877,6 +877,12 @@ def main(argv: list[str] | None = None) -> int:
         default="masculino",
         help="Qué juego de piezas se está haciendo. Solo con --pieza.",
     )
+    p.add_argument(
+        "--sobre",
+        help="Genera una pieza del catálogo sobre esta figura en vez de sobre la "
+        "canónica de su familia. Para cuando el modelo se niega en una figura y "
+        "accede en otra: pasa, y la pieza se traslada después con --trasladar.",
+    )
     p.add_argument("--figura", help="base_femenino_001, base_masculino_002…")
     p.add_argument("--ranura", choices=sorted(BANDAS))
     p.add_argument("--prompt", help="Qué prenda pintar. Obligatorio con --aplicar.")
@@ -895,7 +901,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.figura or args.ranura or args.prompt:
             raise SystemExit("--pieza ya trae figura, banda y prompt: no los repitas.")
         pieza = por_codigo(args.pieza)
-        args.figura = CANONICA[args.familia]
+        args.figura = args.sobre or CANONICA[args.familia]
         args.ranura = pieza.banda
         args.prompt = pieza.prompt
         # Una capa se genera de una vez y se parte después, así que mientras se
