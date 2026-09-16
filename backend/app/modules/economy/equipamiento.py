@@ -350,7 +350,7 @@ PILA_DE_CAPAS: dict[str, int] = {
 Z_DESCONOCIDO = 999
 
 
-def _capas_de(item: Item, slot: ItemSlot) -> list[dict[str, Any]]:
+def capas_de(item: Item, slot: ItemSlot) -> list[dict[str, Any]]:
     """Resuelve `items.render_manifest` a las capas que el cliente debe pintar.
 
     El manifiesto guardado tiene la forma de 06c §2.7: cada entrada trae `layer`
@@ -442,7 +442,7 @@ def configuracion_avatar(db: Session, usuario_id: uuid.UUID) -> dict[str, Any]:
         suprimidas.update(str(c) for c in manifiesto.get("suppresses_layers", []) or [])
         if manifiesto.get("two_handed"):
             dos_manos = True
-        capas.extend(_capas_de(item, equipado.slot))
+        capas.extend(capas_de(item, equipado.slot))
 
     if dos_manos:
         capas = [capa for capa in capas if capa["slot"] != ItemSlot.OFFHAND.value]

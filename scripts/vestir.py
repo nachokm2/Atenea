@@ -59,6 +59,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
+from piezas import Pieza, por_codigo
 from PIL import Image, ImageFilter
 from scipy import ndimage
 
@@ -135,6 +136,19 @@ CANONICA: dict[str, str] = {
     "femenino": "base_femenino_002",
 }
 
+#: Lo que se le añade solo al generar una pieza.
+#:
+#: Sin esto viste al personaje. Pidiéndole una capa carmesí sobre el cuerpo en
+#: ropa interior devolvió, además de la capa, una túnica negra, un cinturón y un
+#: pantalón marrón: la banda de la capa abarca casi todo el cuerpo, y un cuerpo
+#: en camiseta le parece algo que hay que terminar de vestir.
+SOLO_LA_PIEZA = (
+    "Añade ÚNICAMENTE esa pieza. Todo lo demás se queda exactamente como está: "
+    "el personaje sigue en camiseta sin mangas blanca y pantalón corto gris, y "
+    "no le pongas ninguna otra prenda, ni túnica, ni cinturón, ni pantalón, ni "
+    "nada que no se te haya pedido."
+)
+
 #: Lo que se le añade solo al desnudar.
 #:
 #: Quitar ropa le invita a mejorar el cuerpo que aparece debajo, y lo hace: el
@@ -163,6 +177,31 @@ class Banda:
     hasta: int
     holgura: int = 6
 
+    protege_cara: bool = False
+    """Saca la cara de la zona editable.
+
+    Los siete objetos de cabeza del catálogo dicen «deja la cara descubierta», y
+    esto es no tener que fiarse de que el modelo lo lea: sin cara editable, un
+    yelmo o una capucha tienen que dibujarse alrededor, que es lo que hacen los
+    de verdad. La cara del aprendiz es su identidad; el resto de la cabeza, no.
+    """
+
+    solo_extremos: bool = False
+    """Se queda con el primer trozo de cada fila y el último, y suelta el resto.
+
+    A la altura de las manos, la fila son tres cosas: mano, cadera, mano. Una
+    banda que las una deja al modelo repintar el pantalón cuando lo que se le
+    pidió fueron unos guantes.
+    """
+
+    ancho_maximo: int = 10_000
+    """Descarta un trozo más ancho que esto, en píxeles.
+
+    Con `solo_extremos`, una fila por debajo de las manos tiene por extremos las
+    dos piernas, que son mucho más anchas que una mano. Sin este tope, la banda
+    se derrama pierna abajo en cuanto se pasa una fila.
+    """
+
 
 BANDAS: dict[str, Banda] = {
     # La pasada que deja al aprendiz en ropa interior. Tiene que ir **antes**
@@ -183,20 +222,33 @@ BANDAS: dict[str, Banda] = {
     # corto tiene tan poco margen que no le queda sitio donde desviarse.
     "base_torso": Banda(desde=195, hasta=470, holgura=3),
     "base_piernas": Banda(desde=440, hasta=970, holgura=3),
-    "cabeza": Banda(desde=-20, hasta=200, holgura=4),
+    # Medido sobre el cuerpo desnudo, bajando fila a fila desde la coronilla: la
+    # cabeza se ensancha hasta dy≈80, se estrecha hasta el cuello en dy 165-180 y
+    # los hombros arrancan de golpe en dy 195. La banda anterior llegaba a 200 y
+    # se metía en los hombros.
+    "cabeza": Banda(desde=-20, hasta=170, holgura=4, protege_cara=True),
     "cuerpo": Banda(desde=215, hasta=455),
     "botas": Banda(desde=700, hasta=960, holgura=4),
     "capa": Banda(desde=140, hasta=800, holgura=10),
-    # Las manos. Medido sobre el cuerpo desnudo: los brazos se separan del
-    # torso en tres trozos hasta dy≈530, y la mano es el ensanchamiento del
-    # final —41 px de ancho en dy 520 contra 28 del antebrazo en dy 480—. Se
-    # acaban en dy≈590.
-    "manos": Banda(desde=490, hasta=600, holgura=3),
-    # La cara, y solo para los anteojos. Es la única pieza del catálogo que la
-    # toca, y toca justo la línea de ojos (dy≈195). Banda cortísima a propósito:
-    # la cara del aprendiz es su identidad, y el modelo la cambia en cuanto le
-    # das sitio.
-    "cara": Banda(desde=150, hasta=215, holgura=2),
+    # Las manos, medidas sobre la figura canónica: la mano es el ensanchamiento
+    # del final del brazo —de 15 px de antebrazo en dy 445 a 37 en dy 505— y ahí
+    # se acaba. `solo_extremos` suelta el trozo del medio de cada fila, que a esa
+    # altura es la cadera: sin eso, al pedir unos guantes el modelo repinta el
+    # pantalón.
+    #
+    # Ojo con esta banda más que con ninguna. Los brazos no miden lo mismo en las
+    # tres figuras de la familia: la mano está en dy 480-515 en la 002 y en dy
+    # 500-545 en la 001, treinta píxeles más abajo. En una bota o una pechera esa
+    # diferencia se pierde; en un guante, que mide cuarenta píxeles, es casi su
+    # propio tamaño. Si al verlo en pantalla el guante flota sobre la mano, la
+    # salida es generar las cuatro piezas de mano por figura y no por familia:
+    # son cuatro objetos, no treinta y uno.
+    "manos": Banda(desde=462, hasta=548, holgura=3, solo_extremos=True, ancho_maximo=60),
+    # La cara, y solo para los anteojos, que son la única pieza del catálogo que
+    # la toca. Iba de 150 a 215, que sobre el cuerpo desnudo es el cuello y los
+    # hombros: los 195 de «línea de ojos» venían de otra escala. Con la cabeza
+    # entre dy 0 y 160, los ojos caen hacia dy 85-100.
+    "cara": Banda(desde=70, hasta=125, holgura=2),
     # El pecho, para lo que se prende encima sin ser prenda: una insignia.
     "pecho": Banda(desde=235, hasta=340, holgura=3),
     # La cadera y el costado, para lo que cuelga: un morral, una bolsa.
@@ -254,13 +306,73 @@ def zona_editable(figura: Image.Image, ranura: str) -> np.ndarray:
     """Silueta ensanchada, recortada a la banda de la ranura."""
     banda = BANDAS[ranura]
     alfa = np.array(figura.split()[3]) > 40
-    cuerpo = ndimage.binary_dilation(alfa, structure=np.ones((3, 3)), iterations=banda.holgura * 4)
     top = coronilla(figura)
+
+    # Soltar el trozo central va **antes** de ensanchar, no después: la
+    # dilatación de doce píxeles salva el hueco entre el brazo y la cadera, así
+    # que la fila pasa a ser un solo trozo y el filtro la descartaba entera. Se
+    # quedaba en cero píxeles editables.
+    util = _solo_los_extremos(alfa, banda) if banda.solo_extremos else alfa
+
+    cuerpo = ndimage.binary_dilation(util, structure=np.ones((3, 3)), iterations=banda.holgura * 4)
     filas = np.zeros_like(cuerpo)
     arriba = max(0, top + banda.desde)
     abajo = min(LIENZO, top + banda.hasta)
     filas[arriba:abajo, :] = True
-    return cuerpo & filas
+    zona = cuerpo & filas
+
+    if banda.protege_cara:
+        zona &= ~_la_cara(alfa, top)
+    return zona
+
+
+def _solo_los_extremos(alfa: np.ndarray, banda: Banda) -> np.ndarray:
+    """De cada fila, el primer trozo y el último; lo de en medio se suelta.
+
+    Sobre la silueta sin ensanchar, que es la única donde el brazo y la cadera
+    siguen siendo dos cosas distintas.
+
+    El primero y el último, y no «el que no contiene la mitad del lienzo»: a la
+    altura de las manos el pantalón ya se ha abierto en dos perneras, así que
+    ninguna contiene la mitad y las dos pasaban por extremas. Salía una tira
+    cruzando la entrepierna.
+    """
+    limpia = np.zeros_like(alfa)
+    for y in np.where(alfa.any(axis=1))[0]:
+        etiquetas, cuantos = ndimage.label(alfa[y])
+        if cuantos < 2:
+            continue
+        for i in (1, cuantos):
+            xs = np.where(etiquetas == i)[0]
+            if xs.size <= banda.ancho_maximo:
+                limpia[y, xs] = True
+    return limpia
+
+
+def _la_cara(alfa: np.ndarray, top: int) -> np.ndarray:
+    """El óvalo de la cara, medido sobre la propia cabeza de cada figura.
+
+    No un rectángulo fijo: cada figura tiene su pelo, y lo que hay que proteger
+    es la cara, no el ancho del peinado. Por eso se toma el centro de cada fila
+    de la cabeza y se guarda su parte central, que es donde están los ojos, la
+    nariz y la boca; las sienes y el contorno quedan libres, que es justo por
+    donde pasa una capucha.
+    """
+    cara = np.zeros_like(alfa)
+    # Desde los ojos, no desde la coronilla. Protegiendo también la frente no le
+    # quedaba sitio donde poner un yelmo y devolvía la cabeza igual: un yelmo, una
+    # capucha y una corona se apoyan precisamente ahí.
+    for dy in range(78, 160):
+        y = top + dy
+        if y >= LIENZO:
+            break
+        xs = np.where(alfa[y])[0]
+        if xs.size < 20:
+            continue
+        centro = (xs.min() + xs.max()) / 2
+        medio = (xs.max() - xs.min()) * 0.31
+        cara[y, int(centro - medio) : int(centro + medio) + 1] = True
+    return cara
 
 
 def como_mascara(zona: np.ndarray) -> Image.Image:
@@ -387,6 +499,32 @@ def extraer_capa(nuevo: Image.Image, zona: np.ndarray) -> Image.Image:
     return capa
 
 
+def partir_capa(capa: Image.Image, cuerpo: Image.Image) -> dict[str, Image.Image]:
+    """Una capa dibujada, en sus dos capas de la pila: detrás y delante.
+
+    La semilla le da a la ranura CAPE dos capas —`cape_back` en z=20, por detrás
+    del cuerpo, y `cape_front` en z=140, por delante—, y no son dos dibujos sino
+    dos trozos del mismo. Pedirle al modelo «la parte de la capa que queda
+    detrás» sería pedirle algo que no se ve; el corte, en cambio, es geometría:
+
+      - lo que cae **fuera** de la silueta del cuerpo es la tela que cuelga, y va
+        detrás. Que se dibuje detrás no cambia nada, porque ahí no hay cuerpo que
+        la tape: sencillamente es donde le toca en la pila.
+      - lo que cae **dentro** es el embozo, los hombros y el broche, y va delante,
+        que es lo único que de verdad tiene que taparle el pecho al aprendiz.
+
+    Gratis y sin margen de error, al revés que una segunda generación.
+    """
+    dentro = np.array(cuerpo.split()[3]) > 40
+    alfa = np.array(capa.split()[3])
+    partes: dict[str, Image.Image] = {}
+    for nombre, mascara in (("cape_back", ~dentro), ("cape_front", dentro)):
+        trozo = capa.copy()
+        trozo.putalpha(Image.fromarray(np.where(mascara, alfa, 0).astype(np.uint8), "L"))
+        partes[nombre] = trozo
+    return partes
+
+
 def damero(imagen: Image.Image) -> Image.Image:
     """Fondo de cuadros para mirar el recorte de una capa."""
     fondo = Image.new("RGBA", (LIENZO, LIENZO), (235, 235, 235, 255))
@@ -399,8 +537,20 @@ def damero(imagen: Image.Image) -> Image.Image:
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--figura", required=True, help="base_femenino_001, base_masculino_002…")
-    p.add_argument("--ranura", required=True, choices=sorted(BANDAS))
+    p.add_argument(
+        "--pieza",
+        help="Código de un objeto del catálogo (`armadura_placas`). Saca de "
+        "`piezas.py` la banda, el nombre del archivo y qué pintar, y de "
+        "`CANONICA` sobre qué figura hacerlo.",
+    )
+    p.add_argument(
+        "--familia",
+        choices=sorted(CANONICA),
+        default="masculino",
+        help="Qué juego de piezas se está haciendo. Solo con --pieza.",
+    )
+    p.add_argument("--figura", help="base_femenino_001, base_masculino_002…")
+    p.add_argument("--ranura", choices=sorted(BANDAS))
     p.add_argument("--prompt", help="Qué prenda pintar. Obligatorio con --aplicar.")
     p.add_argument("--nombre", help="Nombre del archivo de salida (por defecto, la ranura).")
     p.add_argument("--aplicar", action="store_true", help="Llama al modelo. Cuesta dinero.")
@@ -411,6 +561,21 @@ def main(argv: list[str] | None = None) -> int:
         "Para afinar el recorte sin pagar dos veces por la misma imagen.",
     )
     args = p.parse_args(argv)
+
+    pieza: Pieza | None = None
+    if args.pieza:
+        if args.figura or args.ranura or args.prompt:
+            raise SystemExit("--pieza ya trae figura, banda y prompt: no los repitas.")
+        pieza = por_codigo(args.pieza)
+        args.figura = CANONICA[args.familia]
+        args.ranura = pieza.banda
+        args.prompt = pieza.prompt
+        # Una capa se genera de una vez y se parte después, así que mientras se
+        # genera se llama `<codigo>_cape` y no toma todavía uno de los dos
+        # nombres de la pila.
+        args.nombre = args.nombre or pieza.nombre
+    elif not (args.figura and args.ranura):
+        raise SystemExit("Sin --pieza hacen falta --figura y --ranura.")
 
     destino = SALIDA / args.figura
     destino.mkdir(parents=True, exist_ok=True)
@@ -426,7 +591,7 @@ def main(argv: list[str] | None = None) -> int:
         figura = Image.open(destino / f"partida_{nombre}.png").convert("RGBA")
         zona = np.array(Image.open(destino / f"mascara_{nombre}.png").split()[3]) == 0
         print("reusando la respuesta guardada: no se llama al modelo")
-        return _componer(args, destino, nombre, figura, zona)
+        return _componer(args, destino, nombre, figura, zona, pieza)
 
     figura = figura_de_partida(args.figura, args.ranura)
     zona = zona_editable(figura, args.ranura)
@@ -456,14 +621,25 @@ def main(argv: list[str] | None = None) -> int:
         (destino / f"partida_{nombre}.png").read_bytes(),
         (destino / f"mascara_{nombre}.png").read_bytes(),
         f"{args.prompt}. {ESTILO}"
-        + (f" {DESNUDEZ}" if args.ranura.startswith("base") else "")
+        + (
+            f" {DESNUDEZ}"
+            if args.ranura.startswith("base")
+            else f" {SOLO_LA_PIEZA}"
+        )
         + f" El fondo, {FONDO}.",
     )
     (destino / f"bruto_{nombre}.png").write_bytes(bruto)
-    return _componer(args, destino, nombre, figura, zona)
+    return _componer(args, destino, nombre, figura, zona, pieza)
 
 
-def _componer(args, destino: Path, nombre: str, figura: Image.Image, zona: np.ndarray) -> int:
+def _componer(
+    args,
+    destino: Path,
+    nombre: str,
+    figura: Image.Image,
+    zona: np.ndarray,
+    pieza: Pieza | None = None,
+) -> int:
     """Del PNG que devolvió el modelo al archivo que se usa. Sin red."""
     nuevo = Image.open(destino / f"bruto_{nombre}.png").convert("RGBA")
 
@@ -475,13 +651,18 @@ def _componer(args, destino: Path, nombre: str, figura: Image.Image, zona: np.nd
         return 0
 
     capa = extraer_capa(nuevo, zona)
-    capa.save(destino / f"{nombre}.png")
-    damero(capa).save(destino / f"{nombre}_sola.png")
     Image.alpha_composite(figura, capa).save(destino / f"{nombre}_puesta.png")
 
-    caja = capa.split()[3].getbbox()
-    print(f"capa {nombre}.png · caja {caja}")
-    print(f"mírala en {nombre}_puesta.png y {nombre}_sola.png")
+    salidas = (
+        {f"{pieza.codigo}_{k}": v for k, v in partir_capa(capa, figura).items()}
+        if pieza is not None and pieza.capa == "cape"
+        else {nombre: capa}
+    )
+    for archivo, trozo in salidas.items():
+        trozo.save(destino / f"{archivo}.png")
+        damero(trozo).save(destino / f"{archivo}_sola.png")
+        print(f"capa {archivo}.png · caja {trozo.split()[3].getbbox()}")
+    print(f"mírala puesta en {nombre}_puesta.png")
     return 0
 
 

@@ -219,11 +219,81 @@ void main() {
           .map((Image i) => (i.image as AssetImage).assetName)
           .toList();
       expect(pedidas, <String>[
-        'assets/arte/capas/cuerpos/base_masculino_001.webp',
+        // La primera va por debajo de `body_base` (z=40), así que el cuerpo se
+        // cuela entre ella y las otras dos.
         'assets/arte/capas/masculino/a.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001.webp',
         'assets/arte/capas/masculino/b.webp',
         'assets/arte/capas/masculino/c.webp',
       ]);
+    });
+  });
+
+  group('lo que va por detrás del cuerpo', () {
+    testWidgets('la espalda de una capa se pinta antes que el cuerpo',
+        (WidgetTester tester) async {
+      // El cuerpo no es el fondo de la pila: es `body_base`, en z=40, y hay
+      // cuatro capas por debajo. Una capa prendida a los hombros cuelga POR
+      // DETRÁS del aprendiz; pintarla encima de todo la convierte en un babero.
+      await pintar(tester, const <CapaAvatar>[
+        CapaAvatar(clave: 'cape_back', ranura: RanuraItem.capa, assetKey: 'atras.webp', z: 20),
+        CapaAvatar(clave: 'cape_front', ranura: RanuraItem.capa, assetKey: 'delante.webp', z: 140),
+      ]);
+
+      final List<String> pedidas = tester
+          .widgetList<Image>(find.byType(Image))
+          .map((Image i) => (i.image as AssetImage).assetName)
+          .toList();
+      expect(pedidas, <String>[
+        'assets/arte/capas/masculino/atras.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001.webp',
+        'assets/arte/capas/masculino/delante.webp',
+      ]);
+    });
+  });
+
+  group('la vista previa del Mercado', () {
+    test('lleva el src del ítem, o no enseñaría la pieza puesta', () {
+      // `capasConItem` fabricaba una capa mínima sin `src`, así que mirar un
+      // objeto en la tienda lo enseñaba de ficha al margen aunque tuviera arte:
+      // el aprendiz decidía una compra sin ver lo que compraba. El arreglo está
+      // en el servidor, que ahora resuelve `layers` también en `ItemOut`.
+      const Item item = Item(
+        id: 'i1',
+        codigo: 'botas_reforzadas',
+        nombre: 'Botas reforzadas',
+        ranura: RanuraItem.botas,
+        capas: <CapaAvatar>[
+          CapaAvatar(
+            clave: 'boots',
+            ranura: RanuraItem.botas,
+            assetKey: 'botas_reforzadas_boots.webp',
+            codigoItem: 'botas_reforzadas',
+            z: 50,
+          ),
+        ],
+      );
+
+      final List<CapaAvatar> compuestas = capasConItem(const <CapaAvatar>[], item);
+
+      expect(compuestas, hasLength(1));
+      expect(compuestas.single.assetKey, 'botas_reforzadas_boots.webp');
+    });
+
+    test('sin capas resueltas sigue fabricando la mínima, que da ficha', () {
+      // Un ítem sin arte por capas todavía: la vista previa no puede pintarlo
+      // encima, pero tampoco puede quedarse sin enseñar nada.
+      const Item item = Item(
+        id: 'i2',
+        codigo: 'yelmo_guardia',
+        nombre: 'Yelmo de la Guardia',
+        ranura: RanuraItem.cabeza,
+      );
+
+      final List<CapaAvatar> compuestas = capasConItem(const <CapaAvatar>[], item);
+
+      expect(compuestas.single.codigoItem, 'yelmo_guardia');
+      expect(compuestas.single.assetKey, isEmpty);
     });
   });
 

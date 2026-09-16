@@ -85,6 +85,16 @@ class ItemOut(EsquemaBase):
     visibility: ItemVisibility
     icon_key: str | None = None
     render_manifest: dict[str, Any] = Field(default_factory=dict)
+
+    layers: list[dict[str, Any]] = Field(default_factory=list)
+    """Las capas ya resueltas, con la misma forma que las de `AvatarOut`.
+
+    El manifiesto crudo de arriba no le sirve al cliente para pintar: sus
+    entradas traen `layer` y `src`, pero ni la ranura ni el orden de dibujado,
+    que el cliente no puede deducir. Sin esto, la vista previa del Mercado no
+    podía enseñar la pieza puesta —solo su ficha al margen—, y el aprendiz
+    decidía una compra sin ver lo que compraba.
+    """
     knowledge_area_id: uuid.UUID | None = None
     set_code: str | None = None
 

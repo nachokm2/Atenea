@@ -64,10 +64,21 @@ def _requisitos(crudos: list[dict[str, Any]]) -> list[RequirementProgressOut]:
     return [RequirementProgressOut.model_validate(dato) for dato in crudos]
 
 
+def _ficha(item) -> ItemOut:
+    """La ficha de un ítem, con sus capas ya resueltas.
+
+    Las capas van aquí y no en el esquema porque resolverlas necesita el ítem
+    entero, no solo lo que la ficha publica.
+    """
+    ficha = ItemOut.model_validate(item)
+    ficha.layers = equipamiento.capas_de(item, item.slot)
+    return ficha
+
+
 def _fila_inventario(fila: inventario.FilaInventario) -> InventoryItemOut:
     """Adapta una fila del inventario al esquema del contrato."""
     return InventoryItemOut(
-        item=ItemOut.model_validate(fila.item),
+        item=_ficha(fila.item),
         owned=fila.owned,
         locked=fila.locked,
         is_new=fila.is_new,
@@ -83,7 +94,7 @@ def _oferta(oferta: tienda.OfertaTienda) -> ShopListingOut:
     """Adapta un listado de la tienda al esquema del contrato."""
     return ShopListingOut(
         listing_id=oferta.listing.id,
-        item=ItemOut.model_validate(oferta.item),
+        item=_ficha(oferta.item),
         currency=oferta.listing.currency,
         price=oferta.price,
         min_level=oferta.min_level,
@@ -106,7 +117,7 @@ def _compra(db, usuario_id: uuid.UUID, resultado: tienda.ResultadoCompra) -> Pur
         user_item=(
             UserItemOut.model_validate(resultado.user_item) if resultado.user_item else None
         ),
-        item=ItemOut.model_validate(resultado.item) if resultado.item else None,
+        item=_ficha(resultado.item) if resultado.item else None,
         balance_after=resultado.balance_after,
         avatar_layers=capas,
     )

@@ -115,6 +115,18 @@ class AvatarCapas extends StatelessWidget {
           }
         : piezas;
 
+    // El cuerpo no es el fondo de la pila: es una capa más, `body_base`, y hay
+    // cuatro por debajo suyo. Una capa prendida a los hombros cuelga POR DETRÁS
+    // del aprendiz, y pintarla encima de todo la convertía en un babero.
+    final List<CapaAvatar> detras = <CapaAvatar>[
+      for (final CapaAvatar c in capas)
+        if (c.assetKey.isNotEmpty && c.z < zDelCuerpo) c,
+    ];
+    final List<CapaAvatar> delante = <CapaAvatar>[
+      for (final CapaAvatar c in capas)
+        if (c.assetKey.isNotEmpty && c.z >= zDelCuerpo) c,
+    ];
+
     final List<String> puestos = <String>[
       for (final RanuraItem ranura in ranurasDelVestidorInterno)
         if (equipo.containsKey(ranura)) _nombreRanura(ranura).toLowerCase(),
@@ -150,6 +162,11 @@ class AvatarCapas extends StatelessWidget {
                   soloFondo: true,
                 ),
               ),
+            // Lo que va por detrás del cuerpo: la espalda de una capa, el
+            // pelo de atrás, un aura. Cuatro de las diecinueve capas de la pila
+            // caen ahí.
+            if (apilando)
+              for (final CapaAvatar capa in detras) _Capa(capa: capa, figura: clave, lado: tamano),
             Image.asset(
               apilando ? Arte.cuerpo(clave) : Arte.personaje(clave),
               height: tamano,
@@ -171,36 +188,9 @@ class AvatarCapas extends StatelessWidget {
                 ),
               ),
             ),
-            // El equipo, encima del cuerpo y en el orden que manda el Reino.
-            //
-            // Sin `x`, `y`, `ancho` ni `alto`: cada capa ya viene dibujada
-            // dentro del lienzo maestro de 1024×1024, con su sitio hecho y
-            // transparencia alrededor. Centradas y al mismo alto, encajan solas.
-            // Los desplazamientos del manifiesto son para el día que una pieza
-            // se recorte a su caja para ahorrar bytes; hoy ninguna lo está, y
-            // aplicarlos ahora los aplicaría dos veces.
+            // Y lo que va por delante, en el orden que manda el Reino.
             if (apilando)
-              for (final CapaAvatar capa in capas)
-                if (capa.assetKey.isNotEmpty)
-                  Image.asset(
-                    Arte.capaDeEquipo(figura: clave, src: capa.assetKey),
-                    height: tamano,
-                    fit: BoxFit.contain,
-                    filterQuality: FilterQuality.medium,
-                    // `modulate` multiplica, así que tiñe conservando el
-                    // sombreado y el contorno. Es lo que necesitan los
-                    // cosméticos de conocimiento: un solo dibujo y un color por
-                    // disciplina.
-                    color: _colorDeTinte(capa.tinte),
-                    colorBlendMode:
-                        capa.tinte == null ? null : BlendMode.modulate,
-                    // Una capa que falta no rompe el avatar ni deja un hueco
-                    // negro: sencillamente no se pinta, y su ficha al margen
-                    // sigue diciendo que la pieza está puesta.
-                    errorBuilder: (BuildContext context, Object error,
-                            StackTrace? pila) =>
-                        const SizedBox.shrink(),
-                  ),
+              for (final CapaAvatar capa in delante) _Capa(capa: capa, figura: clave, lado: tamano),
             // Las fichas del equipo, en los dos márgenes que la figura deja
             // libres. Es lo único que se podía hacer mientras cada pieza fuera
             // una ficha de catálogo con su propio encuadre, y sigue siendo la
@@ -213,6 +203,42 @@ class AvatarCapas extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Una capa del manifiesto, pintada sobre el lienzo maestro.
+///
+/// Sin `x`, `y`, `ancho` ni `alto`: cada capa ya viene dibujada dentro del
+/// lienzo de 1024×1024, con su sitio hecho y transparencia alrededor. Centradas
+/// y al mismo alto, encajan solas. Los desplazamientos del manifiesto son para
+/// el día que una pieza se recorte a su caja para ahorrar bytes; hoy ninguna lo
+/// está, y aplicarlos ahora los aplicaría dos veces.
+class _Capa extends StatelessWidget {
+  const _Capa({required this.capa, required this.figura, required this.lado});
+
+  final CapaAvatar capa;
+  final String figura;
+  final double lado;
+
+  @override
+  Widget build(BuildContext context) {
+    final Color? tinte = _colorDeTinte(capa.tinte);
+    return Image.asset(
+      Arte.capaDeEquipo(figura: figura, src: capa.assetKey),
+      height: lado,
+      fit: BoxFit.contain,
+      filterQuality: FilterQuality.medium,
+      // `modulate` multiplica, así que tiñe conservando el sombreado y el
+      // contorno. Es lo que necesitan los cosméticos de conocimiento: un solo
+      // dibujo y un color por disciplina.
+      color: tinte,
+      colorBlendMode: tinte == null ? null : BlendMode.modulate,
+      // Una capa que falta no rompe el avatar ni deja un hueco negro:
+      // sencillamente no se pinta, y su ficha al margen sigue diciendo que la
+      // pieza está puesta.
+      errorBuilder: (BuildContext context, Object error, StackTrace? pila) =>
+          const SizedBox.shrink(),
     );
   }
 }
@@ -344,6 +370,19 @@ class RetratoAvatar extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // Colores derivados
 // ---------------------------------------------------------------------------
+
+/// Dónde entra el cuerpo en la pila de dibujado (06c §2.3).
+///
+/// El cuerpo no es el fondo: es la capa `body_base`, y la pila tiene cuatro por
+/// debajo —la montura, la espalda de la capa, el aura y el pelo de detrás—. Una
+/// capa prendida a los hombros cuelga por detrás del aprendiz, así que pintarla
+/// encima de todo la convertiría en un babero.
+///
+/// Es el único número de la pila del servidor que el cliente necesita saber, y
+/// lo necesita porque el cuerpo llega por otro camino: no viene en `layers[]`,
+/// se elige aquí a partir de los rasgos. El día que el servidor mande también
+/// `body_base` con su `src`, esto sobra y las capas se pintan en fila.
+const int zDelCuerpo = 40;
 
 /// Las ranuras que el dibujo sabe representar.
 const List<RanuraItem> ranurasDelVestidorInterno = <RanuraItem>[

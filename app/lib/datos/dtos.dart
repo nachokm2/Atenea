@@ -862,13 +862,14 @@ class Item {
       nombreConocimiento: _txtN(
         _alguna(json, <String>['knowledge_area_name', 'area_name']),
       ),
-      // Solo las capas ya RESUELTAS, si el servidor las manda. `ItemOut` no
-      // declara `layers`, así que esto caía siempre al manifiesto crudo del
-      // catálogo, cuyas entradas traen `layer` y `src` pero ni ranura ni z
-      // resueltos: nacían con ranura nula y se descartaban después. El efecto
-      // era que previsualizar un ítem en el Mercado enseñaba MENOS equipo que
-      // antes de tocarlo, porque la pieza que llevabas puesta se quitaba y la
-      // nueva no llegaba a entrar.
+      // Las capas ya RESUELTAS, con ranura y orden de dibujado. `ItemOut` no
+      // las declaraba, así que esto caía siempre al manifiesto crudo del
+      // catálogo, cuyas entradas traen `layer` y `src` pero ni ranura ni z:
+      // nacían con ranura nula y se descartaban después. El efecto era que
+      // previsualizar un ítem en el Mercado enseñaba MENOS equipo que antes de
+      // tocarlo, porque la pieza que llevabas puesta se quitaba y la nueva no
+      // llegaba a entrar. Desde que el servidor las resuelve, la vista previa
+      // enseña la pieza puesta de verdad.
       capas: _lista(json['layers'], CapaAvatar.desdeJson),
       esPlantilla: _bol(json['is_template']),
       disponibleDesde: fechaHora(json['available_from']),
