@@ -1,10 +1,18 @@
 /// Ilustraciones del onboarding (P01): tres escenas que cuentan la promesa.
 ///
-/// No hay recursos gráficos todavía, así que las escenas se pintan con el
-/// mismo lenguaje visual del resto de la app: fondo nocturno, constelación de
-/// nodos y el avatar que va ganando equipo. El muñeco es el mismo
-/// [LienzoAvatar] de la creación de personaje, para que la promesa de la
-/// pantalla 3 se cumpla literalmente dos minutos después.
+/// El fondo se pinta —constelación de nodos sobre noche—, pero el héroe ya no:
+/// es la misma figura ilustrada que el aprendiz va a tener, apilada con el
+/// mismo widget que la dibuja en el Vestidor.
+///
+/// Antes era el muñeco vectorial de la creación de personaje, porque no había
+/// arte por capas. Se notaba: la bienvenida enseñaba un personaje que luego no
+/// aparecía por ninguna parte, y prometer «tu héroe» con el dibujo de otro es
+/// justo lo contrario de lo que hacen estas tres pantallas.
+///
+/// Y el equipo va llegando de verdad, que es lo que esta pantalla cuenta: en la
+/// primera escena el aprendiz no tiene nada, en la segunda ya lleva la túnica y
+/// las botas de iniciación, y en la tercera la capa. Los tres son objetos del
+/// catálogo sembrado, no adornos: son literalmente lo primero que se gana.
 library;
 
 import 'dart:math' as math;
@@ -13,7 +21,7 @@ import 'package:flutter/material.dart';
 
 import '../../../datos/repositorios.dart';
 import '../../../design/tokens.dart';
-import 'avatar_lienzo.dart';
+import '../../personaje/widgets/avatar_capas.dart';
 
 /// Una de las tres escenas del onboarding.
 class IlustracionOnboarding extends StatelessWidget {
@@ -24,16 +32,64 @@ class IlustracionOnboarding extends StatelessWidget {
 
   final double alto;
 
+  /// Lo que lleva puesto el héroe en cada escena.
+  ///
+  /// Las capas van en el orden de la pila del Reino (06c §2.3), que es como las
+  /// espera [AvatarCapas]: el manifiesto llega ordenado por z y el cliente no lo
+  /// recompone.
+  static const List<List<CapaAvatar>> _equipoPorEscena = <List<CapaAvatar>>[
+    <CapaAvatar>[],
+    <CapaAvatar>[
+      CapaAvatar(
+        clave: 'boots',
+        ranura: RanuraItem.botas,
+        codigoItem: 'botas_camino',
+        assetKey: 'botas_camino_boots.webp',
+        z: 50,
+      ),
+      CapaAvatar(
+        clave: 'outfit',
+        ranura: RanuraItem.cuerpo,
+        codigoItem: 'tunica_iniciacion',
+        assetKey: 'tunica_iniciacion_outfit.webp',
+        z: 60,
+      ),
+    ],
+    <CapaAvatar>[
+      CapaAvatar(
+        clave: 'cape_back',
+        ranura: RanuraItem.capa,
+        codigoItem: 'capa_lana_gris',
+        assetKey: 'capa_lana_gris_cape_back.webp',
+        z: 20,
+      ),
+      CapaAvatar(
+        clave: 'boots',
+        ranura: RanuraItem.botas,
+        codigoItem: 'botas_camino',
+        assetKey: 'botas_camino_boots.webp',
+        z: 50,
+      ),
+      CapaAvatar(
+        clave: 'outfit',
+        ranura: RanuraItem.cuerpo,
+        codigoItem: 'tunica_iniciacion',
+        assetKey: 'tunica_iniciacion_outfit.webp',
+        z: 60,
+      ),
+      CapaAvatar(
+        clave: 'cape_front',
+        ranura: RanuraItem.capa,
+        codigoItem: 'capa_lana_gris',
+        assetKey: 'capa_lana_gris_cape_front.webp',
+        z: 140,
+      ),
+    ],
+  ];
+
   @override
   Widget build(BuildContext context) {
     final AteneaPalette paleta = context.paleta;
-
-    const RasgosAvatar rasgos = RasgosAvatar(
-      tonoPiel: 'skin_03',
-      rostro: 'face_01',
-      cabello: 'hair_02',
-      colorCabello: 'hair_brown',
-    );
 
     return ExcludeSemantics(
       child: SizedBox(
@@ -54,13 +110,11 @@ class IlustracionOnboarding extends StatelessWidget {
                 ),
               ),
             ),
-            LienzoAvatar(
-              rasgos: rasgos,
-              orden: paso == 2 ? Arquetipo.arcano : Arquetipo.acero,
-              alto: alto * 0.74,
-              conCapa: paso == 2,
-              conMarco: false,
-              semantica: '',
+            // Sin resplandor: la escena ya trae el suyo detrás.
+            AvatarCapas(
+              capas: _equipoPorEscena[paso.clamp(0, _equipoPorEscena.length - 1)],
+              tamano: alto * 0.92,
+              resplandor: false,
             ),
           ],
         ),
