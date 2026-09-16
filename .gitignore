@@ -54,3 +54,15 @@ app/android/key.properties
 # la CLI de Railway trae dentro el motor que evalua `.railway/railway.ts`, asi
 # que no hace falta ningun paquete para desplegar.
 node_modules/
+
+# Intermedios de scripts/vestir.py. Lo que vale la pena guardar es `base.png` y
+# las capas de cada pieza; lo demas son pasos del camino que pesan megas: la
+# figura normalizada, la mascara, el control en rojo, el PNG crudo del modelo y
+# las dos vistas para mirarlo (sobre damero y puesto encima).
+arte/capas/**/figura.png
+arte/capas/**/mascara_*.png
+arte/capas/**/control_*.png
+arte/capas/**/bruto_*.png
+arte/capas/**/*_sola.png
+arte/capas/**/*_puesta.png
+arte/capas/**/prueba_*.png
