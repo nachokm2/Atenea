@@ -59,7 +59,7 @@ node_modules/
 # las capas de cada pieza; lo demas son pasos del camino que pesan megas: la
 # figura normalizada, la mascara, el control en rojo, el PNG crudo del modelo y
 # las dos vistas para mirarlo (sobre damero y puesto encima).
-arte/capas/**/figura.png
+arte/capas/**/partida_*.png
 arte/capas/**/mascara_*.png
 arte/capas/**/control_*.png
 arte/capas/**/bruto_*.png

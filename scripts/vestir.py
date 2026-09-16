@@ -313,11 +313,16 @@ def desnudar(figura: Image.Image, nuevo: Image.Image, zona: np.ndarray) -> Image
 
 
 def extraer_capa(nuevo: Image.Image, zona: np.ndarray) -> Image.Image:
-    """Se queda solo con la pieza: dentro de la zona y sin el fondo del modelo."""
+    """Se queda solo con la pieza: dentro de la zona y sin el fondo del modelo.
+
+    El cierre de 3×3 solo sutura el dentado del antialias. No se rellenan
+    huecos: un hueco de fondo encerrado dentro de la pieza es fondo de verdad.
+    En la banda de la capa, el hueco entre el brazo y el torso queda encerrado
+    por el sobaco, el brazo y la mano, y rellenarlo pinta un pegote macizo en el
+    costado. Es el mismo fallo que ya se vio al desnudar.
+    """
     fondo = solo_fondo(nuevo)
-    util = ndimage.binary_fill_holes(
-        ndimage.binary_closing(zona & ~fondo, structure=np.ones((3, 3)))
-    )
+    util = ndimage.binary_closing(zona & ~fondo, structure=np.ones((3, 3)))
     alfa = Image.fromarray((util * 255).astype(np.uint8), "L").filter(ImageFilter.GaussianBlur(0.7))
     capa = nuevo.copy()
     capa.putalpha(alfa)
@@ -353,11 +358,26 @@ def main(argv: list[str] | None = None) -> int:
     destino.mkdir(parents=True, exist_ok=True)
     nombre = args.nombre or args.ranura
 
+    if args.reusar:
+        # La partida y la máscara de **entonces**, no unas recalculadas ahora.
+        # Generar una pieza cambia el directorio —`base.png` aparece, y con él
+        # cambia de qué figura se parte—, así que recomponer con la silueta de
+        # después recorta la pieza contra un cuerpo que el modelo nunca vio.
+        if not (destino / f"bruto_{nombre}.png").exists():
+            raise SystemExit(f"No hay bruto_{nombre}.png que reusar.")
+        figura = Image.open(destino / f"partida_{nombre}.png").convert("RGBA")
+        zona = np.array(Image.open(destino / f"mascara_{nombre}.png").split()[3]) == 0
+        print("reusando la respuesta guardada: no se llama al modelo")
+        return _componer(args, destino, nombre, figura, zona)
+
     figura = figura_de_partida(args.figura, args.ranura)
     zona = zona_editable(figura, args.ranura)
-    mascara = como_mascara(zona)
-    figura.save(destino / "figura.png")
-    mascara.save(destino / f"mascara_{nombre}.png")
+
+    # Con nombre de pieza, no un `figura.png` compartido: la imagen de partida
+    # cambia según lo que ya exista, y en el mismo archivo una pieza pisaba la
+    # partida de otra.
+    figura.save(destino / f"partida_{nombre}.png")
+    como_mascara(zona).save(destino / f"mascara_{nombre}.png")
 
     rojo = Image.new("RGBA", (LIENZO, LIENZO), (255, 60, 60, 110))
     Image.composite(
@@ -367,20 +387,15 @@ def main(argv: list[str] | None = None) -> int:
     ).save(destino / f"control_{nombre}.png")
 
     print(f"zona editable: {int(zona.sum())} px · control_{nombre}.png")
-    if not args.aplicar and not args.reusar:
+    if not args.aplicar:
         print("Sin --aplicar no se llama al modelo. Mira el control y vuelve.")
         return 0
-    if args.reusar:
-        if not (destino / f"bruto_{nombre}.png").exists():
-            raise SystemExit(f"No hay bruto_{nombre}.png que reusar.")
-        print("reusando la respuesta guardada: no se llama al modelo")
-        return _componer(args, destino, nombre, figura, zona)
 
     if not args.prompt:
         raise SystemExit("--aplicar necesita --prompt.")
 
     bruto = pedir_edicion(
-        (destino / "figura.png").read_bytes(),
+        (destino / f"partida_{nombre}.png").read_bytes(),
         (destino / f"mascara_{nombre}.png").read_bytes(),
         f"{args.prompt}. {ESTILO} El fondo, {FONDO}.",
     )
