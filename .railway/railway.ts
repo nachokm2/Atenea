@@ -58,30 +58,30 @@
  *     Se vacía a mano en Settings → Build.
  */
 
-import { database, defineRailway, github, preserve, project, service, volume } from "railway/iac";
+import { defineRailway, github, postgres, preserve, project, service, volume } from "railway/iac";
 
 export default defineRailway((ctx) => {
   const esProduccion = ctx.environment === "production";
 
-  // `postgres()` fija la imagen de Railway, que **no trae pgvector**: su propia
-  // documentación dice que no piensan añadir extensiones a las plantillas. La
-  // migración 0001 hace `CREATE EXTENSION vector` y crea un índice HNSW, así que
-  // el `preDeploy` moría ahí y el despliegue nunca llegaba a servir nada.
+  // La imagen **no** se fija aquí, y eso merece explicación porque el comentario
+  // anterior decía justo lo contrario.
   //
-  // `database()` es exactamente lo mismo que `postgres()` —mismo tipo, misma
-  // dirección `database.postgres`, mismo `env`— solo que deja elegir la imagen.
+  // El razonamiento era bueno: la migración 0001 hace `CREATE EXTENSION vector`,
+  // y si la imagen de Railway no trae `pgvector` muere ahí. Por eso se usaba
+  // `database()` con `image: "pgvector/pgvector:pg16"` en vez de `postgres()`.
   //
-  // pg16 y no pg18 (que es lo que usa `postgres()` hoy) para que la base de
-  // producción tenga la misma versión mayor que la de desarrollo y la de
-  // integración continua, que ya usan `pgvector/pgvector:pg16`. Subir de versión
-  // mayor es una decisión deliberada con su propio cambio; hacerlo sin querer, en
-  // el sitio donde están los datos de verdad, no.
-  const base = database("postgres", "postgres", {
-    image: "pgvector/pgvector:pg16",
+  // En la práctica fijarla abre un bucle. Railway crea el recurso como base de
+  // datos; al aplicarle una imagen lo pasa a **servicio**; y entonces el archivo,
+  // que lo declara como base, quiere borrarlo y rehacerlo. Cada aplicación
+  // repite el ciclo, y una de esas veces borra una base con datos dentro.
+  //
+  // Así que se deja la que Railway ponga y se comprueba con la migración, que es
+  // la prueba de verdad: si `pgvector` no estuviera, el arranque se cae con
+  // `extension "vector" is not available` y entonces sí toca elegir imagen a
+  // mano, una vez, desde el panel.
+  const base = postgres("postgres", {
     output: "DATABASE_URL",
-    defaultMountPath: "/var/lib/postgresql/data",
   });
-
   // El material del aprendiz. `sizeMB` se puede subir sin perder nada; bajarlo
   // o quitarlo es destructivo y Railway lo marca como tal antes de aplicar.
   //
@@ -111,38 +111,47 @@ export default defineRailway((ctx) => {
       dockerfilePath: "Dockerfile",
     },
 
-    // Las migraciones y las semillas van **antes** del arranque, no dentro del
-    // comando de inicio: si fallan, el despliegue se detiene y la versión
-    // anterior sigue sirviendo. Ambas son idempotentes, así que repetirlas no
-    // hace nada. Sin la siembra, una base recién migrada arranca sin
-    // configuración de juego, sin niveles, sin objetos y sin misiones, y la app
-    // respondería 200 a todo sin tener nada que mostrar.
-    // `esperar_base` va delante, y no es un lujo. La base vive en la red privada
-    // de Railway, que tarda unos segundos en levantarse dentro del contenedor;
-    // alembic arranca de inmediato y el primer despliegue moría con
-    // `psycopg.errors.ConnectionTimeout` teniendo la base viva al lado. No es un
-    // `sleep`: pregunta hasta que contesta, y si no contesta en un minuto se
-    // detiene el despliegue con el error a la vista.
-    preDeploy: "python -m app.esperar_base && alembic upgrade head && python -m app.seeds",
-
-    // Envuelto en `sh -c`, y eso es lo único que hace que arranque.
+    // Las migraciones y la siembra van **dentro** del arranque, y no es lo que
+    // uno querría.
     //
-    // Railway ejecuta el comando de inicio **sin shell**, así que sin el
-    // envoltorio `${PORT:-8000}` le llega a uvicorn como texto y se cae con
-    // «Invalid value for '--port': '${PORT:-8000}' is not a valid integer».
-    // Aquí había un comentario razonando sobre esa sintaxis que daba por hecho
-    // que alguien la expandiría; no la expande nadie.
+    // Estaban en `preDeploy`, que es su sitio: si fallan ahí, el despliegue se
+    // detiene y la versión anterior sigue sirviendo. Pero Railway no lo ejecuta.
+    // El despliegue salía SUCCESS, la aplicación respondía en `/health`, y
+    // `/config/public` daba 500 con `relation "game_configs" does not exist`:
+    // ni una línea de alembic en los registros de ese despliegue, buscada por
+    // nombre. Se probaron dos aplicaciones seguidas del archivo y una
+    // reconstrucción entera.
+    //
+    // Así que se ejecuta donde sí se ejecuta. Ambas son idempotentes, de modo
+    // que repetirlas en cada arranque no hace nada: alembic no tiene nada que
+    // aplicar y la siembra no duplica. Lo que se pierde es el despliegue que se
+    // detiene solo, y a cambio se gana que la base tenga esquema, que es más
+    // importante.
+    //
+    // Si alguna vez `preDeploy` empieza a funcionar, esto se puede volver a
+    // mover. La prueba es mirar si `Running upgrade` aparece en los registros.
+    //
+    // ---
+    //
+    // Envuelto en `sh -c`, y eso es lo único que hace que arranque: Railway
+    // ejecuta el comando de inicio **sin shell**, así que sin el envoltorio
+    // `${PORT:-8000}` le llega a uvicorn como texto y se cae con «Invalid value
+    // for '--port': '${PORT:-8000}' is not a valid integer». Aquí hubo un
+    // comentario razonando sobre esa sintaxis que daba por hecho que alguien la
+    // expandiría; no la expande nadie.
     //
     // Y sigue siendo `${PORT:-8000}` y no `$PORT` pelado: este comando sustituye
     // al `CMD` del Dockerfile, que sí llevaba respaldo. Railway inyecta `PORT` a
-    // partir del puerto destino de un dominio, que al principio no existe, y sin
-    // respaldo el shell borraría la palabra vacía y uvicorn recibiría
-    // `--port --proxy-headers`.
+    // partir del puerto destino de un dominio, y sin respaldo el shell borraría
+    // la palabra vacía y uvicorn recibiría `--port --proxy-headers`.
     //
     // `exec` para que uvicorn sea el proceso 1 y reciba el SIGTERM del reinicio
     // en vez de que lo intercepte el shell y el contenedor muera a lo bruto.
     start:
-      "sh -c 'exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} " +
+      "sh -c 'python -m app.esperar_base " +
+      "&& alembic upgrade head " +
+      "&& python -m app.seeds " +
+      "&& exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} " +
       '--proxy-headers --forwarded-allow-ips="*"\'',
 
     // La ruta del contrato es `/api/v1/health`; `/health` existe porque es la
