@@ -38,6 +38,22 @@ flutter run --dart-define=ATENEA_API=http://10.0.2.2:8000/api/v1      # emulador
 flutter run --dart-define=ATENEA_API=http://192.168.1.20:8000/api/v1  # teléfono en la misma red
 ```
 
+**Para mirar la app, no para programarla, compílala en release.** En el navegador,
+el modo de depuración de Flutter va a tirones: no optimiza, no recorta código y
+deja todas las aserciones puestas, y Atenea tiene ilustraciones grandes, sombras y
+degradados, que es lo que más sufre ahí. Se nota sobre todo al desplazar una
+pantalla larga, y parece que la app se ha colgado cuando lo único que pasa es que
+está en modo de depuración.
+
+```powershell
+cd app
+flutter build web --release --dart-define=ATENEA_API=http://localhost:8000/api/v1
+cd build\web; python -m http.server 5124
+```
+
+Tarda algo más de un minuto en compilar y se desplaza con soltura. El `flutter run`
+de arriba sigue siendo lo correcto para programar, porque trae recarga en caliente.
+
 Atenea usa dos servicios de IA distintos y conviene no confundirlos. **Claude**
 escribe las lecciones y corrige las respuestas abiertas. **Los embeddings**
 (OpenAI o Voyage, a elección) convierten el material en vectores para poder

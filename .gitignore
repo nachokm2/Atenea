@@ -45,6 +45,11 @@ app/android/key.properties
 *.jks
 *.keystore
 
+# El enlace con el proyecto de Railway. Es de esta maquina, no del repositorio:
+# `.railway/railway.ts` si se versiona —es la descripcion del despliegue—, pero a
+# que proyecto y entorno apunta cada quien, no.
+.railway/config.json
+
 # Por si alguien instala algo de Node aqui: Atenea no es un proyecto de Node, y
 # la CLI de Railway trae dentro el motor que evalua `.railway/railway.ts`, asi
 # que no hace falta ningun paquete para desplegar.
