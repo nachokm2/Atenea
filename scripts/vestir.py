@@ -178,6 +178,17 @@ class Banda:
     hasta: int
     holgura: int = 6
 
+    relleno: bool = False
+    """Rellena cada fila de borde a borde de la silueta, huecos incluidos.
+
+    Solo para desnudar, y hace falta de verdad. La figura femenina vestida está
+    de piernas abiertas —a media pantorrilla, las botas ocupan x 389-444 y
+    601-657—, y el cuerpo desnudo que devuelve el modelo tiene las piernas mucho
+    más juntas y estrechas: x 452-478 y 543-569. O sea, justo en el hueco de
+    entre medias, que en una zona hecha de la silueta no existe. Las piernas se
+    recortaban enteras y la figura acababa en una punta a la altura de la rodilla.
+    """
+
     protege_cara: bool = False
     """Saca la cara de la zona editable.
 
@@ -193,6 +204,21 @@ class Banda:
     A la altura de las manos, la fila son tres cosas: mano, cadera, mano. Una
     banda que las una deja al modelo repintar el pantalón cuando lo que se le
     pidió fueron unos guantes.
+    """
+
+    mano: str | None = None
+    """`"diestra"` o `"zurda"`: hace de la banda un rectángulo junto a esa mano.
+
+    Lo que se empuña no se lleva puesto, y por eso no cabe en una franja del
+    cuerpo: una espada es sobre todo hoja, y la hoja está en el aire, al lado de
+    la figura, donde la silueta no llega. Con esta bandera la zona deja de ser
+    «la silueta recortada a unas filas» y pasa a ser un rectángulo centrado en la
+    mano, del que se descuenta el cuerpo salvo en la propia mano, para que la
+    empuñadura se vea agarrada y la hoja tenga aire.
+
+    «Diestra» y «zurda» son desde quien mira, que es como ya lo hace el dibujo
+    vectorial de reserva: el arma a la derecha de la imagen y el escudo a la
+    izquierda.
     """
 
     ancho_maximo: int = 10_000
@@ -215,14 +241,14 @@ BANDAS: dict[str, Banda] = {
     # lienzo entero dibujó **otra persona** —otra cara, otra altura y los brazos
     # cruzados en vez de a los costados—, y una pose distinta invalida de golpe
     # todas las piezas que se pinten después.
-    "base": Banda(desde=195, hasta=970, holgura=3),
+    "base": Banda(relleno=True, desde=195, hasta=970, holgura=3),
     # Y las mismas dos, por tramos, para cuando de una sola pasada se desvía.
     # Cuanta más superficie se le da al modelo, más se inventa: con el lienzo
     # entero dibujó otra persona; con el cuerpo entero, una figura más alta y
     # estrecha que la silueta, que la máscara luego recorta a lo largo. Un tramo
     # corto tiene tan poco margen que no le queda sitio donde desviarse.
-    "base_torso": Banda(desde=195, hasta=470, holgura=3),
-    "base_piernas": Banda(desde=440, hasta=970, holgura=3),
+    "base_torso": Banda(relleno=True, desde=195, hasta=470, holgura=3),
+    "base_piernas": Banda(relleno=True, desde=440, hasta=970, holgura=3),
     # Medido sobre el cuerpo desnudo, bajando fila a fila desde la coronilla: la
     # cabeza se ensancha hasta dy≈80, se estrecha hasta el cuello en dy 165-180 y
     # los hombros arrancan de golpe en dy 195. La banda anterior llegaba a 200 y
@@ -254,6 +280,12 @@ BANDAS: dict[str, Banda] = {
     # antorcha es sobre todo mango, y un guante no: ciñendo la banda a la mano,
     # la antorcha y la pluma salieron invisibles porque no tenían dónde estar.
     "empunado": Banda(desde=400, hasta=600, holgura=14, solo_extremos=True, ancho_maximo=48),
+    # Lo que se empuña de verdad: un arma en la diestra y un escudo en la zurda.
+    # Sus límites son relativos al centro de la mano, no a la coronilla, porque
+    # es la mano la que sostiene la pieza. Una espada sube más de lo que baja: la
+    # hoja va hacia arriba y el pomo queda apenas por debajo del puño.
+    "arma": Banda(desde=-330, hasta=230, mano="diestra"),
+    "escudo": Banda(desde=-200, hasta=200, mano="zurda"),
     # La cara, y solo para los anteojos, que son la única pieza del catálogo que
     # la toca. Iba de 150 a 215, que sobre el cuerpo desnudo es el cuello y los
     # hombros: los 195 de «línea de ojos» venían de otra escala. Con la cabeza
@@ -318,6 +350,9 @@ def zona_editable(figura: Image.Image, ranura: str) -> np.ndarray:
     alfa = np.array(figura.split()[3]) > 40
     top = coronilla(figura)
 
+    if banda.mano:
+        return _junto_a_la_mano(alfa, top, banda)
+
     # Soltar el trozo central va **antes** de ensanchar, no después: la
     # dilatación de doce píxeles salva el hueco entre el brazo y la cadera, así
     # que la fila pasa a ser un solo trozo y el filtro la descartaba entera. Se
@@ -325,6 +360,8 @@ def zona_editable(figura: Image.Image, ranura: str) -> np.ndarray:
     util = _solo_los_extremos(alfa, banda) if banda.solo_extremos else alfa
 
     cuerpo = ndimage.binary_dilation(util, structure=np.ones((3, 3)), iterations=banda.holgura * 4)
+    if banda.relleno:
+        cuerpo = _de_borde_a_borde(cuerpo)
     filas = np.zeros_like(cuerpo)
     arriba = max(0, top + banda.desde)
     abajo = min(LIENZO, top + banda.hasta)
@@ -342,6 +379,70 @@ def zona_editable(figura: Image.Image, ranura: str) -> np.ndarray:
     if banda.protege_cara:
         zona &= ~_la_cara(alfa, top)
     return zona
+
+
+def _centro_de_la_mano(alfa: np.ndarray, top: int, cual: str) -> tuple[int, int]:
+    """Dónde cae una mano, medido sobre la propia figura.
+
+    La mano es el trozo lateral de las filas donde el brazo ya se ha separado del
+    torso: entre ocho y sesenta píxeles de ancho, que la distingue de una pierna.
+    Se promedian varias filas porque una sola puede caer en un dedo.
+    """
+    centros: list[int] = []
+    filas: list[int] = []
+    for dy in range(480, 550, 10):
+        y = top + dy
+        if y >= LIENZO:
+            break
+        etiquetas, cuantos = ndimage.label(alfa[y])
+        trozos = []
+        for i in range(1, cuantos + 1):
+            xs = np.where(etiquetas == i)[0]
+            if 8 < xs.size < 60:
+                trozos.append((int(xs.min()), int(xs.max())))
+        if len(trozos) < 2:
+            continue
+        izq, der = trozos[0], trozos[-1]
+        # «Diestra» es la derecha de quien mira, que es donde el dibujo
+        # vectorial de reserva lleva poniendo el arma desde siempre.
+        elegido = der if cual == "diestra" else izq
+        centros.append((elegido[0] + elegido[1]) // 2)
+        filas.append(y)
+    if not centros:
+        # Sin manos reconocibles, el sitio de siempre: a la altura de la cadera y
+        # al borde de la figura.
+        ancho = np.where(alfa.any(axis=0))[0]
+        x = int(ancho.max()) if cual == "diestra" else int(ancho.min())
+        return x, top + 510
+    return sum(centros) // len(centros), sum(filas) // len(filas)
+
+
+def _junto_a_la_mano(alfa: np.ndarray, top: int, banda: Banda) -> np.ndarray:
+    """Un rectángulo alrededor de una mano, sin el cuerpo dentro.
+
+    El cuerpo se descuenta —si no, pedir una espada acabaría repintando la
+    cadera— salvo un disco alrededor de la propia mano, que es lo que hace que la
+    empuñadura se vea agarrada y no flotando al lado.
+    """
+    cx, cy = _centro_de_la_mano(alfa, top, banda.mano or "diestra")
+    zona = np.zeros_like(alfa)
+    x0, x1 = max(0, cx - 95), min(LIENZO, cx + 95)
+    y0, y1 = max(0, cy + banda.desde), min(LIENZO, cy + banda.hasta)
+    zona[y0:y1, x0:x1] = True
+
+    yy, xx = np.ogrid[:LIENZO, :LIENZO]
+    empunadura = (yy - cy) ** 2 + (xx - cx) ** 2 <= 55**2
+    cuerpo = ndimage.binary_dilation(alfa, structure=np.ones((3, 3)), iterations=8)
+    return zona & (~cuerpo | empunadura)
+
+
+def _de_borde_a_borde(mascara: np.ndarray) -> np.ndarray:
+    """Cada fila, del primer píxel al último; lo de en medio se da por dentro."""
+    lleno = np.zeros_like(mascara)
+    for y in np.where(mascara.any(axis=1))[0]:
+        xs = np.where(mascara[y])[0]
+        lleno[y, xs.min() : xs.max() + 1] = True
+    return lleno
 
 
 def _solo_los_extremos(alfa: np.ndarray, banda: Banda) -> np.ndarray:

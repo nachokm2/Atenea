@@ -22,13 +22,16 @@ el corte se hace después por geometría —lo que queda fuera de la silueta del
 cuerpo cuelga por detrás, lo que queda dentro es el embozo y el broche—, que es
 gratis y no se puede equivocar.
 
-## Lo que no está aquí
+## Lo que se empuña
 
-Las armas y los escudos, que son quince. No se llevan puestos: se sostienen, y su
-sitio no es una franja del cuerpo sino un rectángulo al lado de la mano, con
-lienzo vacío alrededor. `zona_editable` corta contra la silueta, así que ese
-rectángulo no se puede expresar todavía. Mientras tanto siguen saliendo de ficha
-al margen, que es justo para lo que se dejó ese camino.
+Las armas y los escudos no se llevan puestos: se sostienen, y su sitio no es una
+franja del cuerpo sino un rectángulo al lado de la mano, con lienzo vacío para la
+hoja. Las bandas `arma` y `escudo` lo hacen: se miden desde el centro de la mano,
+que se busca en cada figura, y descuentan el cuerpo salvo un disco alrededor del
+puño, para que la empuñadura se vea agarrada y no flotando.
+
+El arma va a la derecha de quien mira y el escudo a la izquierda, que es donde
+los pone el dibujo vectorial de reserva desde el principio.
 """
 
 from __future__ import annotations
@@ -321,7 +324,128 @@ ACCESORIOS: tuple[Pieza, ...] = (
     ),
 )
 
-TODAS: tuple[Pieza, ...] = CABEZA + CUERPO + CAPA + GUANTES + BOTAS + ACCESORIOS
+# ---------------------------------------------------------------------------
+# Armas
+# ---------------------------------------------------------------------------
+
+ARMAS: tuple[Pieza, ...] = (
+    Pieza(
+        "espada_entrenamiento",
+        "weapon",
+        "arma",
+        "una espada de entrenamiento empuñada con la hoja hacia arriba: filo romo, "
+        "acero mate y guarda sencilla de hierro",
+    ),
+    Pieza(
+        "baston_aprendiz",
+        "weapon",
+        "arma",
+        "un bastón de madera de fresno sin tallar, empuñado en vertical, con varias "
+        "muescas pequeñas grabadas a media altura",
+    ),
+    Pieza(
+        "arco_fresno",
+        "weapon",
+        "arma",
+        "un arco de fresno curvado a mano, sujeto en vertical por el centro y "
+        "encordado con una cuerda de tendón tensa",
+    ),
+    Pieza(
+        "espada_corta_acero",
+        "weapon",
+        "arma",
+        "una espada corta de acero bien templado empuñada con la hoja hacia arriba, "
+        "sin florituras, con la guarda recta",
+    ),
+    Pieza(
+        "arco_bosque_antiguo",
+        "weapon",
+        "arma",
+        "un arco largo de tejo oscuro, sujeto en vertical por el centro, encordado "
+        "con seda clara y rematado en punta de asta",
+    ),
+    Pieza(
+        "espada_obsidiana",
+        "weapon",
+        "arma",
+        "una espada de vidrio volcánico negro empuñada con la hoja hacia arriba, con "
+        "el filo translúcido y reflejos fríos",
+    ),
+    Pieza(
+        "espada_del_sql",
+        "weapon",
+        "arma",
+        "una espada de acero claro empuñada con la hoja hacia arriba, con runas "
+        "grabadas a lo largo del filo y una gema azul en el pomo",
+    ),
+    Pieza(
+        "cetro_bigquery",
+        "weapon",
+        "arma",
+        "un cetro empuñado en vertical, de vara plateada rematada en un cristal "
+        "azul facetado que brilla desde dentro",
+    ),
+    Pieza(
+        "baculo_maestria_ia",
+        "weapon",
+        "arma",
+        "un báculo alto empuñado en vertical, de madera oscura, coronado por una "
+        "lente de cristal engastada en un aro de latón",
+    ),
+)
+
+# ---------------------------------------------------------------------------
+# Secundaria
+# ---------------------------------------------------------------------------
+
+SECUNDARIA: tuple[Pieza, ...] = (
+    Pieza(
+        "escudo_madera",
+        "offhand",
+        "escudo",
+        "un escudo redondo de tablas de roble sujeto por el brazo, con un umbo de "
+        "hierro abollado en el centro",
+    ),
+    Pieza(
+        "escudo_roble",
+        "offhand",
+        "escudo",
+        "un escudo redondo de madera veteada con aro de hierro alrededor, sujeto "
+        "por el brazo",
+    ),
+    Pieza(
+        "escudo_blason_reino",
+        "offhand",
+        "escudo",
+        "un escudo de forma alargada sujeto por el brazo, con el blasón del Reino "
+        "en esmalte de colores y sin una sola muesca",
+    ),
+    Pieza(
+        "escudo_data_engineer",
+        "offhand",
+        "escudo",
+        "un escudo de placas de metal soldadas como las juntas de un acueducto, "
+        "sujeto por el brazo, con los remaches a la vista",
+    ),
+    Pieza(
+        "tomo_erudito",
+        "offhand",
+        "escudo",
+        "un tomo grueso encuadernado en cuero sostenido contra el costado, con tres "
+        "cintas marcapáginas y cantos dorados",
+    ),
+    Pieza(
+        "escudo_primer_desafio",
+        "offhand",
+        "escudo",
+        "un escudo pequeño y sencillo sujeto por el brazo, de madera clara con "
+        "refuerzos de cuero y alguna marca de uso",
+    ),
+)
+
+TODAS: tuple[Pieza, ...] = (
+    CABEZA + CUERPO + CAPA + GUANTES + BOTAS + ACCESORIOS + ARMAS + SECUNDARIA
+)
 
 #: Lo que se genera primero para comprobar las bandas antes de la tanda entera.
 #:
