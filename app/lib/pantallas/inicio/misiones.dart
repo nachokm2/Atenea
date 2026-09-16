@@ -218,13 +218,18 @@ class _VacioDePestana extends StatelessWidget {
           'Sin misiones por hoy',
           'El Reino te asignará nuevas misiones en el próximo amanecer.',
         ),
+      // El Reino no reparte semanales todavía: `missions.weekly.enabled` está
+      // apagado y ningún módulo las instancia. El texto anterior prometía que
+      // «llegarán cuando lleves varios días seguidos de estudio», y eso era
+      // falso: por muchos días seguidos que encadenara el aprendiz, esta
+      // pestaña iba a seguir vacía. Mejor no prometer una fecha que no existe.
       AmbitoMision.semanal => (
-          'Aún no hay misiones semanales',
-          'Llegarán cuando lleves varios días seguidos de estudio.',
+          'Los encargos semanales aún no están abiertos',
+          'El Reino todavía no los reparte. Cuando abra sus puertas, aparecerán aquí.',
         ),
       AmbitoMision.especial => (
           'Sin misiones de ruta',
-          'Cuando avances en una Ruta aparecerán encargos propios de ella.',
+          'Empieza una Ruta y recibirás encargos propios de ella.',
         ),
     };
 

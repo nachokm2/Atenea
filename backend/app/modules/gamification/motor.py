@@ -30,6 +30,7 @@ import sqlalchemy as sa
 from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
+from app.core.logging import get_logger
 from app.core.time import utcnow
 from app.models.enums import (
     EventStatus,
@@ -55,6 +56,8 @@ from app.modules.gamification.recompensas import (
     ReciboRecompensas,
 )
 from app.modules.gamification.servicio_config import ServicioConfig
+
+logger = get_logger("atenea.motor")
 
 #: Nombre del módulo productor de los eventos derivados (`domain_events.source_module`).
 MODULO = "gamification"
@@ -980,6 +983,42 @@ def _recompensa_de_logro(db: Session, ctx: Contexto, evento: DomainEvent) -> Non
 # ---------------------------------------------------------------------------
 
 
+def _misiones_de_la_ruta(db: Session, ctx: Contexto, evento: DomainEvent) -> None:
+    """Instancia las misiones especiales de una ruta recién empezada (§5.7).
+
+    `asignar_misiones_de_ruta` existía desde el principio, estaba exportada y no
+    la llamaba nadie: la pantalla de Misiones tenía una sección de especiales
+    que iba a salir vacía para siempre, sin que ninguna prueba lo notara.
+
+    Se engancha aquí y no en los dos sitios que crean rutas —crear una propia y
+    adoptar una del Reino— porque los dos pasan por `PATH_CREATED` y el motor es
+    justamente quien consume los eventos. Un sitio en vez de dos, y el día que
+    haya una tercera forma de empezar una ruta, esto sigue funcionando.
+
+    La función es idempotente: si la ruta ya tiene sus misiones, las devuelve sin
+    crear nada, así que adoptar dos veces no duplica.
+    """
+    payload = dict(evento.payload or {})
+    path_id = payload.get("path_id")
+    if not path_id:
+        return
+    area = payload.get("knowledge_area_id")
+    creadas = misiones.asignar_misiones_de_ruta(
+        db,
+        ctx.cfg,
+        usuario_id=ctx.usuario_id,
+        learning_path_id=uuid.UUID(str(path_id)),
+        knowledge_area_id=uuid.UUID(str(area)) if area else None,
+    )
+    if creadas:
+        logger.info(
+            "mision.ruta_instanciada",
+            usuario_id=str(ctx.usuario_id),
+            path_id=str(path_id),
+            cuantas=len(creadas),
+        )
+
+
 def _avanzar_misiones(db: Session, ctx: Contexto, evento: DomainEvent) -> None:
     """Paso 4: avance de misiones y emisión de `MISSION_COMPLETED`."""
     progresos = misiones.avanzar_por_evento(
@@ -1128,7 +1167,10 @@ def _procesar(db: Session, ctx: Contexto, evento: DomainEvent) -> None:
     if tipo in EVENTOS_APRENDIZAJE:
         _completar_conocimiento(db, ctx, evento)
 
-    # 4 y 5 · Misiones y logros.
+    # 4 y 5 · Misiones y logros. Empezar una ruta instancia primero las suyas,
+    # para que el mismo evento pueda ya avanzarlas.
+    if tipo == EventType.PATH_CREATED:
+        _misiones_de_la_ruta(db, ctx, evento)
     _avanzar_misiones(db, ctx, evento)
     _evaluar_logros(db, ctx, evento)
 
