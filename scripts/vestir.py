@@ -143,6 +143,20 @@ BANDAS: dict[str, Banda] = {
     "cuerpo": Banda(desde=215, hasta=455),
     "botas": Banda(desde=700, hasta=960, holgura=4),
     "capa": Banda(desde=140, hasta=800, holgura=10),
+    # Las manos. Medido sobre el cuerpo desnudo: los brazos se separan del
+    # torso en tres trozos hasta dy≈530, y la mano es el ensanchamiento del
+    # final —41 px de ancho en dy 520 contra 28 del antebrazo en dy 480—. Se
+    # acaban en dy≈590.
+    "manos": Banda(desde=490, hasta=600, holgura=3),
+    # La cara, y solo para los anteojos. Es la única pieza del catálogo que la
+    # toca, y toca justo la línea de ojos (dy≈195). Banda cortísima a propósito:
+    # la cara del aprendiz es su identidad, y el modelo la cambia en cuanto le
+    # das sitio.
+    "cara": Banda(desde=150, hasta=215, holgura=2),
+    # El pecho, para lo que se prende encima sin ser prenda: una insignia.
+    "pecho": Banda(desde=235, hasta=340, holgura=3),
+    # La cadera y el costado, para lo que cuelga: un morral, una bolsa.
+    "cadera": Banda(desde=370, hasta=520, holgura=5),
 }
 
 
