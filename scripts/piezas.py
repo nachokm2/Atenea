@@ -22,16 +22,28 @@ el corte se hace después por geometría —lo que queda fuera de la silueta del
 cuerpo cuelga por detrás, lo que queda dentro es el embozo y el broche—, que es
 gratis y no se puede equivocar.
 
-## Tres que el modelo no quiso dibujar
+## Dos que hubo que traer de otra figura
 
-En la figura femenina se niega a poner en la mano el bastón de aprendiz, la
-espada de obsidiana y la espada del SQL: devuelve el brazo desnudo y el fondo,
-cuatro intentos y con el prompt reescrito para insistir en cerrar los dedos
-alrededor de la empuñadura. Las mismas tres salen a la primera en la masculina,
-así que no es la banda ni el catálogo.
+El modelo se niega en seco con ciertas combinaciones, y no es cuestión de
+insistir. En la figura femenina canónica no puso en la mano el bastón de
+aprendiz ni la espada de obsidiana: devolvía el brazo desnudo y el fondo, ocho
+intentos entre las tres figuras femeninas y con el prompt reescrito para insistir
+en cerrar los dedos alrededor de la empuñadura.
 
-No se fuerzan. Una pieza sin capa sigue saliendo de ficha al margen, que es
-exactamente para lo que se dejó ese camino, y el aprendiz ve su objeto igual.
+Las dos existen ahora, generadas donde sí accedió y movidas después con
+`vestir.py --sobre … --trasladar`, que resta el centro de una mano y suma el de
+la otra:
+
+  - el bastón, desde la figura femenina 003, a 19 px de distancia;
+  - la espada de obsidiana, desde la **masculina** 002, a 4 px.
+
+La segunda tiene un precio que conviene saber: la capa lleva dibujados los dedos
+que agarran, así que en la figura femenina se ve una mano masculina, algo más
+gruesa. Comparada al lado de un arma generada allí mismo se nota; sola y al
+tamaño al que se dibuja el avatar —220 a 300 dp— no.
+
+La tercera que se resistía, la espada del SQL, sí salió al deshacer una
+contradicción del prompt: ver `SIN_MANGAS` en `vestir.py`.
 
 ## Lo que se empuña
 

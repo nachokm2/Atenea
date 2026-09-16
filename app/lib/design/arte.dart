@@ -43,21 +43,38 @@ abstract final class Arte {
     return personaje(personajes.first);
   }
 
-  /// Clave de la figura que le corresponde a un personaje según sus rasgos.
-  ///
-  /// Hay seis figuras: tres de silueta femenina y tres de masculina. La forma
-  /// de tratamiento elegida decide la familia, y el rostro elegido decide la
-  /// variante. Quien prefiere el trato neutro recibe una figura estable
-  /// derivada de su rostro, no una al azar: el avatar no debe cambiar solo.
+  /// Clave de la figura que le corresponde a un personaje.
   ///
   /// Devuelve la clave (`base_masculino_001`) y no la ruta, porque con la misma
   /// clave se piden tres cosas distintas: la ilustración vestida, el cuerpo
   /// desnudo y la familia de la que sacar las piezas.
+  ///
+  /// **Si `rostro` ya es una figura, esa es la respuesta.** Desde que la
+  /// creación de personaje enseña las seis y deja elegir, la elección viaja en
+  /// `face_id` —una columna de 32 caracteres sin valores tasados, así que
+  /// `base_femenino_001` cabe sin migración ni cambio de contrato—. Lo que
+  /// sigue es solo para los personajes creados antes.
+  ///
+  /// ## Lo que hacía la derivación, y por qué no valía
+  ///
+  /// Repartía 34.560 combinaciones ofrecidas entre seis ilustraciones, y lo
+  /// hacía mal de dos maneras que nadie podía ver desde la pantalla:
+  ///
+  ///   - `(variante % 3) + 1` mandaba `face_01` y `face_04` a la **misma**
+  ///     figura, así que de cuatro rostros salían tres.
+  ///   - la silueta solo se consultaba con trato neutro: quien elegía trato
+  ///     masculino o femenino tiraba su silueta sin enterarse.
+  ///
+  /// Se conserva tal cual, defectos incluidos, porque cambiarla ahora le
+  /// cambiaría la cara a quien ya tenga personaje. Eso es peor que ser
+  /// imperfecto.
   static String claveDeFigura({
     FormaTrato trato = FormaTrato.neutro,
     TipoCuerpo cuerpo = TipoCuerpo.neutro,
     String rostro = 'face_01',
   }) {
+    if (personajes.contains(rostro)) return rostro;
+
     final int variante = _varianteDe(rostro);
     final bool femenina = switch (trato) {
       FormaTrato.femenino => true,

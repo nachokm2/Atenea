@@ -292,6 +292,60 @@ void main() {
     });
   });
 
+  group('la figura se elige, ya no se deriva', () {
+    test('si el rostro ya es una figura, esa es la figura', () {
+      // Desde que la creación enseña las seis y deja elegir, la elección viaja
+      // en `rostro` —que es `face_id` en el servidor, 32 caracteres sin valores
+      // tasados—. Sin esto, elegir una figura no serviría de nada.
+      for (final String clave in Arte.personajes) {
+        expect(Arte.claveDeFigura(rostro: clave), clave);
+      }
+    });
+
+    test('la elección manda sobre el trato y la silueta', () {
+      // Antes el trato decidía la familia. Ahora no: quien elige una figura
+      // femenina y el trato masculino recibe la figura que eligió, porque es lo
+      // que vio al elegirla. El trato sigue decidiendo cómo se le habla.
+      expect(
+        Arte.claveDeFigura(
+          trato: FormaTrato.masculino,
+          cuerpo: TipoCuerpo.robusto,
+          rostro: 'base_femenino_003',
+        ),
+        'base_femenino_003',
+      );
+    });
+
+    test('un personaje viejo conserva la figura que tenía', () {
+      // Los creados antes guardaron `face_01`..`face_04`, no una figura. La
+      // derivación se queda para ellos tal cual estaba, defectos incluidos:
+      // cambiarla ahora les cambiaría la cara.
+      expect(Arte.claveDeFigura(rostro: 'face_01'), 'base_masculino_002');
+      expect(
+        Arte.claveDeFigura(trato: FormaTrato.femenino, rostro: 'face_02'),
+        'base_femenino_003',
+      );
+    });
+
+    test('la derivación vieja mandaba dos rostros a la misma figura', () {
+      // No es una prueba de algo que queramos: es el registro de por qué se
+      // cambió. Con la familia ya fijada por el trato, `(variante % 3) + 1`
+      // mandaba el rostro 1 y el 4 a la misma ilustración, así que de los cuatro
+      // que ofrecía la pantalla salían tres. Nadie podía verlo desde ahí.
+      expect(
+        Arte.claveDeFigura(trato: FormaTrato.masculino, rostro: 'face_01'),
+        Arte.claveDeFigura(trato: FormaTrato.masculino, rostro: 'face_04'),
+      );
+      // Con trato neutro no chocaban, pero por accidente: la paridad de la
+      // variante decidía la familia, así que el rostro 4 se iba a la femenina.
+      // Elegir «Rostro 4» cambiaba de sexo a la figura sin decirlo.
+      expect(
+        Arte.claveDeFigura(rostro: 'face_01'),
+        isNot(Arte.claveDeFigura(rostro: 'face_04')),
+      );
+    });
+  });
+
   group('el catálogo de rutas', () {
     test('toda figura declarada con cuerpo desnudo es una figura real', () {
       // Un error de dedo aquí no rompe nada visible: la imagen falla, cae al

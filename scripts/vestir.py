@@ -889,6 +889,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--nombre", help="Nombre del archivo de salida (por defecto, la ranura).")
     p.add_argument("--aplicar", action="store_true", help="Llama al modelo. Cuesta dinero.")
     p.add_argument(
+        "--trasladar",
+        action="store_true",
+        help="Mueve una pieza generada con --sobre hasta la mano de la figura "
+        "canónica y la guarda ahí. Sin llamar al modelo.",
+    )
+    p.add_argument(
         "--reusar",
         action="store_true",
         help="Recompone desde el PNG que ya devolvió el modelo, sin volver a llamarlo. "
@@ -910,6 +916,11 @@ def main(argv: list[str] | None = None) -> int:
         args.nombre = args.nombre or pieza.nombre
     elif not (args.figura and args.ranura):
         raise SystemExit("Sin --pieza hacen falta --figura y --ranura.")
+
+    if args.trasladar:
+        if pieza is None or not args.sobre:
+            raise SystemExit("--trasladar necesita --pieza y --sobre.")
+        return trasladar(pieza, args.familia, args.sobre)
 
     destino = SALIDA / args.figura
     destino.mkdir(parents=True, exist_ok=True)
@@ -964,6 +975,43 @@ def main(argv: list[str] | None = None) -> int:
     )
     (destino / f"bruto_{nombre}.png").write_bytes(bruto)
     return _componer(args, destino, nombre, figura, zona, pieza)
+
+
+def trasladar(pieza: Pieza, familia: str, origen: str) -> int:
+    """Lleva una pieza de la figura donde salió a la canónica de su familia.
+
+    Existe porque el modelo se niega en seco con ciertas combinaciones y accede
+    con otras: el bastón de aprendiz no salía en la figura femenina 002 después
+    de cinco intentos, y salió a la primera en la 003.
+
+    Una pieza empuñada se coloca respecto a la mano, así que trasladarla es
+    restar un centro y sumar el otro. No se reescala: las figuras de una familia
+    comparten ya coronilla y suelo —eso lo hace `alinear_cuerpos.py`—, de modo
+    que lo único que cambia es dónde cae la mano.
+    """
+    canonica = CANONICA[familia]
+    if origen == canonica:
+        raise SystemExit("La pieza ya está en la figura canónica.")
+
+    mano = "diestra" if pieza.banda == "arma" else "zurda"
+    centros = {}
+    for figura in (origen, canonica):
+        cuerpo = Image.open(SALIDA / figura / "base.png").convert("RGBA")
+        alfa = np.array(cuerpo.split()[3]) > 40
+        centros[figura] = _centro_de_la_mano(alfa, coronilla(cuerpo), mano)
+
+    dx = centros[canonica][0] - centros[origen][0]
+    dy = centros[canonica][1] - centros[origen][1]
+
+    capa = Image.open(SALIDA / origen / f"{pieza.nombre}.png").convert("RGBA")
+    movida = Image.new("RGBA", capa.size, (0, 0, 0, 0))
+    movida.paste(capa, (dx, dy), capa)
+    destino = SALIDA / canonica / f"{pieza.nombre}.png"
+    movida.save(destino)
+    damero(movida).save(SALIDA / canonica / f"{pieza.nombre}_sola.png")
+
+    print(f"{origen} -> {canonica}: movida {dx:+d},{dy:+d} px · caja {movida.split()[3].getbbox()}")
+    return 0
 
 
 def _lo_que_no_contradice(ranura: str) -> str:

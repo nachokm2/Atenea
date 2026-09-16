@@ -27,8 +27,10 @@ import 'package:provider/provider.dart';
 
 import '../../data/errores.dart';
 import '../../datos/repositorios.dart';
+import '../../design/arte.dart';
 import '../../design/components.dart';
 import '../../design/tokens.dart';
+import '../personaje/widgets/avatar_capas.dart';
 import '../../estado/celebraciones.dart';
 import '../../estado/sesion.dart';
 import 'widgets/avatar_lienzo.dart';
@@ -383,7 +385,7 @@ class _CuerpoCrearPersonajeState extends State<_CuerpoCrearPersonaje> {
                         etiquetas: const <String>[
                           'Orden',
                           'Cuerpo',
-                          'Rostro',
+                          'Figura',
                           'Cabello',
                         ],
                         iconos: const <IconData>[
@@ -485,10 +487,18 @@ class _Retrato extends StatelessWidget {
             Stack(
               alignment: Alignment.bottomRight,
               children: <Widget>[
-                LienzoAvatar(
-                  rasgos: borrador.rasgos,
-                  orden: borrador.orden,
-                  alto: alto,
+                // La figura de verdad, no el muñeco vectorial. Desde que se
+                // elige entre las seis mirándolas, enseñar aquí otro dibujo
+                // haría que la pantalla se contradijera a sí misma: elegirías
+                // una cara y verías otra encima.
+                SizedBox(
+                  height: alto,
+                  width: alto,
+                  child: AvatarCapas(
+                    capas: const <CapaAvatar>[],
+                    rasgos: borrador.rasgos,
+                    tamano: alto,
+                  ),
                 ),
                 // El dado vive sobre el retrato, junto a lo que cambia.
                 Padding(
@@ -877,40 +887,91 @@ class _PanelRostro extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final RasgosAvatar r = borrador.rasgos;
+    final String elegida = Arte.claveDeFigura(
+      trato: r.formaTrato,
+      cuerpo: r.tipoCuerpo,
+      rostro: r.rostro,
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const TituloBloque(texto: 'Rostro'),
+        const TituloBloque(texto: 'Tu figura'),
+        // Las seis ilustraciones de verdad, no cuatro rostros abstractos.
+        //
+        // Antes se ofrecían `face_01`..`face_04` y una función los repartía
+        // entre las seis figuras junto con el trato y la silueta. El aprendiz
+        // no podía saber qué le tocaba: elegía «Rostro 2» y recibía una de seis
+        // ilustraciones que no había visto, y dos de los cuatro rostros daban la
+        // misma. Ahora se elige mirando.
+        //
+        // La elección viaja en `rostro`, que es `face_id` en el servidor: una
+        // columna de 32 caracteres sin valores tasados. Por eso esto no necesitó
+        // migración ni tocar el contrato.
         Wrap(
-          spacing: Espacio.xs,
-          runSpacing: Espacio.xs,
+          spacing: Espacio.sm,
+          runSpacing: Espacio.sm,
           children: <Widget>[
-            for (final OpcionAvatar o in CatalogoAvatar.rostros)
-              _FichaRasgo(
-                etiqueta: o.etiqueta,
-                seleccionada: r.rostro == o.clave,
-                alTocar: () => borrador.fijarRasgos(rostro: o.clave),
-                rasgos: r.copiarCon(rostro: o.clave),
-                orden: borrador.orden,
-              ),
-          ],
-        ),
-        const TituloBloque(texto: 'Orejas'),
-        Wrap(
-          spacing: Espacio.xs,
-          runSpacing: Espacio.xs,
-          children: <Widget>[
-            for (final OpcionAvatar o in CatalogoAvatar.orejas)
-              ChipOpcion(
-                texto: o.etiqueta,
-                seleccionada: r.orejas == o.clave,
-                alTocar: () => borrador.fijarRasgos(orejas: o.clave),
-                semantica: 'Orejas ${o.etiqueta}',
+            for (final String clave in Arte.personajes)
+              _FichaFigura(
+                clave: clave,
+                seleccionada: elegida == clave,
+                alTocar: () => borrador.fijarRasgos(rostro: clave),
               ),
           ],
         ),
       ],
+    );
+  }
+}
+
+/// Una de las seis figuras, para elegirla viéndola.
+class _FichaFigura extends StatelessWidget {
+  const _FichaFigura({
+    required this.clave,
+    required this.seleccionada,
+    required this.alTocar,
+  });
+
+  final String clave;
+  final bool seleccionada;
+  final VoidCallback alTocar;
+
+  @override
+  Widget build(BuildContext context) {
+    final AteneaPalette p = context.paleta;
+    return Semantics(
+      button: true,
+      selected: seleccionada,
+      label: 'Figura ${Arte.personajes.indexOf(clave) + 1} de ${Arte.personajes.length}',
+      child: InkWell(
+        onTap: alTocar,
+        borderRadius: BorderRadius.circular(Redondeo.tarjeta),
+        child: Container(
+          width: 96,
+          height: 132,
+          decoration: BoxDecoration(
+            color: p.superficieElevada,
+            borderRadius: BorderRadius.circular(Redondeo.tarjeta),
+            border: Border.all(
+              color: seleccionada ? p.arcano : p.borde,
+              width: seleccionada ? 2 : 1,
+            ),
+          ),
+          clipBehavior: Clip.antiAlias,
+          // `alignment: topCenter` y un alto mayor que el ancho: la miniatura
+          // enseña la mitad de arriba, que es donde están la cara y el pelo, que
+          // es lo que distingue una figura de otra.
+          child: Image.asset(
+            Arte.personaje(clave),
+            alignment: Alignment.topCenter,
+            fit: BoxFit.cover,
+            filterQuality: FilterQuality.medium,
+            errorBuilder: (BuildContext context, Object error, StackTrace? pila) =>
+                Icon(Icons.person_rounded, color: p.textoSecundario),
+          ),
+        ),
+      ),
     );
   }
 }
