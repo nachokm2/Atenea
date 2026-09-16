@@ -88,8 +88,8 @@ CABEZA: tuple[Pieza, ...] = (
         "corona_laurel_plata",
         "head",
         "cabeza",
-        "una corona de hojas de laurel de plata batida, finísima y ligera, ceñida "
-        "sobre el pelo. Deja la cara entera descubierta",
+        "una corona de hojas de laurel de color plata clara y brillante, ceñida sobre "
+        "el pelo, con las hojas bien marcadas. Deja la cara entera descubierta",
     ),
     Pieza(
         "corona_del_maestro",
@@ -308,14 +308,14 @@ ACCESORIOS: tuple[Pieza, ...] = (
     Pieza(
         "antorcha_constancia",
         "accessory_body",
-        "manos",
-        "una antorcha corta empuñada en la mano, con la llama viva y el mango "
-        "ennegrecido por el aceite",
+        "empunado",
+        "una antorcha empuñada en la mano, con una llama anaranjada grande y bien "
+        "visible ardiendo en lo alto del mango, que está ennegrecido por el aceite",
     ),
     Pieza(
         "pluma_primer_paso",
         "accessory_body",
-        "manos",
+        "empunado",
         "una pluma de escribir pequeña sostenida entre los dedos, de barba clara y "
         "punta entintada",
     ),
@@ -344,7 +344,8 @@ def por_codigo(codigo: str) -> Pieza:
     """El objeto con ese código. Tolera espacios y saltos de línea alrededor.
 
     Lo del `strip()` no es mimo: la lista de pendientes se genera con un
-    redirección en Windows, que escribe CRLF, y cada código llegaba con un ``
+    redirección en Windows, que escribe CRLF, y cada código llegaba con un `
+`
     pegado detrás. Con la salida filtrada, una tanda de veinticinco piezas
     terminó con código 0 y sin generar ninguna.
     """

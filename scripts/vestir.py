@@ -146,7 +146,8 @@ SOLO_LA_PIEZA = (
     "Añade ÚNICAMENTE esa pieza. Todo lo demás se queda exactamente como está: "
     "el personaje sigue en camiseta sin mangas blanca y pantalón corto gris, y "
     "no le pongas ninguna otra prenda, ni túnica, ni cinturón, ni pantalón, ni "
-    "nada que no se te haya pedido."
+    "nada que no se te haya pedido. Sigue DESCALZO, sin botas ni sandalias, y "
+    "con los brazos y las piernas desnudos."
 )
 
 #: Lo que se le añade solo al desnudar.
@@ -226,7 +227,12 @@ BANDAS: dict[str, Banda] = {
     # cabeza se ensancha hasta dy≈80, se estrecha hasta el cuello en dy 165-180 y
     # los hombros arrancan de golpe en dy 195. La banda anterior llegaba a 200 y
     # se metía en los hombros.
-    "cabeza": Banda(desde=-20, hasta=170, holgura=4, protege_cara=True),
+    # Holgura grande, y no por descuido. La banda es la silueta ensanchada, así
+    # que con poca holgura una pieza solo puede dibujarse pegada a la cabeza: el
+    # sombrero de ala ancha salió un pegote y la capucha acabó pareciendo otro
+    # peinado, porque el ala y la caída no tenían dónde salir. Cincuenta y seis
+    # píxeles es el ancho de un ala.
+    "cabeza": Banda(desde=-40, hasta=180, holgura=14, protege_cara=True),
     "cuerpo": Banda(desde=215, hasta=455),
     "botas": Banda(desde=700, hasta=960, holgura=4),
     "capa": Banda(desde=140, hasta=800, holgura=10),
@@ -244,6 +250,10 @@ BANDAS: dict[str, Banda] = {
     # salida es generar las cuatro piezas de mano por figura y no por familia:
     # son cuatro objetos, no treinta y uno.
     "manos": Banda(desde=462, hasta=548, holgura=3, solo_extremos=True, ancho_maximo=60),
+    # Lo que se empuña, que no es lo mismo que lo que se calza en la mano. Una
+    # antorcha es sobre todo mango, y un guante no: ciñendo la banda a la mano,
+    # la antorcha y la pluma salieron invisibles porque no tenían dónde estar.
+    "empunado": Banda(desde=400, hasta=600, holgura=14, solo_extremos=True, ancho_maximo=48),
     # La cara, y solo para los anteojos, que son la única pieza del catálogo que
     # la toca. Iba de 150 a 215, que sobre el cuerpo desnudo es el cuello y los
     # hombros: los 195 de «línea de ojos» venían de otra escala. Con la cabeza
@@ -320,6 +330,14 @@ def zona_editable(figura: Image.Image, ranura: str) -> np.ndarray:
     abajo = min(LIENZO, top + banda.hasta)
     filas[arriba:abajo, :] = True
     zona = cuerpo & filas
+
+    if banda.solo_extremos:
+        # Ensanchar alrededor de la mano vuelve a alcanzar la cadera —el hueco
+        # entre las dos es de unos cuarenta píxeles y la holgura de una banda de
+        # empuñar es mayor—, así que se le quita lo que sea cuerpo y no se
+        # eligió. La banda puede crecer hacia el lienzo vacío, que es donde va el
+        # mango de una antorcha, y nunca sobre el pantalón.
+        zona &= ~(alfa & ~util)
 
     if banda.protege_cara:
         zona &= ~_la_cara(alfa, top)
