@@ -49,6 +49,7 @@ import uuid
 from collections.abc import Callable
 from typing import Any
 
+import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -77,6 +78,11 @@ SEGUNDOS_BARRIDO = 900.0
 #: Instante monotónico del próximo barrido. Arranca en cero para que la primera
 #: vuelta del worker ya lo haga.
 _proximo_barrido = 0.0
+
+#: Avisos de presupuesto que se mandan por vuelta. Son como mucho dos al día, así
+#: que el tope solo existe para que una base con historia vieja no dispare cien
+#: correos en el primer arranque tras el despliegue.
+TOPE_AVISOS_PRESUPUESTO = 5
 
 #: Identidad del proceso en los registros: permite seguir a un worker concreto.
 NOMBRE_WORKER = os.environ.get("WORKER_NAME") or f"worker-{uuid.uuid4().hex[:8]}"
@@ -391,6 +397,7 @@ def mantenimiento(db: Session) -> dict[str, int]:
     resumen.update(_tarea(db, "material", lambda: {"purgados": _purgar(db)}))
     resumen.update(_tarea(db, "avisos", lambda: _entregar_avisos(db)))
     resumen.update(_tarea(db, "planificador", lambda: _barrido_de_avisos(db)))
+    resumen.update(_tarea(db, "presupuesto", lambda: _avisar_del_presupuesto(db)))
     if any(resumen.values()):
         logger.info("mantenimiento", worker=NOMBRE_WORKER, **resumen)
     return resumen
@@ -407,6 +414,107 @@ def _tarea(db: Session, nombre: str, trabajo: Callable[[], dict[str, int]]) -> d
         return {}
     punto.commit()
     return resultado
+
+
+def _avisar_del_presupuesto(db: Session) -> dict[str, int]:
+    """Saca de la base los avisos de gasto de IA y los manda por correo.
+
+    `AI_BUDGET_THRESHOLD` se escribía en `domain_events` al cruzar el 80 % y el
+    100 % del presupuesto del día, y ahí se quedaba: nadie leía esa tabla, ningún
+    worker la barría, ningún endpoint la exponía y el módulo que la escribe ni
+    siquiera tiene registro. El freno de gasto funcionaba —cortaba antes de
+    gastar— y Rodrigo se enteraba cuando un aprendiz le escribía diciendo que su
+    ruta no se generaba.
+
+    Se hace aquí y no dentro de `verificar_presupuesto` por dos razones. Enviar un
+    correo tiene un plazo de espera de quince segundos, y esa función corre en
+    línea antes de cada llamada a la IA: le sumaría esos quince segundos a la
+    petición del aprendiz. Y si el servidor de correo falla, `enviar` levanta una
+    excepción que se llevaría por delante la generación que la disparó.
+
+    No hace falta escribir ningún freno de repetición: la clave de idempotencia
+    del emisor (`ai-budget:<fecha>:<porcentaje>`) más la unicidad de
+    `domain_events.idempotency_key` topan esto en dos correos al día, y lo topan
+    en PostgreSQL, que es donde no se puede equivocar nadie.
+    """
+    from app.core import correo  # noqa: PLC0415
+    from app.core.config import settings  # noqa: PLC0415
+    from app.models.enums import EventStatus, EventType  # noqa: PLC0415
+    from app.models.gamification import DomainEvent  # noqa: PLC0415
+
+    pendientes = list(
+        db.execute(
+            sa.select(DomainEvent)
+            .where(
+                DomainEvent.event_type == EventType.AI_BUDGET_THRESHOLD,
+                DomainEvent.processing_status == EventStatus.PENDING,
+            )
+            .order_by(DomainEvent.occurred_at)
+            .limit(TOPE_AVISOS_PRESUPUESTO)
+        )
+        .scalars()
+        .all()
+    )
+    if not pendientes:
+        return {}
+
+    enviados = 0
+    for evento in pendientes:
+        if not settings.alert_email:
+            # Había algo que avisar y no había a quién. Queda dicho en la fila,
+            # para que no se confunda con un aviso que sí salió.
+            evento.processing_status = EventStatus.SKIPPED
+            logger.warning("aviso_presupuesto_sin_destino", evento=str(evento.id))
+            continue
+        try:
+            correo.enviar(
+                destinatario=settings.alert_email,
+                asunto=_asunto_de_presupuesto(evento.payload or {}),
+                cuerpo=_cuerpo_de_presupuesto(evento.payload or {}),
+            )
+        except Exception:
+            evento.processing_status = EventStatus.FAILED
+            logger.exception("aviso_presupuesto_no_enviado", evento=str(evento.id))
+            continue
+        evento.processing_status = EventStatus.PROCESSED
+        evento.processed_at = utcnow()
+        enviados += 1
+
+    db.flush()
+    return {"avisos_presupuesto": enviados}
+
+
+def _asunto_de_presupuesto(payload: dict[str, Any]) -> str:
+    """Un asunto que se entienda desde la pantalla de bloqueo del teléfono."""
+    pct = payload.get("threshold_pct", 0)
+    gastado = payload.get("spent_usd", 0)
+    presupuesto = payload.get("budget_usd", 0)
+    if int(pct) >= 100:
+        return f"Atenea: se agotó el presupuesto de IA del día ({gastado:.2f} USD)"
+    return f"Atenea: gasto de IA al {pct} % ({gastado:.2f} de {presupuesto:.2f} USD)"
+
+
+def _cuerpo_de_presupuesto(payload: dict[str, Any]) -> str:
+    """El aviso dice qué pasa, qué se puede hacer, y de qué no se fía."""
+    pct = int(payload.get("threshold_pct", 0))
+    gastado = payload.get("spent_usd", 0)
+    presupuesto = payload.get("budget_usd", 0)
+    consecuencia = (
+        "La generación de rutas, de módulos y las re-explicaciones están "
+        "devolviendo 503 hasta la medianoche UTC."
+        if pct >= 100
+        else "Todavía se está generando con normalidad."
+    )
+    parrafos = [
+        f"El gasto de IA del día llegó al {pct} % del presupuesto: "
+        f"{gastado:.2f} de {presupuesto:.2f} USD.",
+        consecuencia,
+        "El presupuesto vive en game_configs, clave "
+        "ai.global_budget_usd_per_day: se sube con un UPDATE, sin desplegar.",
+        "Una advertencia sobre esta cifra: solo cuenta las llamadas que "
+        "terminaron bien. El gasto real puede ser algo mayor.",
+    ]
+    return "\n\n".join(parrafos)
 
 
 def _purgar(db: Session) -> int:

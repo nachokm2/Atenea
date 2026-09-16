@@ -52,6 +52,7 @@ from app.modules.ai.proveedor import (
     SolicitudIA,
     modelo_para_tarea,
     plantilla_para_tarea,
+    uso_vacio,
 )
 from app.modules.gamification import avisos, eventos as bus
 from app.modules.gamification.servicio_config import ServicioConfig
@@ -649,6 +650,10 @@ def disenar_ruta(
     try:
         salida, respuesta = generar_validado(proveedor, solicitud, SalidaRuta)
     except AteneaError as error:
+        # Las tentativas fallidas también se pagaron. Sin esto, una racha de
+        # generaciones que no cuadran con su esquema quema la tarjeta mientras el
+        # presupuesto del día sigue marcando cero y el freno no salta nunca.
+        costos.registrar_uso(db, job, getattr(error, "uso", None) or uso_vacio())
         costos.cerrar_job(db, job, estado=JobStatus.FAILED, error=str(error))
         path.status = PathStatus.FAILED
         db.flush()

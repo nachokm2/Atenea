@@ -208,6 +208,12 @@ export default defineRailway((ctx) => {
       EMAIL_FROM: "Atenea <no-responder@atenea.cl>",
       SMTP_PORT: "587",
 
+      // A quién se avisa cuando el gasto de IA del día cruza un umbral. No es un
+      // secreto, pero va con `preserve()` para poder cambiarla desde el panel sin
+      // desplegar: el día que haga falta cambiarla es, justamente, un día en el
+      // que no se quiere esperar a un despliegue.
+      ALERT_EMAIL: preserve(),
+
       CORS_ORIGINS: '["https://atenea.cl","https://www.atenea.cl"]',
 
       // Cargados a mano en el panel una sola vez. `preserve()` significa

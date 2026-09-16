@@ -38,9 +38,18 @@ logger = get_logger(__name__)
 
 
 class SalidaInvalida(ExternalServiceError):
-    """502 · La IA devolvió una salida que no cumple su esquema tras los reintentos."""
+    """502 · La IA devolvió una salida que no cumple su esquema tras los reintentos.
+
+    Lleva el consumo de **todas** las tentativas en `uso`. Esas llamadas se
+    hicieron y el proveedor las cobra, aunque ninguna sirviera: quien cierre el
+    trabajo tiene que contabilizarlas o el presupuesto del día dirá que no se
+    gastó nada.
+    """
 
     code = "GENERATION_FAILED"
+
+    #: Consumo acumulado de los intentos fallidos. Lo rellena `generar_validado`.
+    uso: UsoIA | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -477,6 +486,11 @@ def generar_validado[ModeloSalida: EsquemaSalida](
     En cada reintento se le devuelve al modelo el error exacto de validación. El uso de
     todas las tentativas se acumula en la `RespuestaIA` devuelta, de modo que el coste
     de los reintentos también se contabiliza.
+
+    Y si ninguna tentativa valida, ese consumo no se pierde: viaja en
+    `SalidaInvalida.uso`. Antes se descartaba, así que una racha de generaciones
+    que no cuadraban con su esquema quemaba la tarjeta a toda velocidad mientras
+    el presupuesto del día seguía marcando cero y el freno no saltaba nunca.
     """
     if solicitud.esquema is None:
         solicitud.esquema = esquema_estricto(modelo)
@@ -525,10 +539,12 @@ def generar_validado[ModeloSalida: EsquemaSalida](
         errors=detalles.get("errors"),
         muestra=str(respuesta.contenido)[:400] if respuesta else "",
     )
-    raise SalidaInvalida(
+    fallo = SalidaInvalida(
         "No pudimos generar el contenido. Inténtalo de nuevo.",
         details=detalles,
     )
+    fallo.uso = uso_total
+    raise fallo
 
 
 __all__ = [

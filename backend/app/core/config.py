@@ -168,6 +168,19 @@ class Settings(BaseSettings):
     smtp_user: str | None = None
     smtp_password: str | None = None
 
+    #: A quién se avisa cuando algo va mal en el servicio. No es la dirección de
+    #: ningún aprendiz: es la de quien opera el Reino.
+    #:
+    #: Sin ella, el aviso no se envía y queda anotado en el registro. A propósito
+    #: no entra en las comprobaciones de arranque: añadir un motivo nuevo de
+    #: caída a un despliegue vivo, por un aviso, sale más caro que el aviso.
+    #:
+    #: Conviene que no sea un correo institucional con filtros ajenos, sino uno
+    #: que suene en el teléfono. Y como `email_from` es `no-responder@atenea.cl`,
+    #: el primer aviso tiene números de acabar en la carpeta de no deseado: vale
+    #: la pena mandarse uno de prueba y marcarlo antes de fiarse.
+    alert_email: str | None = None
+
     #: Cuánto vive el permiso para elegir una contraseña nueva. Corto a
     #: propósito: es una llave a la cuenta viajando por correo.
     password_reset_ttl_min: int = 30
