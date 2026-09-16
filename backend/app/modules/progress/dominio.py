@@ -1100,6 +1100,34 @@ class ServicioDominio:
             )
             resultado.eventos.append(EventType.AREA_MASTERED)
 
+        # El territorio del mapa sale de la niebla la primera vez que el aprendiz
+        # gana dominio en ese conocimiento: es la misma condición que usa
+        # `estado_territorio` para pasar de FOGGED a DISCOVERED. `TERRITORY_UNLOCKED`
+        # estaba en el catálogo de eventos y había un logro contándolo, pero no lo
+        # emitía nadie: ese logro no podía desbloquearse jamás.
+        if (
+            resultado.knowledge_area_id
+            and resultado.area_after > 0
+            and resultado.area_before <= 0
+        ):
+            self._insertar_evento(
+                EventType.TERRITORY_UNLOCKED,
+                user_id,
+                {
+                    "knowledge_area_id": str(resultado.knowledge_area_id),
+                    "territory_id": self._territorio_de(resultado.knowledge_area_id),
+                    "mastery": resultado.area_after,
+                },
+                # Una sola vez por conocimiento y aprendiz, para siempre: un
+                # dominio que baje a cero y vuelva a subir no redescubre el mapa.
+                clave=f"territory-unlocked:{user_id}:{resultado.knowledge_area_id}:1",
+                momento=momento,
+                correlation_id=correlation_id,
+                timezone_name=timezone_name,
+                permitir_duplicado=True,
+            )
+            resultado.eventos.append(EventType.TERRITORY_UNLOCKED)
+
         if resultado.weakness_detected and resultado.topic_id:
             self._insertar_evento(
                 EventType.WEAKNESS_DETECTED,
@@ -1119,6 +1147,15 @@ class ServicioDominio:
             )
             resultado.eventos.append(EventType.WEAKNESS_DETECTED)
             self._proponer_repaso(user_id, resultado.topic_id, marca)
+
+    def _territorio_de(self, knowledge_area_id: uuid.UUID) -> str | None:
+        """Territorio del mapa que representa a ese conocimiento (1:1)."""
+        from app.models.content import Territory  # noqa: PLC0415 - evita el ciclo
+
+        encontrado = self.db.execute(
+            sa.select(Territory.id).where(Territory.knowledge_area_id == knowledge_area_id)
+        ).scalar_one_or_none()
+        return str(encontrado) if encontrado else None
 
     def _proponer_repaso(self, user_id: uuid.UUID, topic_id: uuid.UUID, marca: int) -> None:
         """Aviso de repaso del tema que acaba de marcarse débil (§4.2).

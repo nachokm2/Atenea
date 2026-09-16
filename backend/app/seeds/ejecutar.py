@@ -401,6 +401,45 @@ def _sembrar_item(
 # ---------------------------------------------------------------------------
 
 
+def derivar_cosmeticos_de_conocimiento(
+    db: Session, areas: dict[str, KnowledgeArea], resumen: Resumen
+) -> None:
+    """Materializa los tres moldes del catálogo para cada conocimiento canónico.
+
+    Los moldes (`tpl_capa_estudiante`, `tpl_capa_maestro`,
+    `tpl_insignia_perfeccion`) llevan el hueco `{short_name}` en el nombre y no
+    son equipables: existen para derivar uno por conocimiento. Nadie los derivaba,
+    así que terminar una ruta prometía una capa que no existía como fila y todo
+    cosmético de conocimiento del juego era inalcanzable.
+
+    Va después de `sembrar_items` porque necesita los moldes ya en la base, y es
+    idempotente: repetir la siembra no crea duplicados.
+    """
+    from app.models.economy import ItemRequirement  # noqa: PLC0415
+    from app.modules.economy import plantillas  # noqa: PLC0415 - evita el ciclo
+
+    derivados: list[uuid.UUID] = []
+    for area in areas.values():
+        for item in plantillas.derivar_para_area(db, area):
+            resumen.registrar("items", creada=True)
+            derivados.append(item.id)
+
+    if not derivados:
+        return
+    # Las condiciones viajan con el derivado y también son filas sembradas: sin
+    # contarlas, el resumen diría que el catálogo tiene menos requisitos de los
+    # que tiene, y el oráculo de la siembra dejaría de cuadrar.
+    condiciones = int(
+        db.execute(
+            sa.select(sa.func.count(ItemRequirement.id)).where(
+                ItemRequirement.item_id.in_(derivados)
+            )
+        ).scalar_one()
+    )
+    for _ in range(condiciones):
+        resumen.registrar("item_requirements", creada=True)
+
+
 def sembrar_logros(db: Session, cfg: ServicioConfig, resumen: Resumen) -> None:
     """Siembra los 32 logros con sus reglas declarativas y sus niveles."""
     for semilla in catalogo_logros(cfg):
@@ -728,6 +767,7 @@ def sembrar(db: Session) -> Resumen:
     sembrar_niveles(db, cfg, resumen)
     areas = sembrar_areas(db, resumen)
     sembrar_items(db, cfg, areas, resumen)
+    derivar_cosmeticos_de_conocimiento(db, areas, resumen)
     sembrar_logros(db, cfg, resumen)
     sembrar_misiones(db, resumen)
     sembrar_reglas_recompensa(db, resumen)

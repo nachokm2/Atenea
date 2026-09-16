@@ -204,11 +204,13 @@ def crear_item(db: Session):
         requirement_facts: list[str] | None = None,
         render_manifest: dict[str, Any] | None = None,
         knowledge_area_id: uuid.UUID | None = None,
+        is_template: bool = False,
+        description: str = "Ítem cosmético de pruebas.",
     ) -> Item:
         item = Item(
             code=code or f"item_{uuid.uuid4().hex[:12]}",
             name=name,
-            description="Ítem cosmético de pruebas.",
+            description=description,
             slot=slot,
             rarity=rarity,
             origin=origin,
@@ -223,6 +225,7 @@ def crear_item(db: Session):
             render_manifest=render_manifest
             or manifiesto(code or "item_de_prueba", CAPAS_POR_RANURA.get(slot, (slot.value,))),
             knowledge_area_id=knowledge_area_id,
+            is_template=is_template,
         )
         db.add(item)
         db.flush()

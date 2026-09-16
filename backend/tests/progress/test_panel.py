@@ -10,6 +10,7 @@ cuenta, que es justo lo contrario de para lo que sirve una campana.
 
 from __future__ import annotations
 
+import datetime as dt
 import uuid
 from datetime import timedelta
 
@@ -29,6 +30,9 @@ from app.modules.progress.panel import (
 )
 
 ZONA = "America/Santiago"
+
+#: Un día cualquiera, a una hora en la que nadie está en silencio.
+MEDIODIA = dt.date(2026, 3, 10)
 
 
 def _ruta_del_usuario(
@@ -139,6 +143,12 @@ def test_el_panel_trae_los_avisos_sin_leer(
             cuerpo="Cuerpo.",
             clave=f"panel:{uuid.uuid4().hex}:{indice}",
             cfg=cfg,
+            # Mediodía, y fijado a propósito. Sin esto la prueba usaba la hora
+            # de quien la ejecutara: pasadas las diez de la noche el aviso cae en
+            # horas de silencio, nace programado para las ocho de la mañana en
+            # vez de entregado, y la campana marca cero con toda la razón. La
+            # prueba pasaba de día y fallaba de noche.
+            momento=avisos.instante_local(MEDIODIA, dt.time(12, 0), ZONA),
         )
         assert creado is not None
 

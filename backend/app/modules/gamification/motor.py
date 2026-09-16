@@ -983,6 +983,30 @@ def _recompensa_de_logro(db: Session, ctx: Contexto, evento: DomainEvent) -> Non
 # ---------------------------------------------------------------------------
 
 
+def _cosmeticos_del_conocimiento(db: Session, evento: DomainEvent) -> None:
+    """Deriva los cosméticos del conocimiento que el aprendiz acaba de crear.
+
+    El catálogo trae tres moldes —Capa del Estudiante, Capa del Maestro e
+    Insignia de la Perfección— cuyo nombre lleva el hueco `{short_name}`. Sin
+    derivarlos, terminar una ruta de un conocimiento propio prometía una capa que
+    no existía como fila, y el desbloqueo del paso 6 no tenía nada que otorgar.
+
+    Los conocimientos canónicos los derivan las semillas; este camino es solo el
+    de los que crea el aprendiz.
+    """
+    from app.models.content import KnowledgeArea  # noqa: PLC0415 - §1.3
+    from app.modules.economy import plantillas  # noqa: PLC0415 - §1.3
+
+    payload = dict(evento.payload or {})
+    area_id = payload.get("knowledge_area_id") or payload.get("area_id")
+    if not area_id:
+        return
+    area = db.get(KnowledgeArea, uuid.UUID(str(area_id)))
+    if area is None:
+        return
+    plantillas.derivar_para_area(db, area)
+
+
 def _misiones_de_la_ruta(db: Session, ctx: Contexto, evento: DomainEvent) -> None:
     """Instancia las misiones especiales de una ruta recién empezada (§5.7).
 
@@ -1166,6 +1190,11 @@ def _procesar(db: Session, ctx: Contexto, evento: DomainEvent) -> None:
     _revisar_nivel(db, ctx, evento, xp_antes)
     if tipo in EVENTOS_APRENDIZAJE:
         _completar_conocimiento(db, ctx, evento)
+
+    # Un conocimiento nuevo estrena sus cosméticos antes de nada: los
+    # desbloqueos del paso 6 solo pueden otorgar ítems que existan.
+    if tipo == EventType.KNOWLEDGE_AREA_CREATED:
+        _cosmeticos_del_conocimiento(db, evento)
 
     # 4 y 5 · Misiones y logros. Empezar una ruta instancia primero las suyas,
     # para que el mismo evento pueda ya avanzarlas.

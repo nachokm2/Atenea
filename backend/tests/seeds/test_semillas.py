@@ -29,8 +29,13 @@ TOTALES_ESPERADOS: dict[str, int] = {
     "level_definitions": 100,
     "knowledge_areas": 7,
     "territories": 7,
-    "items": 46,
-    "item_requirements": 18,
+    # 46 del catálogo más los 21 derivados de plantilla: tres moldes
+    # («Capa del Estudiante de {short_name}» y compañía) por cada uno de los
+    # siete conocimientos canónicos. Antes no se derivaba ninguno, y por eso todo
+    # cosmético de conocimiento del juego era inalcanzable.
+    "items": 67,
+    # 18 del catálogo más las 28 condiciones que viajan con esos derivados.
+    "item_requirements": 46,
     "shop_listings": 21,
     "achievements": 32,
     "mission_templates": 23,

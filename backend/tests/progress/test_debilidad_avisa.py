@@ -114,3 +114,66 @@ def test_un_tema_sano_no_avisa_de_nada(
         sa.select(UserTopicProgress).where(UserTopicProgress.topic_id == contenido.tema.id)
     ).scalar_one()
     assert fila.is_weak is False
+
+
+# ---------------------------------------------------------------------------
+# El territorio del mapa
+# ---------------------------------------------------------------------------
+#
+# `TERRITORY_UNLOCKED` estaba en el catálogo de eventos y hay un logro
+# contándolo, pero no lo emitía nadie: ese logro no podía desbloquearse jamás.
+# Sale de la niebla con la misma condición que usa el mapa para pasar de FOGGED
+# a DISCOVERED: el primer dominio del aprendiz en ese conocimiento.
+
+
+def test_el_primer_dominio_saca_el_territorio_de_la_niebla(
+    db: Session, config_sembrada: None, usuario: User, contenido
+) -> None:
+    for _ in range(4):
+        registrar_respuesta(db, usuario, contenido, correcta=True)
+
+    resultado = ServicioDominio(db).recalcular_cascada(usuario.id, topic_id=contenido.tema.id)
+
+    assert resultado.area_after > 0
+    assert EventType.TERRITORY_UNLOCKED in resultado.eventos
+    eventos = _eventos(db, EventType.TERRITORY_UNLOCKED)
+    assert len(eventos) == 1
+    assert eventos[0].payload["knowledge_area_id"] == str(contenido.area.id)
+
+
+def test_el_territorio_no_se_redescubre(
+    db: Session, config_sembrada: None, usuario: User, contenido
+) -> None:
+    """Un dominio que sube, baja y vuelve a subir no vale dos veces."""
+    servicio = ServicioDominio(db)
+    primero = utcnow()
+    for _ in range(4):
+        registrar_respuesta(db, usuario, contenido, correcta=True)
+    servicio.recalcular_cascada(usuario.id, topic_id=contenido.tema.id, ahora=primero)
+
+    registrar_respuesta(db, usuario, contenido, correcta=True)
+    servicio.recalcular_cascada(
+        usuario.id, topic_id=contenido.tema.id, ahora=primero + timedelta(seconds=5)
+    )
+
+    assert len(_eventos(db, EventType.TERRITORY_UNLOCKED)) == 1
+
+
+def test_intentarlo_y_fallar_tambien_descubre_el_territorio(
+    db: Session, config_sembrada: None, usuario: User, contenido
+) -> None:
+    """La cobertura cuenta aunque las respuestas no acierten, y está bien.
+
+    El mapa da el territorio por descubierto en cuanto el aprendiz pone un pie,
+    acierte o no. No hay aquí una prueba del caso contrario —territorio con
+    niebla— porque no se puede montar: el dominio de un conocimiento no baja de
+    cero ni sin evidencias, y el recálculo solo se dispara cuando el aprendiz ha
+    hecho algo en ese conocimiento. La niebla es, literalmente, no haber pasado.
+    """
+    for _ in range(4):
+        registrar_respuesta(db, usuario, contenido, correcta=False)
+
+    resultado = ServicioDominio(db).recalcular_cascada(usuario.id, topic_id=contenido.tema.id)
+
+    assert resultado.area_after > 0
+    assert EventType.TERRITORY_UNLOCKED in resultado.eventos

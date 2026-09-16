@@ -30,6 +30,13 @@ from app.modules.gamification.servicio_config import ServicioConfig
 
 SANTIAGO = "America/Santiago"
 
+#: Un día cualquiera, y su mediodía. Toda prueba de esta suite trabaja sobre un
+#: reloj fijado: sin él, las que esperan un aviso ENTREGADO pasaban de día y
+#: fallaban de noche, porque a partir de las diez el aviso cae en horas de
+#: silencio y nace programado para la mañana siguiente. Una prueba que depende de
+#: cuándo se ejecuta no prueba nada.
+DIA = dt.date(2026, 3, 10)
+
 
 def _instante(dia: dt.date, hora: dt.time, zona: str = SANTIAGO) -> dt.datetime:
     """Atajo legible: «las 19:00 del martes en Santiago», en UTC."""
@@ -44,6 +51,7 @@ def _crear(db: Session, cfg: ServicioConfig, usuario: User, **kwargs) -> Notific
         "cuerpo": "Cuerpo del aviso.",
         "clave": f"prueba:{uuid.uuid4().hex}",
         "cfg": cfg,
+        "momento": _instante(DIA, dt.time(12, 0)),
     }
     base.update(kwargs)
     return avisos.crear(db, **base)
