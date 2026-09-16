@@ -5,12 +5,18 @@ import 'tokens.dart';
 
 /// Catálogo de arte de Atenea: qué ilustración le corresponde a cada cosa.
 ///
-/// Las ilustraciones son piezas de catálogo, no capas de muñeco de papel: cada
-/// una llena su propio lienzo a su escala y el personaje base ya viene vestido.
-/// Por eso el avatar **no se compone apilando prendas**: se elige una figura
-/// completa y el equipamiento se muestra como fichas alrededor. Cuando exista
-/// un pack de arte por capas, el manifiesto del servidor ya trae la pila de
-/// dibujado y solo habrá que cambiar `AvatarCapas`.
+/// Conviven dos clases de arte, y no son lo mismo.
+///
+/// Las **ilustraciones de catálogo** —`personajes/` e `items/`— son piezas
+/// terminadas: cada una llena su propio lienzo a su escala, y la figura del
+/// personaje ya viene vestida. No se pueden apilar. Se usan para las fichas del
+/// Vestidor y del Mercado, y para las figuras que todavía no tengan cuerpo
+/// desnudo.
+///
+/// El **arte por capas** —`capas/`— sí se apila: comparte un lienzo maestro de
+/// 1024×1024 con cada pieza ya colocada dentro, así que superponer centrado las
+/// deja en su sitio sin calcular nada. Lo genera `scripts/vestir.py` y lo trae
+/// `scripts/exportar_capas.py`.
 ///
 /// El emparejamiento es por código de ítem. Lo que no tiene ilustración cae al
 /// icono de su ranura, que es un marcador honesto: se ve que falta arte, no se
@@ -83,20 +89,23 @@ abstract final class Arte {
 
   /// Figuras que ya tienen cuerpo desnudo, y que por tanto se dibujan apilando.
   ///
+  /// Ya son las seis. Se deja como conjunto y no como un `bool` porque el arte
+  /// llegó figura a figura y podría volver a pasar: si mañana se añade una
+  /// séptima, entra aquí el día que tenga su cuerpo y mientras tanto sigue por
+  /// el camino de la ilustración vestida sin que nadie toque el widget.
+  ///
   /// Se lleva a mano y a propósito. Flutter no sabe preguntar si un recurso
   /// existe sin intentar cargarlo, así que la alternativa sería descubrirlo por
   /// el `errorBuilder` de cada imagen, ya pintando: para entonces la decisión de
   /// si enseñar las fichas del margen o no ya está tomada, y saldrían las dos
   /// cosas a la vez.
-  ///
-  /// Una figura entra aquí el día que `assets/arte/capas/cuerpos/<clave>.webp`
-  /// existe y se ha mirado. Mientras no esté, esa figura sigue por el camino de
-  /// siempre —ilustración vestida y fichas alrededor—, que no es un respaldo de
-  /// emergencia sino lo que se ve hoy.
   static const Set<String> conCuerpoDesnudo = <String>{
     'base_masculino_001',
     'base_masculino_002',
     'base_masculino_003',
+    'base_femenino_001',
+    'base_femenino_002',
+    'base_femenino_003',
   };
 
   /// Cuerpo desnudo de una figura: el fondo de la pila de dibujado.
@@ -107,9 +116,9 @@ abstract final class Arte {
   /// El `src` que manda el servidor no dice de qué familia es, y no debe: el
   /// mismo objeto lo llevan las seis figuras. Quien sabe de qué cuerpo se trata
   /// es el cliente, que es quien eligió la figura.
-  /// El `src` ya trae la extensión: el contrato dice que es «el archivo», y
-  /// dejar que el cliente la ponga sería decidir aquí un formato que decide el
-  /// servidor.
+  ///
+  /// Y ya trae la extensión: el contrato dice que `src` es «el archivo», así que
+  /// ponerla aquí sería decidir en el cliente un formato que decide el servidor.
   static String capaDeEquipo({required String figura, required String src}) {
     final String familia = figura.contains('femenino') ? 'femenino' : 'masculino';
     return '$_raiz/capas/$familia/$src';

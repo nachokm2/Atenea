@@ -146,8 +146,19 @@ SOLO_LA_PIEZA = (
     "Añade ÚNICAMENTE esa pieza. Todo lo demás se queda exactamente como está: "
     "el personaje sigue en camiseta sin mangas blanca y pantalón corto gris, y "
     "no le pongas ninguna otra prenda, ni túnica, ni cinturón, ni pantalón, ni "
-    "nada que no se te haya pedido. Sigue DESCALZO, sin botas ni sandalias, y "
-    "con los brazos y las piernas desnudos."
+    "nada que no se te haya pedido."
+)
+
+#: Y esto, solo a lo que no va en los pies.
+#:
+#: Iba dentro de `SOLO_LA_PIEZA`, junto al resto, y se volvió contra sí mismo:
+#: estaba ahí para que las capas dejaran de traer botas de regalo, pero también
+#: se lo decía a las botas. Pidiéndole unas botas de camino sobre la figura
+#: femenina devolvió los pies descalzos, obedeciendo. Dos de los cuatro pares
+#: salieron así y un tercero con una sola bota.
+DESCALZO = (
+    " Sigue DESCALZO, sin botas ni sandalias, y con los brazos y las piernas "
+    "desnudos."
 )
 
 #: Lo que se le añade solo al desnudar.
@@ -241,7 +252,14 @@ BANDAS: dict[str, Banda] = {
     # lienzo entero dibujó **otra persona** —otra cara, otra altura y los brazos
     # cruzados en vez de a los costados—, y una pose distinta invalida de golpe
     # todas las piezas que se pinten después.
-    "base": Banda(relleno=True, desde=195, hasta=970, holgura=3),
+    # Empieza en el cuello y no en los hombros, y eso importa más de lo que
+    # parece: por ahí pasa la costura entre la cabeza que se conserva y el cuerpo
+    # que dibuja el modelo. Cortando en dy 195 la costura cae en los hombros, y
+    # ahí las dos imágenes no coinciden —el cuello se ensancha de golpe y el pelo
+    # salta—, así que se veía una raya cruzando el pecho. Medido sobre el cuerpo
+    # desnudo, el cuello es la fila más estrecha: dy 165-180, 73 px de ancho.
+    # Ahí el corte es piel contra piel.
+    "base": Banda(relleno=True, desde=178, hasta=970, holgura=3),
     # Y las mismas dos, por tramos, para cuando de una sola pasada se desvía.
     # Cuanta más superficie se le da al modelo, más se inventa: con el lienzo
     # entero dibujó otra persona; con el cuerpo entero, una figura más alta y
@@ -589,15 +607,31 @@ def desnudar(figura: Image.Image, nuevo: Image.Image, zona: np.ndarray) -> Image
     verdad, y taparlo pinta una mancha negra en el costado.
     """
     util = zona & ~solo_fondo(nuevo)
+
+    # Las dos mitades se cruzan en el corte en vez de encontrarse a cuchillo: la
+    # de arriba se desvanece mientras la de abajo aparece. Un corte limpio se ve
+    # siempre, por bien que coincidan las dos imágenes.
+    #
+    # Solo en el corte horizontal, y por filas. Con la distancia al borde de la
+    # zona entera, la rampa también bajaba a cero alrededor de toda la silueta, y
+    # ahí `1 - rampa` devolvía la figura vestida: reaparecían las mangas y las
+    # botas en fantasma, ensanchando la caja cincuenta píxeles.
+    filas = np.where(zona.any(axis=1))[0]
+    corte = int(filas.min()) if filas.size else 0
+    rampa = np.clip((np.arange(LIENZO) - corte) / FUNDIDO, 0, 1)[:, None] * np.ones(
+        (1, LIENZO)
+    )
+
     cuerpo = nuevo.copy()
     cuerpo.putalpha(
-        Image.fromarray((util * 255).astype(np.uint8), "L").filter(ImageFilter.GaussianBlur(0.6))
+        Image.fromarray((util * rampa * 255).astype(np.uint8), "L").filter(
+            ImageFilter.GaussianBlur(0.6)
+        )
     )
 
     vaciada = figura.copy()
-    alfa = np.array(vaciada.split()[3])
-    alfa[zona] = 0
-    vaciada.putalpha(Image.fromarray(alfa, "L"))
+    alfa = np.array(vaciada.split()[3]) * (1 - rampa)
+    vaciada.putalpha(Image.fromarray(alfa.astype(np.uint8), "L"))
     return Image.alpha_composite(vaciada, cuerpo)
 
 
@@ -614,6 +648,31 @@ CAMBIO = 30
 #: repartidas por toda la banda que, si se dejan, salpican la capa de suciedad.
 MOTA = 400
 
+#: Y trozos sueltos menores que esta parte del mayor, también.
+#:
+#: El modelo no solo resombrea lo que no toca: a veces lo **mueve**. Al pedir un
+#: jubón sobre la figura femenina redibujó los brazos un poco más adentro, y esas
+#: dos tiras de piel desplazada difieren del original en 212 niveles —más que el
+#: propio jubón, que difiere 156—, así que ningún umbral las separa. Lo que sí
+#: las distingue es el tamaño: sueltas y flacas al lado de la prenda.
+#:
+#: Una fracción y no un número fijo porque las piezas no miden lo mismo. Y no
+#: tanta como para tirar la segunda bota o el segundo guante, que vienen en dos
+#: trozos parecidos.
+PARTE_MINIMA = 0.15
+
+#: Cuántos píxeles tarda una capa en desaparecer contra el borde de su banda.
+#:
+#: La banda acaba donde acaba, pero el modelo pinta hasta el último píxel que le
+#: dejas, así que un corte a cuchillo deja una raya. En la figura femenina salía
+#: una barra horizontal cruzando el pecho y el pelo, justo en el borde alto de la
+#: banda del cuerpo: ahí el modelo había redibujado los hombros con otro tono y
+#: la capa los traía de golpe.
+#:
+#: No pasa nada por perder catorce píxeles en el borde: la banda se dibuja con
+#: holgura de sobra alrededor de donde va la prenda, precisamente para esto.
+FUNDIDO = 14
+
 
 def _lo_que_cambio(figura: Image.Image, nuevo: Image.Image) -> np.ndarray:
     """Los píxeles donde el modelo pintó algo distinto de lo que había.
@@ -622,26 +681,40 @@ def _lo_que_cambio(figura: Image.Image, nuevo: Image.Image) -> np.ndarray:
     todo lo que hay en la banda y no es fondo, y en una capa abierta por delante
     eso incluye la camiseta y la piel que se ven **entre** los paños: el archivo
     `cape_front` acababa llevando dentro una copia del torso, que luego se pinta
-    encima de la armadura y la tapa. Se vio con una armadura de placas a la que
-    le desaparecía la pechera al ponerle una capa encima.
+    encima de la armadura y la tapa.
+
+    La comparación tolera desplazamiento, y esa es la parte que importa. El
+    modelo no solo resombrea lo que no toca: lo mueve unos píxeles. Comparando
+    píxel contra píxel, un brazo redibujado dos píxeles más adentro difiere 212
+    niveles —más que el propio jubón, que difiere 156—, así que entraba en la
+    capa y salía un brazo doble. Un píxel cuenta como «lo mismo» si su color
+    aparece en el original **en algún sitio cercano**, y entonces el brazo movido
+    vuelve a ser el brazo.
 
     Donde la figura de partida no tenía nada, cualquier cosa que no sea fondo es
-    la pieza: es por donde la capa cuelga más allá del cuerpo.
+    la pieza: es por donde una capa cuelga más allá del cuerpo.
     """
     antes = np.array(figura.convert("RGB"), dtype=np.int16)
     despues = np.array(nuevo.convert("RGB"), dtype=np.int16)
-    distinto = np.abs(antes - despues).max(axis=2) > CAMBIO
+
+    parecido = np.full(antes.shape[:2], 255, dtype=np.int16)
+    for dy in (-6, -3, 0, 3, 6):
+        for dx in (-6, -3, 0, 3, 6):
+            corrido = np.roll(np.roll(antes, dy, axis=0), dx, axis=1)
+            parecido = np.minimum(parecido, np.abs(corrido - despues).max(axis=2))
+
     vacio = np.array(figura.split()[3]) <= 40
-    return distinto | vacio
+    return (parecido > CAMBIO) | vacio
 
 
 def _sin_motas(mascara: np.ndarray) -> np.ndarray:
-    """Tira los trozos sueltos que son ruido y no pieza."""
+    """Tira los trozos sueltos que son ruido, o cuerpo movido, y no pieza."""
     etiquetas, cuantos = ndimage.label(mascara)
     if cuantos == 0:
         return mascara
     tamanos = ndimage.sum_labels(mascara, etiquetas, range(1, cuantos + 1))
-    grandes = {i + 1 for i, t in enumerate(tamanos) if t >= MOTA}
+    corte = max(MOTA, PARTE_MINIMA * max(tamanos))
+    grandes = {i + 1 for i, t in enumerate(tamanos) if t >= corte}
     return np.isin(etiquetas, list(grandes))
 
 
@@ -657,7 +730,12 @@ def extraer_capa(nuevo: Image.Image, zona: np.ndarray, figura: Image.Image) -> I
     fondo = solo_fondo(nuevo)
     util = zona & ~fondo & _lo_que_cambio(figura, nuevo)
     util = _sin_motas(ndimage.binary_closing(util, structure=np.ones((5, 5))))
-    alfa = Image.fromarray((util * 255).astype(np.uint8), "L").filter(ImageFilter.GaussianBlur(0.7))
+
+    # Se desvanece contra el borde de la banda, que si no se ve el corte.
+    borde = np.clip(ndimage.distance_transform_edt(zona) / FUNDIDO, 0, 1)
+    alfa = Image.fromarray((util * borde * 255).astype(np.uint8), "L").filter(
+        ImageFilter.GaussianBlur(0.7)
+    )
     capa = nuevo.copy()
     capa.putalpha(alfa)
     return capa
@@ -827,7 +905,7 @@ def main(argv: list[str] | None = None) -> int:
         + (
             f" {DESNUDEZ}"
             if args.ranura.startswith("base")
-            else f" {SOLO_LA_PIEZA}"
+            else f" {SOLO_LA_PIEZA}" + ("" if args.ranura == "botas" else DESCALZO)
         )
         + f" El fondo, {FONDO}.",
     )

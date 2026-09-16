@@ -9,9 +9,10 @@
 /// comparten el lienzo maestro de 1024×1024, con la pieza colocada dentro, así
 /// que apilarlas centradas las deja en su sitio sin calcular nada.
 ///
-/// Lo que se prueba aquí es el interruptor entre las dos formas de dibujar, que
-/// es donde está el riesgo de verdad: el arte por capas llega figura a figura y
-/// pieza a pieza, así que las dos formas conviven durante meses.
+/// Lo que se prueba aquí es el interruptor entre las dos formas de dibujar. El arte
+/// por capas llegó figura a figura y pieza a pieza, así que las dos convivieron
+/// durante semanas: hoy las seis figuras apilan, pero una pieza sin capa sigue
+/// saliendo de ficha al margen, y ahí sigue el riesgo.
 ///
 /// Nada de esto lo tocaba ninguna prueba cuando se escribió. La única que rozaba
 /// el widget, `avatar_equipo_test.dart`, usa la figura por defecto, y ese día no
@@ -38,17 +39,6 @@ void main() {
   const RasgosAvatar conCapas = RasgosAvatar(
     formaTrato: FormaTrato.masculino,
     rostro: 'face_03',
-  );
-
-  /// Rasgos que resuelven a una figura **sin** cuerpo desnudo todavía.
-  ///
-  /// Femenina: la familia masculina ya tiene sus tres cuerpos. El día que la
-  /// femenina los tenga también, esta prueba dejará de tener figura que usar, y
-  /// entonces habrá que borrarla en vez de arreglarla: los dos caminos habrán
-  /// dejado de convivir.
-  const RasgosAvatar sinCapas = RasgosAvatar(
-    formaTrato: FormaTrato.femenino,
-    rostro: 'face_01',
   );
 
   Future<void> pintar(
@@ -85,14 +75,14 @@ void main() {
       expect(imagen('assets/arte/personajes/base_masculino_001.webp'), findsNothing);
     });
 
-    testWidgets('una figura sin cuerpo desnudo sigue con la ilustración vestida',
-        (WidgetTester tester) async {
-      // Es lo que ven hoy cinco de las seis figuras. No es un respaldo de
-      // emergencia: es el camino normal mientras no llegue su arte.
-      await pintar(tester, const <CapaAvatar>[], rasgos: sinCapas);
-
-      expect(imagen('assets/arte/personajes/base_femenino_002.webp'), findsOneWidget);
-      expect(imagen('assets/arte/capas/cuerpos/base_femenino_002.webp'), findsNothing);
+    testWidgets('las seis figuras tienen cuerpo desnudo', (WidgetTester tester) async {
+      // Hubo meses en que solo lo tenían algunas, y el widget elegía camino por
+      // figura. Ya no hace falta elegir, pero el interruptor se queda: si mañana
+      // entra una séptima figura, vuelve a hacer falta el día que llegue sin su
+      // arte.
+      for (final String clave in Arte.personajes) {
+        expect(Arte.conCuerpoDesnudo, contains(clave));
+      }
     });
   });
 
@@ -134,7 +124,8 @@ void main() {
     testWidgets('la familia sale de la figura, no del servidor',
         (WidgetTester tester) async {
       // El mismo `src` con una figura femenina tiene que ir a buscar el otro
-      // juego de piezas: el objeto es el mismo, el cuerpo no.
+      // juego de piezas: el objeto es el mismo, el cuerpo no. Por eso el
+      // servidor no manda la familia y el cliente la pone.
       await pintar(
         tester,
         const <CapaAvatar>[
@@ -148,6 +139,10 @@ void main() {
         rasgos: const RasgosAvatar(formaTrato: FormaTrato.femenino, rostro: 'face_03'),
       );
 
+      expect(
+        imagen('assets/arte/capas/femenino/botas_reforzadas_boots.webp'),
+        findsOneWidget,
+      );
       expect(
         imagen('assets/arte/capas/masculino/botas_reforzadas_boots.webp'),
         findsNothing,
@@ -298,17 +293,6 @@ void main() {
   });
 
   group('el catálogo de rutas', () {
-    test('queda alguna figura sin cuerpo desnudo, o esta prueba miente', () {
-      // `sinCapas` tiene que resolver de verdad a una figura sin cuerpo: si
-      // algún día entran las seis en el conjunto, las pruebas del camino viejo
-      // pasarían a probar el nuevo sin decírselo a nadie.
-      expect(
-        Arte.conCuerpoDesnudo.length,
-        lessThan(Arte.personajes.length),
-        reason: 'ya no queda figura con la que probar el camino sin capas',
-      );
-    });
-
     test('toda figura declarada con cuerpo desnudo es una figura real', () {
       // Un error de dedo aquí no rompe nada visible: la imagen falla, cae al
       // `errorBuilder` y sale el muñeco vectorial. Se vería raro sin que nadie
