@@ -500,7 +500,51 @@ def desnudar(figura: Image.Image, nuevo: Image.Image, zona: np.ndarray) -> Image
     return Image.alpha_composite(vaciada, cuerpo)
 
 
-def extraer_capa(nuevo: Image.Image, zona: np.ndarray) -> Image.Image:
+#: Cuánto tiene que cambiar un píxel para contar como pieza, de 0 a 255.
+#:
+#: No cero: el modelo redibuja la imagen entera, así que hasta lo que no toca
+#: vuelve con uno o dos niveles de diferencia. Y no mucho más alto, o una prenda
+#: de un color parecido al de la piel dejaría agujeros.
+CAMBIO = 30
+
+#: Trozos sueltos más pequeños que esto se tiran, en píxeles.
+#:
+#: Son el ruido de recompresión del modelo: motas de dos o tres píxeles
+#: repartidas por toda la banda que, si se dejan, salpican la capa de suciedad.
+MOTA = 400
+
+
+def _lo_que_cambio(figura: Image.Image, nuevo: Image.Image) -> np.ndarray:
+    """Los píxeles donde el modelo pintó algo distinto de lo que había.
+
+    Sin esto, una capa se lleva puesto medio cuerpo. `extraer_capa` se queda con
+    todo lo que hay en la banda y no es fondo, y en una capa abierta por delante
+    eso incluye la camiseta y la piel que se ven **entre** los paños: el archivo
+    `cape_front` acababa llevando dentro una copia del torso, que luego se pinta
+    encima de la armadura y la tapa. Se vio con una armadura de placas a la que
+    le desaparecía la pechera al ponerle una capa encima.
+
+    Donde la figura de partida no tenía nada, cualquier cosa que no sea fondo es
+    la pieza: es por donde la capa cuelga más allá del cuerpo.
+    """
+    antes = np.array(figura.convert("RGB"), dtype=np.int16)
+    despues = np.array(nuevo.convert("RGB"), dtype=np.int16)
+    distinto = np.abs(antes - despues).max(axis=2) > CAMBIO
+    vacio = np.array(figura.split()[3]) <= 40
+    return distinto | vacio
+
+
+def _sin_motas(mascara: np.ndarray) -> np.ndarray:
+    """Tira los trozos sueltos que son ruido y no pieza."""
+    etiquetas, cuantos = ndimage.label(mascara)
+    if cuantos == 0:
+        return mascara
+    tamanos = ndimage.sum_labels(mascara, etiquetas, range(1, cuantos + 1))
+    grandes = {i + 1 for i, t in enumerate(tamanos) if t >= MOTA}
+    return np.isin(etiquetas, list(grandes))
+
+
+def extraer_capa(nuevo: Image.Image, zona: np.ndarray, figura: Image.Image) -> Image.Image:
     """Se queda solo con la pieza: dentro de la zona y sin el fondo del modelo.
 
     El cierre de 3×3 solo sutura el dentado del antialias. No se rellenan
@@ -510,14 +554,23 @@ def extraer_capa(nuevo: Image.Image, zona: np.ndarray) -> Image.Image:
     costado. Es el mismo fallo que ya se vio al desnudar.
     """
     fondo = solo_fondo(nuevo)
-    util = ndimage.binary_closing(zona & ~fondo, structure=np.ones((3, 3)))
+    util = zona & ~fondo & _lo_que_cambio(figura, nuevo)
+    util = _sin_motas(ndimage.binary_closing(util, structure=np.ones((5, 5))))
     alfa = Image.fromarray((util * 255).astype(np.uint8), "L").filter(ImageFilter.GaussianBlur(0.7))
     capa = nuevo.copy()
     capa.putalpha(alfa)
     return capa
 
 
-def partir_capa(capa: Image.Image, cuerpo: Image.Image) -> dict[str, Image.Image]:
+#: Hasta dónde puede haber capa por delante del cuerpo, desde la coronilla.
+#:
+#: Una capa se prende a los hombros y cae por detrás: por delante llega al pecho,
+#: al embozo y poco más. Por debajo de la cintura, lo que se ve entre los paños
+#: es el aprendiz, no la capa.
+DELANTE_HASTA = 460
+
+
+def partir_capa(capa: Image.Image, cuerpo: Image.Image, top: int) -> dict[str, Image.Image]:
     """Una capa dibujada, en sus dos capas de la pila: detrás y delante.
 
     La semilla le da a la ranura CAPE dos capas —`cape_back` en z=20, por detrás
@@ -531,12 +584,43 @@ def partir_capa(capa: Image.Image, cuerpo: Image.Image) -> dict[str, Image.Image
       - lo que cae **dentro** es el embozo, los hombros y el broche, y va delante,
         que es lo único que de verdad tiene que taparle el pecho al aprendiz.
 
-    Gratis y sin margen de error, al revés que una segunda generación.
+    Antes se cortaba solo con eso y no bastaba. Una capa abierta por delante deja
+    ver el cuerpo entre los paños, y el modelo redibuja ese cuerpo con su propio
+    sombreado: el pantalón volvía con sesenta niveles de diferencia y las piernas
+    con cincuenta, de sobra para pasar por «cambiado». Así que `cape_front`
+    llevaba dentro una copia del pantalón y de las piernas, y esa copia se pinta
+    en z=140, por encima de todo: unas botas desaparecían bajo una capa.
+
+    Un umbral no los separa —la capa roja da 173 y la pierna 50, pero sus colas
+    se solapan—, y por conectividad tampoco: el pantalón redibujado toca la tela
+    por el borde interior, así que es el mismo trozo.
+
+    Lo que sí los separa es dónde están. Una capa se prende a los hombros y cae
+    por detrás; por delante llega al pecho y poco más. Así que solo lo de encima
+    de la cintura puede ir delante, y el resto se manda detrás, donde el cuerpo
+    lo tapa. Si era el cuerpo redibujado, desaparece; si era tela de verdad, no
+    se pierde.
     """
     dentro = np.array(cuerpo.split()[3]) > 40
     alfa = np.array(capa.split()[3])
+    hay = alfa > 40
+
+    etiquetas, _ = ndimage.label(hay)
+    asoman = set(np.unique(etiquetas[hay & ~dentro])) - {0}
+    de_la_capa = np.isin(etiquetas, list(asoman)) if asoman else hay
+
+    arriba = np.zeros_like(hay)
+    arriba[: min(LIENZO, top + DELANTE_HASTA), :] = True
+
     partes: dict[str, Image.Image] = {}
-    for nombre, mascara in (("cape_back", ~dentro), ("cape_front", dentro)):
+    for nombre, mascara in (
+        # Lo de debajo de la cintura que cae dentro del cuerpo no se tira: se
+        # manda detrás. Ahí el cuerpo lo tapa, que es exactamente lo que se
+        # quiere si resultó ser el cuerpo redibujado, y si era tela de verdad
+        # tampoco se pierde.
+        ("cape_back", de_la_capa & (~dentro | ~arriba)),
+        ("cape_front", de_la_capa & dentro & arriba),
+    ):
         trozo = capa.copy()
         trozo.putalpha(Image.fromarray(np.where(mascara, alfa, 0).astype(np.uint8), "L"))
         partes[nombre] = trozo
@@ -668,11 +752,14 @@ def _componer(
         print(f"cuerpo desnudo en {args.figura}/base.png · caja {cuerpo.split()[3].getbbox()}")
         return 0
 
-    capa = extraer_capa(nuevo, zona)
+    capa = extraer_capa(nuevo, zona, figura)
     Image.alpha_composite(figura, capa).save(destino / f"{nombre}_puesta.png")
 
     salidas = (
-        {f"{pieza.codigo}_{k}": v for k, v in partir_capa(capa, figura).items()}
+        {
+            f"{pieza.codigo}_{k}": v
+            for k, v in partir_capa(capa, figura, coronilla(figura)).items()
+        }
         if pieza is not None and pieza.capa == "cape"
         else {nombre: capa}
     )
