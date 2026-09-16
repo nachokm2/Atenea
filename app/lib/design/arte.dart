@@ -128,6 +128,22 @@ abstract final class Arte {
   /// Cuerpo desnudo de una figura: el fondo de la pila de dibujado.
   static String cuerpo(String clave) => '$_raiz/capas/cuerpos/$clave.webp';
 
+  /// La piel de esa figura, sola y lista para teñir.
+  ///
+  /// Es el mismo dibujo con los brillos llevados al blanco, de modo que
+  /// multiplicarla por un color —`BlendMode.modulate`— devuelve ese color en la
+  /// luz y su sombra correspondiente en la sombra. Se pinta **encima** del
+  /// cuerpo, tapando exactamente los píxeles de piel.
+  ///
+  /// Hace falta normalizarla porque `modulate` solo oscurece, y el tono más
+  /// claro del catálogo es más oscuro que la piel dibujada: sobre el recorte
+  /// crudo, elegir «marfil» habría oscurecido la piel. La produce
+  /// `scripts/separar_piel_y_pelo.py` sin generar arte nuevo.
+  static String piel(String clave) => '$_raiz/capas/cuerpos/${clave}_piel.webp';
+
+  /// El pelo de esa figura, solo y listo para teñir. Ver [piel].
+  static String pelo(String clave) => '$_raiz/capas/cuerpos/${clave}_pelo.webp';
+
   /// Pieza de equipo dentro del juego de capas de su familia.
   ///
   /// El `src` que manda el servidor no dice de qué familia es, y no debe: el

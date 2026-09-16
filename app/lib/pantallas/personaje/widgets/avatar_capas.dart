@@ -28,6 +28,7 @@ import 'package:flutter/material.dart';
 
 import '../../../datos/repositorios.dart';
 import '../../../design/arte.dart';
+import '../../entrada/widgets/catalogo_avatar.dart';
 import '../../../design/tokens.dart';
 
 /// Compone una vista previa: las capas actuales con las de [item] puestas en
@@ -154,8 +155,8 @@ class AvatarCapas extends StatelessWidget {
                 painter: _PintorAvatar(
                   paleta: p,
                   equipo: equipo,
-                  piel: _tonoDePiel(r.tonoPiel, p),
-                  cabello: _colorDeCabello(r.colorCabello, p),
+                  piel: CatalogoAvatar.piel(r.tonoPiel),
+                  cabello: CatalogoAvatar.cabello(r.colorCabello),
                   esbelto: r.tipoCuerpo == TipoCuerpo.esbelto,
                   robusto: r.tipoCuerpo == TipoCuerpo.robusto,
                   resplandor: true,
@@ -180,14 +181,30 @@ class AvatarCapas extends StatelessWidget {
                 painter: _PintorAvatar(
                   paleta: p,
                   equipo: equipo,
-                  piel: _tonoDePiel(r.tonoPiel, p),
-                  cabello: _colorDeCabello(r.colorCabello, p),
+                  piel: CatalogoAvatar.piel(r.tonoPiel),
+                  cabello: CatalogoAvatar.cabello(r.colorCabello),
                   esbelto: r.tipoCuerpo == TipoCuerpo.esbelto,
                   robusto: r.tipoCuerpo == TipoCuerpo.robusto,
                   resplandor: resplandor,
                 ),
               ),
             ),
+            // La piel y el pelo del aprendiz, teñidos con lo que eligió.
+            //
+            // Van pegados al cuerpo y debajo de todo el equipo, que es su sitio
+            // en la pila: una armadura tapa la piel, no al revés. Son el mismo
+            // dibujo del cuerpo con los brillos llevados al blanco, así que
+            // multiplicarlos por el color devuelve ese color donde da la luz y
+            // su sombra donde hay sombra.
+            //
+            // Hasta que existieron, la pantalla de creación ofrecía seis tonos
+            // de piel y diez colores de pelo que no cambiaban nada: en el arte
+            // había dos tonos de piel, uno por familia, y seis colores de pelo
+            // soldados cada uno a su figura.
+            if (apilando) ...<Widget>[
+              _Tinte(ruta: Arte.piel(clave), color: CatalogoAvatar.piel(r.tonoPiel), lado: tamano),
+              _Tinte(ruta: Arte.pelo(clave), color: CatalogoAvatar.cabello(r.colorCabello), lado: tamano),
+            ],
             // Y lo que va por delante, en el orden que manda el Reino.
             if (apilando)
               for (final CapaAvatar capa in delante) _Capa(capa: capa, figura: clave, lado: tamano),
@@ -205,6 +222,31 @@ class AvatarCapas extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Una región del cuerpo —la piel, el pelo— teñida con el color elegido.
+///
+/// Si el recurso no existe, no se pinta nada y el cuerpo se ve con el color con
+/// el que se dibujó. Es la degradación correcta: una figura sin capas teñibles
+/// sale como salía antes, no rota.
+class _Tinte extends StatelessWidget {
+  const _Tinte({required this.ruta, required this.color, required this.lado});
+
+  final String ruta;
+  final Color color;
+  final double lado;
+
+  @override
+  Widget build(BuildContext context) => Image.asset(
+        ruta,
+        height: lado,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.medium,
+        color: color,
+        colorBlendMode: BlendMode.modulate,
+        errorBuilder: (BuildContext context, Object error, StackTrace? pila) =>
+            const SizedBox.shrink(),
+      );
 }
 
 /// Una capa del manifiesto, pintada sobre el lienzo maestro.
@@ -423,44 +465,8 @@ Color _colorPorRanura(RanuraItem ranura, AteneaPalette p) => switch (ranura) {
       RanuraItem.montura => p.advertencia,
     };
 
-int _indiceDeClave(String clave, int total) {
-  final RegExp digitos = RegExp(r'(\d+)');
-  final Match? m = digitos.firstMatch(clave);
-  if (m != null) {
-    final int? n = int.tryParse(m.group(1) ?? '');
-    if (n != null) return (n - 1).clamp(0, total - 1);
-  }
-  int suma = 0;
-  for (final int unidad in clave.codeUnits) {
-    suma += unidad;
-  }
-  return suma % total;
-}
 
-/// Seis tonos de piel derivados de los tokens, mientras no exista el arte.
-Color _tonoDePiel(String clave, AteneaPalette p) {
-  final int i = _indiceDeClave(clave, 6);
-  final double t = i / 5;
-  final Color base = Color.lerp(p.oro, p.brasa, t) ?? p.oro;
-  return Color.lerp(base, p.fondo, t * 0.42) ?? base;
-}
 
-/// Diez colores de cabello derivados de los tokens.
-Color _colorDeCabello(String clave, AteneaPalette p) {
-  final List<Color> tonos = <Color>[
-    p.fondo,
-    p.textoSecundario,
-    p.textoPrimario,
-    p.brasa,
-    p.oro,
-    p.arcano,
-    p.dominio,
-    p.exito,
-    p.error,
-    p.info,
-  ];
-  return tonos[_indiceDeClave(clave, tonos.length)];
-}
 
 // ---------------------------------------------------------------------------
 // Pintor

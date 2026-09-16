@@ -22,6 +22,7 @@ library;
 import 'package:atenea/datos/dtos.dart';
 import 'package:atenea/design/arte.dart';
 import 'package:atenea/design/theme.dart';
+import 'package:atenea/pantallas/entrada/widgets/catalogo_avatar.dart';
 import 'package:atenea/pantallas/personaje/widgets/avatar_capas.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -194,7 +195,9 @@ void main() {
         CapaAvatar(clave: 'hair_front', z: 100),
       ]);
 
-      expect(find.byType(Image), findsOneWidget); // solo el cuerpo
+      // Tres: el cuerpo y sus dos capas teñibles, la piel y el pelo. Ninguna
+      // imagen de equipo.
+      expect(find.byType(Image), findsNWidgets(3));
       expect(tester.takeException(), isNull);
     });
 
@@ -215,9 +218,13 @@ void main() {
           .toList();
       expect(pedidas, <String>[
         // La primera va por debajo de `body_base` (z=40), así que el cuerpo se
-        // cuela entre ella y las otras dos.
+        // cuela entre ella y las otras dos. Y tras el cuerpo van sus dos capas
+        // teñibles, que son parte del aprendiz y no del equipo: una armadura
+        // tapa la piel, no al revés.
         'assets/arte/capas/masculino/a.webp',
         'assets/arte/capas/cuerpos/base_masculino_001.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001_piel.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001_pelo.webp',
         'assets/arte/capas/masculino/b.webp',
         'assets/arte/capas/masculino/c.webp',
       ]);
@@ -242,6 +249,8 @@ void main() {
       expect(pedidas, <String>[
         'assets/arte/capas/masculino/atras.webp',
         'assets/arte/capas/cuerpos/base_masculino_001.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001_piel.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001_pelo.webp',
         'assets/arte/capas/masculino/delante.webp',
       ]);
     });
@@ -343,6 +352,57 @@ void main() {
         Arte.claveDeFigura(rostro: 'face_01'),
         isNot(Arte.claveDeFigura(rostro: 'face_04')),
       );
+    });
+  });
+
+  group('la piel y el pelo se tiñen con lo que se eligió', () {
+    testWidgets('el tono de piel elegido llega a la capa de piel',
+        (WidgetTester tester) async {
+      // Antes se ofrecían seis tonos y en el arte había dos, uno por familia.
+      // Ninguno era elegible.
+      await pintar(
+        tester,
+        const <CapaAvatar>[],
+        rasgos: const RasgosAvatar(
+          formaTrato: FormaTrato.masculino,
+          rostro: 'base_masculino_001',
+          tonoPiel: 'skin_06',
+        ),
+      );
+
+      final Image capa = tester.widget<Image>(
+        imagen('assets/arte/capas/cuerpos/base_masculino_001_piel.webp'),
+      );
+      expect(capa.color, CatalogoAvatar.piel('skin_06'));
+      expect(capa.colorBlendMode, BlendMode.modulate);
+    });
+
+    testWidgets('y el color de pelo a la capa de pelo', (WidgetTester tester) async {
+      await pintar(
+        tester,
+        const <CapaAvatar>[],
+        rasgos: const RasgosAvatar(
+          formaTrato: FormaTrato.masculino,
+          rostro: 'base_masculino_001',
+          colorCabello: 'hair_violet',
+        ),
+      );
+
+      final Image capa = tester.widget<Image>(
+        imagen('assets/arte/capas/cuerpos/base_masculino_001_pelo.webp'),
+      );
+      expect(capa.color, CatalogoAvatar.cabello('hair_violet'));
+    });
+
+    test('los diez colores de pelo son distintos entre sí', () {
+      // El pintor de reserva los derivaba con un hash sobre los tokens del tema
+      // y mandaba el negro, el verde y el violeta al mismo color. Desde que se
+      // usa la paleta de verdad, cada elección es una elección.
+      final Set<Color> vistos = <Color>{
+        for (final OpcionAvatar o in CatalogoAvatar.coloresCabello)
+          CatalogoAvatar.cabello(o.clave),
+      };
+      expect(vistos, hasLength(CatalogoAvatar.coloresCabello.length));
     });
   });
 
