@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../datos/repositorios.dart';
+import '../../design/arte.dart';
 import '../../design/components.dart';
 import '../../design/tokens.dart';
 import '../../estado/celebraciones.dart';
@@ -80,10 +81,19 @@ class _ModalItemDesbloqueadoState extends State<ModalItemDesbloqueado> {
                 border: Border.all(color: rareza.color, width: 2),
                 boxShadow: quieto ? null : Sombra.brillo(rareza.color, rareza.brillo),
               ),
-              child: Icon(
-                _iconoDe(item.ranura),
-                size: 64,
-                color: rareza.color,
+              // La ilustración del objeto, no un icono de perchero. Es el
+              // momento de máxima recompensa —se acaba de gastar el oro— y
+              // hasta ahora enseñaba el mismo dibujo genérico para todos los
+              // ítems de una misma ranura. `ImagenItem` ya cae al icono por su
+              // cuenta si no hay arte.
+              child: Center(
+                child: ImagenItem(
+                  codigo: item.codigoItem,
+                  ranura: item.ranura,
+                  iconoKey: item.iconoKey,
+                  tamano: 96,
+                  color: rareza.color,
+                ),
               ),
             ),
           ),
@@ -191,17 +201,4 @@ class _ModalItemDesbloqueadoState extends State<ModalItemDesbloqueado> {
         motivoDesbloqueo: item.motivoDesbloqueo,
         puedeEquipar: item.puedeEquipar,
       );
-
-  static IconData _iconoDe(RanuraItem ranura) => switch (ranura) {
-        RanuraItem.cabeza => Icons.face_retouching_natural_rounded,
-        RanuraItem.cuerpo => Icons.checkroom_rounded,
-        RanuraItem.capa => Icons.dry_cleaning_rounded,
-        RanuraItem.guantes => Icons.back_hand_rounded,
-        RanuraItem.botas => Icons.hiking_rounded,
-        RanuraItem.arma => Icons.hardware_rounded,
-        RanuraItem.secundaria => Icons.shield_outlined,
-        RanuraItem.accesorio => Icons.diamond_outlined,
-        RanuraItem.mascota => Icons.pets_rounded,
-        RanuraItem.montura => Icons.bedroom_baby_outlined,
-      };
 }

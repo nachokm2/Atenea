@@ -71,8 +71,25 @@ class ControladorPerfil extends ChangeNotifier {
 }
 
 /// Pantalla de Perfil.
-class PantallaPerfil extends StatelessWidget {
+class PantallaPerfil extends StatefulWidget {
   const PantallaPerfil({super.key});
+
+  @override
+  State<PantallaPerfil> createState() => _PantallaPerfilState();
+}
+
+class _PantallaPerfilState extends State<PantallaPerfil> {
+  @override
+  void initState() {
+    super.initState();
+    // Perfil no pedía nunca el avatar: solo lo cargaban el Vestidor y el
+    // Mercado. Quien entrara aquí sin pasar antes por una de esas dos pantallas
+    // veía la figura por defecto —el héroe de otra persona— en su propio perfil.
+    WidgetsBinding.instance.addPostFrameCallback((Duration _) {
+      if (!mounted) return;
+      context.read<ControladorPersonaje>().cargarAvatar();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -201,8 +218,8 @@ class _Cabecera extends StatelessWidget {
   Widget build(BuildContext context) {
     final AteneaPalette p = context.paleta;
     final Personaje? heroe = perfil.personaje ?? sesion.personaje;
-    final RasgosAvatar? rasgos =
-        context.watch<ControladorPersonaje>().avatar?.rasgos;
+    final ControladorPersonaje personaje = context.watch<ControladorPersonaje>();
+    final RasgosAvatar? rasgos = personaje.avatar?.rasgos;
     final int nivel = heroe?.nivel ?? 1;
     final double fraccion = ((heroe?.porcentajeProgreso ?? 0) / 100)
         .clamp(0, 1)
@@ -225,7 +242,10 @@ class _Cabecera extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: <Widget>[
                   AvatarCapas(
-                    capas: perfil.capasAvatar,
+                    // `GET /profile` devuelve `avatar_layers` siempre vacío, así
+                    // que las capas se toman de donde están de verdad: el mismo
+                    // sitio del que las saca el Vestidor.
+                    capas: personaje.capas,
                     rasgos: rasgos,
                     tamano: 124,
                     nombre: heroe?.nombre,

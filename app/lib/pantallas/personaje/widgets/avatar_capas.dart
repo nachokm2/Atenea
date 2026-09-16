@@ -23,9 +23,13 @@ List<CapaAvatar> capasConItem(List<CapaAvatar> base, Item item) {
     if (item.capas.isNotEmpty)
       ...item.capas
     else
+      // El ítem no trae capas resueltas (el catálogo solo guarda su manifiesto
+      // crudo), así que se fabrica la mínima que la vista previa necesita: de
+      // qué ranura es y qué ilustración pintar.
       CapaAvatar(
-        clave: item.codigo.isEmpty ? item.id : item.codigo,
+        clave: item.ranura.name,
         ranura: item.ranura,
+        codigoItem: item.codigo.isEmpty ? null : item.codigo,
         itemId: item.id,
         z: 50,
       ),
@@ -65,10 +69,15 @@ class AvatarCapas extends StatelessWidget {
     final RasgosAvatar r = rasgos ?? const RasgosAvatar();
 
     final Map<RanuraItem, Color> equipo = <RanuraItem, Color>{};
+    final Map<RanuraItem, String> piezas = <RanuraItem, String>{};
     for (final CapaAvatar capa in capas) {
       final RanuraItem? ranura = capa.ranura;
       if (ranura == null) continue;
       equipo[ranura] = _colorDeTinte(capa.tinte) ?? _colorPorRanura(ranura, p);
+      // Una capa aporta varias capas (espalda y broche) y todas traen el mismo
+      // código: el mapa se queda con una y ya está.
+      final String? codigo = capa.codigoItem;
+      if (codigo != null && codigo.isNotEmpty) piezas[ranura] = codigo;
     }
 
     final List<String> puestos = <String>[
@@ -131,11 +140,69 @@ class AvatarCapas extends StatelessWidget {
                 ),
               ),
             ),
+            // Las fichas del equipo, en los dos márgenes que la figura deja
+            // libres. No se pintan ENCIMA del cuerpo a propósito: la
+            // ilustración ya viene vestida y las piezas están dibujadas cada
+            // una en su propio encuadre, así que superponerlas daría un collage.
+            // Alrededor, en cambio, el oro del Mercado compra algo que se ve.
+            if (piezas.isNotEmpty)
+              Positioned.fill(
+                child: _FichasDelEquipo(piezas: piezas, lado: tamano * 0.19),
+              ),
           ],
         ),
       ),
     );
   }
+}
+
+/// Las piezas equipadas, repartidas en las dos columnas laterales.
+class _FichasDelEquipo extends StatelessWidget {
+  const _FichasDelEquipo({required this.piezas, required this.lado});
+
+  final Map<RanuraItem, String> piezas;
+  final double lado;
+
+  @override
+  Widget build(BuildContext context) {
+    final AteneaPalette p = context.paleta;
+    final List<RanuraItem> puestas = <RanuraItem>[
+      for (final RanuraItem ranura in ranurasDelVestidorInterno)
+        if (piezas.containsKey(ranura)) ranura,
+    ];
+    // Se reparten por mitades conservando el orden del Vestidor, para que una
+    // pieza no salte de lado al equipar otra.
+    final int corte = (puestas.length + 1) ~/ 2;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: <Widget>[
+        _columna(p, puestas.take(corte)),
+        _columna(p, puestas.skip(corte)),
+      ],
+    );
+  }
+
+  Widget _columna(AteneaPalette p, Iterable<RanuraItem> ranuras) => Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          for (final RanuraItem ranura in ranuras)
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: lado * 0.08),
+              child: Tooltip(
+                message: _nombreRanura(ranura),
+                child: ImagenItem(
+                  codigo: piezas[ranura]!,
+                  ranura: ranura,
+                  tamano: lado,
+                  color: _colorPorRanura(ranura, p),
+                ),
+              ),
+            ),
+        ],
+      );
 }
 
 /// Marco del Vestidor: pedestal, halo y avatar centrado.

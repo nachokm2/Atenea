@@ -647,7 +647,7 @@ class CapaAvatar {
   /// **no** el código del ítem: para eso está `codigoItem`. Los dos se leían
   /// antes del mismo sitio y por eso una capa parecía dos veces la misma.
   factory CapaAvatar.desdeJson(Map<String, dynamic> json) => CapaAvatar(
-        clave: _txt(_alguna(json, <String>['key', 'layer_key', 'id'])),
+        clave: _txt(_alguna(json, <String>['key', 'layer', 'layer_key', 'id'])),
         ranura: desdeClaveApiOpcional(RanuraItem.values, json['slot']),
         assetKey: _txt(_alguna(json, <String>['src', 'asset_key', 'asset', 'sprite'])),
         z: _ent(_alguna(json, <String>['z', 'z_index', 'order'])),
@@ -848,7 +848,6 @@ class Item {
 
   /// Lee el esquema de ítem del catálogo (`items`).
   factory Item.desdeJson(Map<String, dynamic> json) {
-    final Map<String, dynamic> manifiesto = _mapa(json['render_manifest']);
     return Item(
       id: _txt(_alguna(json, <String>['id', 'item_id'])),
       codigo: _txt(_alguna(json, <String>['code', 'item_code'])),
@@ -863,10 +862,14 @@ class Item {
       nombreConocimiento: _txtN(
         _alguna(json, <String>['knowledge_area_name', 'area_name']),
       ),
-      capas: _lista(
-        _alguna(json, <String>['layers']) ?? manifiesto['layers'],
-        CapaAvatar.desdeJson,
-      ),
+      // Solo las capas ya RESUELTAS, si el servidor las manda. `ItemOut` no
+      // declara `layers`, así que esto caía siempre al manifiesto crudo del
+      // catálogo, cuyas entradas traen `layer` y `src` pero ni ranura ni z
+      // resueltos: nacían con ranura nula y se descartaban después. El efecto
+      // era que previsualizar un ítem en el Mercado enseñaba MENOS equipo que
+      // antes de tocarlo, porque la pieza que llevabas puesta se quitaba y la
+      // nueva no llegaba a entrar.
+      capas: _lista(json['layers'], CapaAvatar.desdeJson),
       esPlantilla: _bol(json['is_template']),
       disponibleDesde: fechaHora(json['available_from']),
       disponibleHasta: fechaHora(json['available_to']),
