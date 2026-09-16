@@ -89,6 +89,23 @@ flutter:
     - assets/arte/items/accesorio/
     - assets/arte/items/cabello/
 
+    # Arte por capas, que es otra cosa que las ilustraciones de arriba: se
+    # genera con `python scripts/vestir.py` y se trae con
+    # `python scripts/exportar_capas.py`. No pasa por `preparar_arte.py`, que
+    # convertiría a RGB y recortaría al contenido: una capa vive justo de lo
+    # contrario, alfa alrededor y el mismo lienzo de 1024×1024 para todas.
+    #
+    # `cuerpos/` lleva una figura desnuda por personaje, porque cada una
+    # conserva su cara. Las piezas van por familia y no por figura: midiendo las
+    # seis siluetas, dentro de una familia el cuerpo es el mismo con ±10 px.
+    #
+    # Una línea por carpeta, y no `assets/arte/capas/` a secas: las entradas de
+    # directorio de Flutter **no son recursivas**, y una sola no empaquetaría
+    # nada de lo que hay dentro.
+    - assets/arte/capas/cuerpos/
+    - assets/arte/capas/masculino/
+    - assets/arte/capas/femenino/
+
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 

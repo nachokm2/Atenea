@@ -25,9 +25,11 @@ está desbloqueado por definición y su acceso lo gobierna el listado (precio y 
 mínimo), tal como fija el contrato §6.13.
 
 El `render_manifest` sigue el formato de 06c §2.7 (lienzo 1024×1024, capas con su
-`layer_key` de la pila de §2.3 y recorte propio). Las rutas de los assets son la
-convención de entrega `items/<code>/<capa>.v1.webp`; el arte se versiona aparte con
-`asset_version`.
+`layer_key` de la pila de §2.3 y recorte propio). El `src` de cada capa es el
+nombre de su archivo dentro del juego de piezas de una familia —`<code>_<capa>.webp`,
+plano y sin versión—, y el cliente le antepone la carpeta de la familia que
+corresponda a la figura elegida. De qué familia es el cuerpo no se decide aquí a
+propósito: el mismo objeto lo llevan las seis figuras.
 """
 
 from __future__ import annotations
@@ -89,8 +91,22 @@ def manifiesto(
         "item_id": code,
         "asset_version": 1,
         "canvas": dict(LIENZO),
+        # `src` es el nombre del archivo de la capa dentro del juego de su
+        # familia, plano y sin versión. Antes era `items/{code}/{capa}.v1.webp`,
+        # una ruta que no correspondía a ningún archivo del repositorio: el
+        # servidor la emitía, el cliente la leía en `CapaAvatar.assetKey` y ahí
+        # se acababa, porque nadie la usaba para pintar nada.
+        #
+        # Plano y no en carpeta por ítem porque las entradas de directorio de
+        # Flutter no son recursivas: treinta y un ítems serían treinta y una
+        # líneas en `pubspec.yaml`. Sin versión porque el arte viaja dentro del
+        # binario, así que la versión de la aplicación ya es la clave de caché;
+        # `asset_version` sigue en el manifiesto para quien la necesite.
+        #
+        # De qué familia es el cuerpo no va aquí a propósito: el mismo objeto lo
+        # llevan las seis figuras, y quien sabe cuál se eligió es el cliente.
         "layers": [
-            {"layer": capa, "src": f"items/{code}/{capa}.v1.webp", "x": 0, "y": 0, "w": 1024, "h": 1024}
+            {"layer": capa, "src": f"{code}_{capa}.webp", "x": 0, "y": 0, "w": 1024, "h": 1024}
             for capa in capas
         ],
         "suppresses_layers": list(oculta),

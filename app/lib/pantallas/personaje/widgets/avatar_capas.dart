@@ -1,11 +1,27 @@
 /// Render del avatar por capas (§6.4 del documento de experiencia).
 ///
 /// El servidor manda siempre el manifiesto de capas ya ordenado por z; el
-/// cliente nunca lo recompone. Mientras el arte definitivo no exista, cada
-/// capa se dibuja como una silueta vectorial teñida con el `tint` que envía el
-/// manifiesto o, si no viene, con un color semántico de los tokens. Así el
-/// Vestidor y el Mercado ya muestran el cambio al equipar sin esperar a los
-/// recursos gráficos.
+/// cliente nunca lo recompone.
+///
+/// ## Dos formas de dibujar, y por qué conviven
+///
+/// **Apilando**, que es lo que se quiere: un cuerpo desnudo de fondo y encima
+/// cada pieza en su propia imagen. Las capas comparten el lienzo maestro de
+/// 1024×1024 con la pieza ya colocada dentro, así que superponerlas centradas y
+/// al mismo alto las deja en su sitio sin calcular ni un desplazamiento. Eso no
+/// es casualidad: `scripts/vestir.py` las genera pintando sobre el cuerpo, y una
+/// pieza que nace ahí nunca se movió.
+///
+/// **Con fichas al margen**, que es lo que había: una ilustración completa del
+/// personaje —ya vestida de fábrica— y el equipo alrededor, en los dos huecos
+/// laterales. Era la única salida cuando cada pieza era una ficha de catálogo
+/// recortada a su propio encuadre: superponerlas daba un collage.
+///
+/// Se elige por figura, no globalmente, porque el arte por capas llega figura a
+/// figura: `Arte.conCuerpoDesnudo` dice cuáles ya lo tienen. Y dentro del modo
+/// apilado se elige otra vez por pieza: la que todavía no tiene capa sigue
+/// saliendo como ficha al margen, en vez de desaparecer del avatar. Según llega
+/// arte, las fichas se van solas.
 library;
 
 import 'package:flutter/material.dart';
@@ -68,8 +84,16 @@ class AvatarCapas extends StatelessWidget {
     final AteneaPalette p = context.paleta;
     final RasgosAvatar r = rasgos ?? const RasgosAvatar();
 
+    final String clave = Arte.claveDeFigura(
+      trato: r.formaTrato,
+      cuerpo: r.tipoCuerpo,
+      rostro: r.rostro,
+    );
+    final bool apilando = Arte.conCuerpoDesnudo.contains(clave);
+
     final Map<RanuraItem, Color> equipo = <RanuraItem, Color>{};
     final Map<RanuraItem, String> piezas = <RanuraItem, String>{};
+    final Set<RanuraItem> conCapa = <RanuraItem>{};
     for (final CapaAvatar capa in capas) {
       final RanuraItem? ranura = capa.ranura;
       if (ranura == null) continue;
@@ -78,7 +102,18 @@ class AvatarCapas extends StatelessWidget {
       // código: el mapa se queda con una y ya está.
       final String? codigo = capa.codigoItem;
       if (codigo != null && codigo.isNotEmpty) piezas[ranura] = codigo;
+      if (capa.assetKey.isNotEmpty) conCapa.add(ranura);
     }
+
+    // Al margen solo lo que no se puede pintar encima. Sin esto, una pieza sin
+    // arte por capas desaparecería del avatar al estrenar el modo apilado: el
+    // aprendiz habría pagado oro por algo que dejó de verse.
+    final Map<RanuraItem, String> alMargen = apilando
+        ? <RanuraItem, String>{
+            for (final MapEntry<RanuraItem, String> e in piezas.entries)
+              if (!conCapa.contains(e.key)) e.key: e.value,
+          }
+        : piezas;
 
     final List<String> puestos = <String>[
       for (final RanuraItem ranura in ranurasDelVestidorInterno)
@@ -116,11 +151,7 @@ class AvatarCapas extends StatelessWidget {
                 ),
               ),
             Image.asset(
-              Arte.figura(
-                trato: r.formaTrato,
-                cuerpo: r.tipoCuerpo,
-                rostro: r.rostro,
-              ),
+              apilando ? Arte.cuerpo(clave) : Arte.personaje(clave),
               height: tamano,
               fit: BoxFit.contain,
               filterQuality: FilterQuality.medium,
@@ -140,14 +171,44 @@ class AvatarCapas extends StatelessWidget {
                 ),
               ),
             ),
+            // El equipo, encima del cuerpo y en el orden que manda el Reino.
+            //
+            // Sin `x`, `y`, `ancho` ni `alto`: cada capa ya viene dibujada
+            // dentro del lienzo maestro de 1024×1024, con su sitio hecho y
+            // transparencia alrededor. Centradas y al mismo alto, encajan solas.
+            // Los desplazamientos del manifiesto son para el día que una pieza
+            // se recorte a su caja para ahorrar bytes; hoy ninguna lo está, y
+            // aplicarlos ahora los aplicaría dos veces.
+            if (apilando)
+              for (final CapaAvatar capa in capas)
+                if (capa.assetKey.isNotEmpty)
+                  Image.asset(
+                    Arte.capaDeEquipo(figura: clave, src: capa.assetKey),
+                    height: tamano,
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.medium,
+                    // `modulate` multiplica, así que tiñe conservando el
+                    // sombreado y el contorno. Es lo que necesitan los
+                    // cosméticos de conocimiento: un solo dibujo y un color por
+                    // disciplina.
+                    color: _colorDeTinte(capa.tinte),
+                    colorBlendMode:
+                        capa.tinte == null ? null : BlendMode.modulate,
+                    // Una capa que falta no rompe el avatar ni deja un hueco
+                    // negro: sencillamente no se pinta, y su ficha al margen
+                    // sigue diciendo que la pieza está puesta.
+                    errorBuilder: (BuildContext context, Object error,
+                            StackTrace? pila) =>
+                        const SizedBox.shrink(),
+                  ),
             // Las fichas del equipo, en los dos márgenes que la figura deja
-            // libres. No se pintan ENCIMA del cuerpo a propósito: la
-            // ilustración ya viene vestida y las piezas están dibujadas cada
-            // una en su propio encuadre, así que superponerlas daría un collage.
-            // Alrededor, en cambio, el oro del Mercado compra algo que se ve.
-            if (piezas.isNotEmpty)
+            // libres. Es lo único que se podía hacer mientras cada pieza fuera
+            // una ficha de catálogo con su propio encuadre, y sigue siendo la
+            // salida para lo que aún no tiene capa: alrededor, el oro del
+            // Mercado compra algo que se ve.
+            if (alMargen.isNotEmpty)
               Positioned.fill(
-                child: _FichasDelEquipo(piezas: piezas, lado: tamano * 0.19),
+                child: _FichasDelEquipo(piezas: alMargen, lado: tamano * 0.19),
               ),
           ],
         ),

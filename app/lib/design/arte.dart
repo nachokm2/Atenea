@@ -37,13 +37,17 @@ abstract final class Arte {
     return personaje(personajes.first);
   }
 
-  /// Figura que le corresponde a un personaje según sus rasgos.
+  /// Clave de la figura que le corresponde a un personaje según sus rasgos.
   ///
   /// Hay seis figuras: tres de silueta femenina y tres de masculina. La forma
   /// de tratamiento elegida decide la familia, y el rostro elegido decide la
   /// variante. Quien prefiere el trato neutro recibe una figura estable
   /// derivada de su rostro, no una al azar: el avatar no debe cambiar solo.
-  static String figura({
+  ///
+  /// Devuelve la clave (`base_masculino_001`) y no la ruta, porque con la misma
+  /// clave se piden tres cosas distintas: la ilustración vestida, el cuerpo
+  /// desnudo y la familia de la que sacar las piezas.
+  static String claveDeFigura({
     FormaTrato trato = FormaTrato.neutro,
     TipoCuerpo cuerpo = TipoCuerpo.neutro,
     String rostro = 'face_01',
@@ -62,7 +66,51 @@ abstract final class Arte {
         },
     };
     final String familia = femenina ? 'femenino' : 'masculino';
-    return personaje('base_${familia}_00${(variante % 3) + 1}');
+    return 'base_${familia}_00${(variante % 3) + 1}';
+  }
+
+  /// Ruta de la figura completa que le corresponde a un personaje.
+  static String figura({
+    FormaTrato trato = FormaTrato.neutro,
+    TipoCuerpo cuerpo = TipoCuerpo.neutro,
+    String rostro = 'face_01',
+  }) =>
+      personaje(claveDeFigura(trato: trato, cuerpo: cuerpo, rostro: rostro));
+
+  // -------------------------------------------------------------------------
+  // Arte por capas
+  // -------------------------------------------------------------------------
+
+  /// Figuras que ya tienen cuerpo desnudo, y que por tanto se dibujan apilando.
+  ///
+  /// Se lleva a mano y a propósito. Flutter no sabe preguntar si un recurso
+  /// existe sin intentar cargarlo, así que la alternativa sería descubrirlo por
+  /// el `errorBuilder` de cada imagen, ya pintando: para entonces la decisión de
+  /// si enseñar las fichas del margen o no ya está tomada, y saldrían las dos
+  /// cosas a la vez.
+  ///
+  /// Una figura entra aquí el día que `assets/arte/capas/cuerpos/<clave>.webp`
+  /// existe y se ha mirado. Mientras no esté, esa figura sigue por el camino de
+  /// siempre —ilustración vestida y fichas alrededor—, que no es un respaldo de
+  /// emergencia sino lo que se ve hoy.
+  static const Set<String> conCuerpoDesnudo = <String>{
+    'base_masculino_001',
+  };
+
+  /// Cuerpo desnudo de una figura: el fondo de la pila de dibujado.
+  static String cuerpo(String clave) => '$_raiz/capas/cuerpos/$clave.webp';
+
+  /// Pieza de equipo dentro del juego de capas de su familia.
+  ///
+  /// El `src` que manda el servidor no dice de qué familia es, y no debe: el
+  /// mismo objeto lo llevan las seis figuras. Quien sabe de qué cuerpo se trata
+  /// es el cliente, que es quien eligió la figura.
+  /// El `src` ya trae la extensión: el contrato dice que es «el archivo», y
+  /// dejar que el cliente la ponga sería decidir aquí un formato que decide el
+  /// servidor.
+  static String capaDeEquipo({required String figura, required String src}) {
+    final String familia = figura.contains('femenino') ? 'femenino' : 'masculino';
+    return '$_raiz/capas/$familia/$src';
   }
 
   /// Número estable a partir del identificador de rostro (`face_02` -> 2).
