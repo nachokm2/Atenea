@@ -24,11 +24,14 @@ import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
 from app.core.errors import NotFound, ValidationFailed
+from app.core.logging import get_logger
 from app.core.time import user_local_date, utcnow
 from app.models.economy import Item, UserItem
 from app.models.enums import EventType, ItemSlot
 from app.models.identity import AvatarConfig, Character, EquippedItem, User
 from app.modules.economy.monedero import recortar_clave, registrar_evento, valor_config
+
+logger = get_logger("atenea.avatar")
 
 #: Clave de configuración con las ranuras activas del avatar (§5.4).
 CLAVE_SLOTS_ACTIVOS = "items.slots_active"
@@ -314,25 +317,90 @@ def aplicar_equipamiento(
 # ---------------------------------------------------------------------------
 
 
+#: Pila de dibujado del avatar (06c §2.3). La **ranura** decide exclusividad; la
+#: **capa** decide dónde se dibuja, y por eso el orden no lo fija la categoría
+#: comercial del ítem sino el nombre de la capa. Una capa aporta dos: una por
+#: detrás del cuerpo y otra por delante.
+PILA_DE_CAPAS: dict[str, int] = {
+    "mount_back": 10,
+    "cape_back": 20,
+    "aura_back": 25,
+    "hair_back": 30,
+    "body_base": 40,
+    "ears": 45,
+    "boots": 50,
+    "outfit": 60,
+    "accessory_body": 65,
+    "gloves": 70,
+    "offhand": 80,
+    "face": 90,
+    "hair_front": 100,
+    "head": 110,
+    "accessory_face": 115,
+    "weapon": 130,
+    "cape_front": 140,
+    "pet": 150,
+    "mount_front": 160,
+}
+
+#: Dónde va una capa cuyo nombre no está en la pila. Por delante de todo, a
+#: propósito: una pieza mal declarada flotando sobre la cara se ve al instante,
+#: mientras que una escondida detrás del cuerpo es justo el fallo que estuvo
+#: meses sin que nadie lo notara.
+Z_DESCONOCIDO = 999
+
+
 def _capas_de(item: Item, slot: ItemSlot) -> list[dict[str, Any]]:
-    """Normaliza `items.render_manifest` a una lista de capas con `z`."""
+    """Resuelve `items.render_manifest` a las capas que el cliente debe pintar.
+
+    El manifiesto guardado tiene la forma de 06c §2.7: cada entrada trae `layer`
+    (el nombre de la capa), `src` (el archivo) y su rectángulo dentro del lienzo
+    maestro. La salida añade lo que el cliente no puede deducir: de qué ranura e
+    ítem viene, y en qué orden va.
+
+    Lo que había antes leía `key` y `z`, dos claves que ningún manifiesto escribe.
+    Tres consecuencias, todas silenciosas: cada capa caía al código del ítem, de
+    modo que una capa emitía **dos filas idénticas** en vez de su cara delantera y
+    su trasera; todos los `z` valían cero, así que la pila quedaba ordenada
+    alfabéticamente por ranura; y `src` se perdía por el camino, con lo que el
+    cliente nunca supo qué archivo pintar. De regalo, las supresiones
+    (`suppresses_layers`, que nombra capas) se comparaban contra códigos de ítem y
+    no casaban jamás: un yelmo cerrado no tapaba el pelo.
+    """
     manifiesto = dict(item.render_manifest or {})
     capas = manifiesto.get("layers")
     if not capas:
-        clave = manifiesto.get("icon") or item.icon_key or item.code
-        capas = [{"key": clave, "z": manifiesto.get("z", 0)}]
+        # Un ítem sin manifiesto aporta una capa única con el nombre de su ranura,
+        # que es lo que la semilla le habría dado (`CAPAS_POR_RANURA`).
+        capas = [{"layer": slot.value}]
+
+    tinte_del_item = manifiesto.get("tint")
     normalizadas: list[dict[str, Any]] = []
     for capa in capas:
         if not isinstance(capa, dict):
             continue
+        nombre = str(capa.get("layer") or capa.get("key") or slot.value)
+        z = PILA_DE_CAPAS.get(nombre)
+        if z is None:
+            logger.warning(
+                "avatar.capa_desconocida", item=item.code, capa=nombre, slot=slot.value
+            )
+            z = Z_DESCONOCIDO
         normalizadas.append(
             {
                 "slot": slot.value,
                 "item_code": item.code,
-                "key": capa.get("key") or item.icon_key or item.code,
-                "z": int(capa.get("z", 0)),
-                "offset": capa.get("offset"),
-                "tint": capa.get("tint") or manifiesto.get("tint"),
+                "key": nombre,
+                "z": z,
+                "src": capa.get("src"),
+                # Rectángulo dentro del lienzo maestro de 1024×1024 (06c §2.4).
+                # Sin él, el cliente no puede colocar una pieza que no ocupe el
+                # lienzo entero.
+                "x": int(capa.get("x", 0)),
+                "y": int(capa.get("y", 0)),
+                "w": int(capa.get("w", 0)) or None,
+                "h": int(capa.get("h", 0)) or None,
+                "tint": capa.get("tint") or tinte_del_item,
             }
         )
     return normalizadas
@@ -410,6 +478,8 @@ def configuracion_avatar(db: Session, usuario_id: uuid.UUID) -> dict[str, Any]:
 __all__ = [
     "CLAVE_SLOTS_ACTIVOS",
     "CLAVE_SLOTS_RESERVADOS",
+    "PILA_DE_CAPAS",
+    "Z_DESCONOCIDO",
     "CambioEquipamiento",
     "RanuraInvalida",
     "aplicar_equipamiento",

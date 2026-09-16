@@ -3041,7 +3041,7 @@ Convenciones de la columna "Respuesta": los nombres en `PascalCase` son esquemas
 | POST | `/api/v1/characters` | Sí | Crea el personaje (P03): nombre, arquetipo y rasgos. Otorga la bolsa de bienvenida y el kit inicial. | `CharacterOut` + `RewardsReceipt` en `rewards` |
 | GET | `/api/v1/characters/me` | Sí | Personaje con nivel, XP, rango y contadores. | `CharacterOut` |
 | PATCH | `/api/v1/characters/me` | Sí | Renombra el personaje o cambia el arquetipo (gratis en el MVP). | `CharacterOut` |
-| GET | `/api/v1/avatar` | Sí | Rasgos, arquetipo, equipo y **manifiesto de capas ya resuelto y ordenado por z**. | `AvatarOut` `{traits, archetype, equipment, layers[], etag}` |
+| GET | `/api/v1/avatar` | Sí | Rasgos, arquetipo, equipo y **manifiesto de capas ya resuelto y ordenado por z**. Cada capa: `{slot, item_code, key, z, src, x, y, w, h, tint}`, donde `key` es el nombre de la capa en la pila de dibujado (06c §2.3) —no el código del ítem—, `src` el archivo y `x/y/w/h` su rectángulo dentro del lienzo maestro de 1024×1024. | `AvatarOut` `{traits, archetype, equipment, layers[], etag}` |
 | PUT | `/api/v1/avatar/traits` | Sí | Cambia piel, rostro, orejas, cabello, color y forma de tratamiento. | `AvatarOut` |
 | PUT | `/api/v1/avatar/equipment` | Sí | Mapa atómico `{"weapon": "<user_item_id>", "cape": null}`; valida propiedad, slot y compatibilidad. | `AvatarOut` |
 | GET | `/api/v1/inventory` | Sí | Poseídos + bloqueados visibles, con progreso de requisitos (P16). Filtros `slot`, `rarity`, `state`, `origin`. | `Page<InventoryItemOut>` con `{item, owned, is_new, equipped, requirements[]}` |

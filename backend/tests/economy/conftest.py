@@ -33,6 +33,7 @@ from app.models.enums import (
 from app.models.gamification import GameConfig
 from app.models.identity import Character, User
 from app.models.progress import UserAreaProgress
+from app.seeds.items import CAPAS_POR_RANURA, manifiesto
 
 #: Versión de `game_configs` propia de esta suite. La tabla es única por
 #: (key, version): con una versión distinta por módulo, dos suites pueden
@@ -214,7 +215,13 @@ def crear_item(db: Session):
             auto_grant=auto_grant,
             requirements={},
             requirement_facts=requirement_facts or [],
-            render_manifest=render_manifest or {"layers": [{"key": "capa", "z": 20}]},
+            # El manifiesto lo construye la MISMA función que la semilla. Antes
+            # esta fábrica inventaba {"layers": [{"key": "capa", "z": 20}]}, que
+            # es la forma que esperaba el normalizador y que ningún ítem real
+            # tiene: por eso las pruebas iban verdes mientras el avatar de
+            # producción no resolvía ni una capa.
+            render_manifest=render_manifest
+            or manifiesto(code or "item_de_prueba", CAPAS_POR_RANURA.get(slot, (slot.value,))),
             knowledge_area_id=knowledge_area_id,
         )
         db.add(item)

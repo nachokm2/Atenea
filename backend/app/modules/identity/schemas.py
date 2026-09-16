@@ -267,13 +267,27 @@ class AvatarTraitsOut(EsquemaBase):
 
 
 class AvatarLayerOut(EsquemaBase):
-    """Capa del manifiesto, ya resuelta y ordenada por `z`."""
+    """Una capa del avatar, ya resuelta y lista para pintar (06c §2.3 y §2.7).
+
+    `key` es el nombre de la capa en la pila de dibujado (`cape_back`, `head`…),
+    no el código del ítem: es lo que decide el orden y lo que nombran las
+    supresiones. `src` es el archivo, y `x/y/w/h` su rectángulo dentro del lienzo
+    maestro de 1024×1024.
+
+    Ya no hay `offset`: nunca llevó valor, nadie lo leía, y lo que el cliente
+    necesita para colocar una pieza es el rectángulo completo, no un
+    desplazamiento suelto.
+    """
 
     slot: str
     item_code: str
     key: str
     z: int
-    offset: Any | None = None
+    src: str | None = None
+    x: int = 0
+    y: int = 0
+    w: int | None = None
+    h: int | None = None
     tint: str | None = None
 
 

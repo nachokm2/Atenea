@@ -632,21 +632,31 @@ class CapaAvatar {
     this.z = 0,
     this.desplazamientoX = 0,
     this.desplazamientoY = 0,
+    this.ancho,
+    this.alto,
     this.tinte,
+    this.codigoItem,
     this.itemId,
     this.itemUsuarioId,
     this.suprime = const <String>[],
   });
 
   /// Lee un elemento de `layers[]`.
+  ///
+  /// `key` es el nombre de la capa en la pila de dibujado (`cape_back`, `head`),
+  /// **no** el código del ítem: para eso está `codigoItem`. Los dos se leían
+  /// antes del mismo sitio y por eso una capa parecía dos veces la misma.
   factory CapaAvatar.desdeJson(Map<String, dynamic> json) => CapaAvatar(
         clave: _txt(_alguna(json, <String>['key', 'layer_key', 'id'])),
         ranura: desdeClaveApiOpcional(RanuraItem.values, json['slot']),
-        assetKey: _txt(_alguna(json, <String>['asset_key', 'asset', 'sprite'])),
+        assetKey: _txt(_alguna(json, <String>['src', 'asset_key', 'asset', 'sprite'])),
         z: _ent(_alguna(json, <String>['z', 'z_index', 'order'])),
-        desplazamientoX: _dec(_alguna(json, <String>['offset_x', 'dx'])),
-        desplazamientoY: _dec(_alguna(json, <String>['offset_y', 'dy'])),
+        desplazamientoX: _dec(_alguna(json, <String>['x', 'offset_x', 'dx'])),
+        desplazamientoY: _dec(_alguna(json, <String>['y', 'offset_y', 'dy'])),
+        ancho: _entN(_alguna(json, <String>['w', 'width'])),
+        alto: _entN(_alguna(json, <String>['h', 'height'])),
         tinte: _txtN(json['tint']),
+        codigoItem: _txtN(json['item_code']),
         itemId: _txtN(json['item_id']),
         itemUsuarioId: _txtN(json['user_item_id']),
         suprime: _textos(json['suppresses_layers']),
@@ -670,8 +680,18 @@ class CapaAvatar {
   /// Desplazamiento vertical en unidades del lienzo.
   final double desplazamientoY;
 
+  /// Ancho de la pieza dentro del lienzo maestro, si no lo ocupa entero.
+  final int? ancho;
+
+  /// Alto de la pieza dentro del lienzo maestro, si no lo ocupa entero.
+  final int? alto;
+
   /// Color de tinte en `#RRGGBB`, si el manifiesto lo indica.
   final String? tinte;
+
+  /// Código del ítem que genera la capa (`capa_carmesi`). Es el que sirve para
+  /// buscar su ilustración en el catálogo de arte.
+  final String? codigoItem;
 
   /// Ítem del catálogo que genera la capa.
   final String? itemId;
