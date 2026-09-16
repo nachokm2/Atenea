@@ -71,8 +71,10 @@ ignore = [
 # Los __init__.py reexportan a propósito.
 "app/models/__init__.py" = ["F401"]
 "app/**/__init__.py" = ["F401"]
-# Las semillas y los scripts sí pueden imprimir por consola.
+# Las semillas y los scripts sí pueden imprimir por consola: los lee una persona
+# mirando la salida de un despliegue, no un agregador de registros.
 "app/seeds/**" = ["T20"]
+"app/esperar_base.py" = ["T20"]
 # En las pruebas la importación dentro de la función es idiomática: sirve para
 # aislar un módulo, para retrasar una carga cara o para no importar lo que se va
 # a sustituir. Fuera de ellas, el contrato (§1.3) exige marcarla.

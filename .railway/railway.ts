@@ -84,7 +84,13 @@ export default defineRailway((ctx) => {
 
   // El material del aprendiz. `sizeMB` se puede subir sin perder nada; bajarlo
   // o quitarlo es destructivo y Railway lo marca como tal antes de aplicar.
-  const material = volume("material", { sizeMB: 5120 });
+  //
+  // La región va escrita aunque parezca redundante. Sin ella el plan la quiere
+  // poner a `null` en cada aplicación —Railway la asignó al crear el volumen, el
+  // archivo no la conocía— y eso sale marcado como cambio destructivo: mover un
+  // volumen de región es vaciarlo. Con el volumen recién creado no se pierde
+  // nada; con material dentro, se pierde todo.
+  const material = volume("material", { sizeMB: 5120, region: "sfo" });
 
   const api = service("api", {
     // `rootDirectory` es obligatorio: el Dockerfile vive en `backend/` y espera
@@ -111,17 +117,33 @@ export default defineRailway((ctx) => {
     // hace nada. Sin la siembra, una base recién migrada arranca sin
     // configuración de juego, sin niveles, sin objetos y sin misiones, y la app
     // respondería 200 a todo sin tener nada que mostrar.
-    preDeploy: "alembic upgrade head && python -m app.seeds",
+    // `esperar_base` va delante, y no es un lujo. La base vive en la red privada
+    // de Railway, que tarda unos segundos en levantarse dentro del contenedor;
+    // alembic arranca de inmediato y el primer despliegue moría con
+    // `psycopg.errors.ConnectionTimeout` teniendo la base viva al lado. No es un
+    // `sleep`: pregunta hasta que contesta, y si no contesta en un minuto se
+    // detiene el despliegue con el error a la vista.
+    preDeploy: "python -m app.esperar_base && alembic upgrade head && python -m app.seeds",
 
-    // `${PORT:-8000}` y no `$PORT` pelado: este comando sustituye al `CMD` del
-    // Dockerfile, que sí llevaba respaldo. Si `PORT` no estuviera puesto —y
-    // Railway lo inyecta a partir del puerto destino de un dominio, que al
-    // principio no existe—, el shell borraría la palabra vacía y uvicorn
-    // recibiría `--port --proxy-headers`. El contenedor no arrancaría y el
-    // healthcheck no llegaría ni a ejecutarse.
+    // Envuelto en `sh -c`, y eso es lo único que hace que arranque.
+    //
+    // Railway ejecuta el comando de inicio **sin shell**, así que sin el
+    // envoltorio `${PORT:-8000}` le llega a uvicorn como texto y se cae con
+    // «Invalid value for '--port': '${PORT:-8000}' is not a valid integer».
+    // Aquí había un comentario razonando sobre esa sintaxis que daba por hecho
+    // que alguien la expandiría; no la expande nadie.
+    //
+    // Y sigue siendo `${PORT:-8000}` y no `$PORT` pelado: este comando sustituye
+    // al `CMD` del Dockerfile, que sí llevaba respaldo. Railway inyecta `PORT` a
+    // partir del puerto destino de un dominio, que al principio no existe, y sin
+    // respaldo el shell borraría la palabra vacía y uvicorn recibiría
+    // `--port --proxy-headers`.
+    //
+    // `exec` para que uvicorn sea el proceso 1 y reciba el SIGTERM del reinicio
+    // en vez de que lo intercepte el shell y el contenedor muera a lo bruto.
     start:
-      "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} " +
-      "--proxy-headers --forwarded-allow-ips='*'",
+      "sh -c 'exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} " +
+      '--proxy-headers --forwarded-allow-ips="*"\'',
 
     // La ruta del contrato es `/api/v1/health`; `/health` existe porque es la
     // que esperan las plataformas, que no saben del prefijo de versión. Apuntar
