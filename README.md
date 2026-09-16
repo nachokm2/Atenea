@@ -143,6 +143,29 @@ Si no pasas `ATENEA_API`, el paquete apunta a `Entorno.apiProduccion`. Nunca a
 `localhost`: un paquete publicado que busca el ordenador de quien lo compiló no
 le sirve a nadie, y desde Android 9 el tráfico sin cifrar está bloqueado.
 
+### Instalarla en tu propio móvil
+
+Para llevarla a un teléfono y ya —sin Play, sin llave de firma— basta un APK,
+que es otro artefacto distinto del `appbundle`:
+
+```bash
+cd app
+flutter build apk --release --dart-define=ATENEA_API=https://api-production-66b3.up.railway.app/api/v1
+```
+
+Sale en `app/build/app/outputs/flutter-apk/app-release.apk`. Se copia al teléfono
+y se abre desde el explorador de archivos; Android pedirá permiso para instalar
+de fuera de Play, que hay que dar una vez.
+
+Va firmado con la clave de depuración mientras no exista `key.properties`. Para
+instalártelo tú da igual; para Play no sirve.
+
+**El `ATENEA_API` tiene que ser `https://`.** Apuntar el APK a la máquina de
+desarrollo por la red de casa —`http://192.168.x.x:8000`— no funciona y encima
+no avisa: Android bloquea el tráfico en claro desde la versión 9 y el manifiesto
+de Atenea no lo permite, así que la app no da error, simplemente no recibe
+respuesta nunca.
+
 ## Comprobar que todo sigue en pie
 
 ```powershell
