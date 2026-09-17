@@ -67,3 +67,8 @@ node_modules/
 # 160 MB y solo sirven para recomponer una pieza sin volver a pagarla, que es
 # algo que se hace el mismo dia y en la misma maquina.
 arte/capas/
+
+# Las composiciones que se hacen para MIRAR un problema del avatar antes de
+# tocarlo. Son de usar y tirar: se regeneran componiendo las capas, y ninguna
+# decision deberia depender de que sigan ahi.
+arte/diagnostico/

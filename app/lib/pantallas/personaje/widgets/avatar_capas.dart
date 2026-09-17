@@ -263,10 +263,43 @@ class _Capa extends StatelessWidget {
   final String figura;
   final double lado;
 
+  /// Coloca la pieza sobre esta figura si no es la canónica de su familia.
+  ///
+  /// Las piezas se dibujaron sobre una figura por familia, así que sobre las
+  /// otras dos van desplazadas y de otra talla. Aquí se corrige con las medidas
+  /// de `Arte.ajuste`, y solo donde tiene sentido: la ropa se ciñe al torso y
+  /// pide talla; el arma se sostiene y pide sitio. Ver [TrazoDeCapa].
+  ///
+  /// Las dos figuras canónicas salen por el camino corto, sin envolver nada.
+  Widget _colocada(Widget imagen) {
+    final AjusteDeFigura a = Arte.ajuste(figura);
+    if (a.esNeutro) return imagen;
+
+    // Las medidas están tomadas sobre el lienzo maestro de 1024, y aquí la capa
+    // se pinta a `lado`. Sin este factor, en una ficha pequeña el arma saltaría
+    // media pantalla.
+    final double k = lado / 1024;
+
+    return switch (TrazoDeCapa.de(capa.clave)) {
+      TrazoDeCapa.talla => Transform(
+          alignment: Alignment.topLeft,
+          transform: Matrix4.identity()
+            ..translateByDouble(a.torsoDx * k, 0, 0, 1)
+            ..scaleByDouble(a.escalaTorso, 1, 1, 1),
+          child: imagen,
+        ),
+      TrazoDeCapa.mano => Transform.translate(
+          offset: Offset(a.manoDx * k, a.manoDy * k),
+          child: imagen,
+        ),
+      TrazoDeCapa.ninguno => imagen,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final Color? tinte = _colorDeTinte(capa.tinte);
-    return Image.asset(
+    return _colocada(Image.asset(
       Arte.capaDeEquipo(figura: figura, src: capa.assetKey),
       height: lado,
       fit: BoxFit.contain,
@@ -281,7 +314,7 @@ class _Capa extends StatelessWidget {
       // pieza está puesta.
       errorBuilder: (BuildContext context, Object error, StackTrace? pila) =>
           const SizedBox.shrink(),
-    );
+    ));
   }
 }
 

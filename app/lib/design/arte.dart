@@ -157,6 +157,32 @@ abstract final class Arte {
     return '$_raiz/capas/$familia/$src';
   }
 
+  /// Cómo hay que colocar una pieza de equipo sobre esta figura.
+  ///
+  /// Devuelve el ajuste neutro para una figura desconocida, que es lo correcto:
+  /// una pieza sin ajustar se ve regular, una pieza con un ajuste inventado se
+  /// ve peor.
+  static AjusteDeFigura ajuste(String figura) =>
+      _ajustes[figura] ?? const AjusteDeFigura();
+
+  /// Las medidas de las seis figuras, sacadas de `scripts/medir_figuras.py`.
+  ///
+  /// **No se editan a mano.** Se regeneran con `python scripts/medir_figuras.py
+  /// --dart` cada vez que cambie un cuerpo, y se pegan aquí. Un número tocado a
+  /// ojo aquí es un número que ya no describe el arte.
+  static const Map<String, AjusteDeFigura> _ajustes = <String, AjusteDeFigura>{
+    'base_femenino_001':
+        AjusteDeFigura(escalaTorso: 0.8596, torsoDx: 66.3, manoDx: -25, manoDy: 3),
+    'base_femenino_002': AjusteDeFigura(),
+    'base_femenino_003':
+        AjusteDeFigura(escalaTorso: 0.86, torsoDx: 70.5, manoDx: -24, manoDy: -15),
+    'base_masculino_001':
+        AjusteDeFigura(escalaTorso: 0.9032, torsoDx: 51.7, manoDx: 2, manoDy: 48),
+    'base_masculino_002': AjusteDeFigura(),
+    'base_masculino_003':
+        AjusteDeFigura(escalaTorso: 1.0991, torsoDx: -49.7, manoDx: 14, manoDy: -18),
+  };
+
   /// Número estable a partir del identificador de rostro (`face_02` -> 2).
   static int _varianteDe(String rostro) {
     final RegExp digitos = RegExp(r'(\d+)');
@@ -383,4 +409,72 @@ class ImagenPersonaje extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Cómo se coloca una pieza de equipo sobre una figura que no es la canónica.
+///
+/// Las 46 piezas se generaron **por familia**, editando la ilustración de una
+/// figura de cada una. Sobre esa figura encajan al milímetro; sobre las otras
+/// dos, no. Y no por poco: el torso varía hasta 28 px por lado, y la mano
+/// cambia de altura hasta 48. Como cada arma lleva dibujado su propio puño
+/// agarrándola, esos 48 px son la distancia entre ese puño y la mano del
+/// cuerpo, y se acaban viendo **las dos manos**.
+///
+/// Los números salen de medir los seis cuerpos, no de ajustar a ojo: los
+/// calcula `scripts/medir_figuras.py` y se pegan en `Arte._ajustes`.
+///
+/// Lo que esto **no** arregla, para que no se espere de más: una pieza dibujada
+/// para otro cuerpo sigue siendo una pieza dibujada para otro cuerpo. Se coloca
+/// y se ajusta de talla; no cambia de postura ni de perspectiva. El arreglo
+/// completo es generar las 46 piezas para las seis figuras en vez de para dos.
+class AjusteDeFigura {
+  const AjusteDeFigura({
+    this.escalaTorso = 1,
+    this.torsoDx = 0,
+    this.manoDx = 0,
+    this.manoDy = 0,
+  });
+
+  /// Cuánto ensanchar una pieza que se ciñe al torso.
+  final double escalaTorso;
+
+  /// Y cuánto recolocarla después, porque escalar mueve el centro.
+  final double torsoDx;
+
+  /// Cuánto mover una pieza que se sostiene con la mano.
+  final double manoDx;
+  final double manoDy;
+
+  /// ¿Esta figura necesita que se le ajuste algo?
+  ///
+  /// Las dos canónicas no, y saberlo evita envolver sus capas en una
+  /// transformación que no hace nada.
+  bool get esNeutro =>
+      escalaTorso == 1 && torsoDx == 0 && manoDx == 0 && manoDy == 0;
+}
+
+/// Qué transformación le toca a cada capa de la pila de dibujado.
+///
+/// La distinción no es decorativa: una túnica se **ciñe** al cuerpo y hay que
+/// darle la talla, mientras que una espada se **sostiene** y solo hay que
+/// llevarla a donde está la mano. Estirar una espada la engorda; mover una
+/// túnica la descoloca.
+enum TrazoDeCapa {
+  /// Se ciñe al torso: túnica, capa, accesorio de cuerpo.
+  talla,
+
+  /// Se sostiene con la mano: arma, secundaria, guantes.
+  mano,
+
+  /// Ni una cosa ni otra: cara, pelo, cabeza, botas, montura, mascota. Estas
+  /// piezas van sobre partes que el ajuste de torso no describe, y moverlas con
+  /// la mano las mandaría a cualquier sitio.
+  ninguno;
+
+  /// El trazo que le corresponde al nombre de capa que manda el Reino.
+  static TrazoDeCapa de(String capa) => switch (capa) {
+        'outfit' || 'cape_back' || 'cape_front' || 'accessory_body' => talla,
+        'weapon' || 'offhand' || 'gloves' => mano,
+        _ => ninguno,
+      };
 }
