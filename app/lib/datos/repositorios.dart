@@ -1228,15 +1228,17 @@ class RepoGamificacion {
   /// Marca todas como leídas.
   Future<void> marcarTodasLeidas() => cliente.enviar('/notifications/read-all');
 
-  /// Registra o actualiza el token de push del dispositivo.
-  Future<void> registrarTokenPush(String token, {String? plataforma}) =>
-      cliente.enviar(
-        '/devices/push-token',
-        cuerpo: _cuerpo(<String, Object?>{
-          'token': token,
-          'platform': plataforma,
-        }),
-      );
+  // Aquí vivía `registrarTokenPush`. No la llamaba nadie —ni una pantalla, ni
+  // una prueba— y además estaba rota: mandaba `token` y `platform` contra un
+  // `PushTokenIn` que exige `push_token` con `extra="forbid"`, o sea un 422
+  // garantizado, que el `catch` de arriba se habría tragado en silencio.
+  //
+  // Lo peligroso de ese código no era que no funcionase: era que *parecía* que
+  // sí, y hacía creer que la cadena del push estaba hecha. No lo está. El
+  // endpoint y la columna siguen en el servidor, que es donde tiene sentido
+  // esperar; cuando haya un SDK que produzca un token de verdad, esto vuelve
+  // —con el nombre del campo correcto— y se llama tras entrar y en cada
+  // refresco del token.
 
   /// Claves públicas de juego, curvas de nivel y colores de rareza.
   ///

@@ -6,12 +6,14 @@
 /// presenta y ofrece cambiar el objetivo.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
-import '../../data/errores.dart';
 import '../../datos/repositorios.dart';
+import '../../estado/config_juego.dart';
 import '../../design/components.dart';
 import '../../design/theme.dart';
 import '../../design/tokens.dart';
@@ -19,74 +21,21 @@ import '../../estado/gamificacion.dart';
 import '../../navegacion/rutas.dart';
 import '../personaje/widgets/piezas.dart';
 
-/// Configuración pública del juego (`GET /config`), de donde salen las
-/// opciones de intensidad del objetivo diario.
-class ControladorConfigJuego extends ChangeNotifier {
-  ControladorConfigJuego(this._repos);
-
-  final Repositorios _repos;
-
-  ConfigPublica? _config;
-  bool _cargando = false;
-
-  /// Configuración vigente, o `null` si todavía no llegó.
-  ConfigPublica? get config => _config;
-
-  /// ¿Se está pidiendo?
-  bool get cargando => _cargando;
-
-  /// Trae la configuración una sola vez.
-  Future<void> cargar() async {
-    if (_cargando || _config != null) return;
-    _cargando = true;
-    notifyListeners();
-    try {
-      _config = await _repos.gamificacion.configPublica();
-    } on ErrorAtenea {
-      // Sin configuración se usan las opciones documentadas del contrato:
-      // no es motivo para dejar al usuario sin poder cambiar su objetivo.
-    } finally {
-      _cargando = false;
-      notifyListeners();
-    }
-  }
-
-  /// Opciones de meta para un tipo de objetivo (`goal.*.options` de §5.6).
-  List<int> opcionesDe(TipoObjetivo tipo) {
-    final String clave = switch (tipo) {
-      TipoObjetivo.minutos => 'goal.minutes.options',
-      TipoObjetivo.actividades => 'goal.activities.options',
-      TipoObjetivo.xp => 'goal.xp.options',
-    };
-    final List<int> delReino = <int>[
-      for (final String v in _config?.lista(clave) ?? const <String>[])
-        if (int.tryParse(v) != null) int.parse(v),
-    ];
-    if (delReino.isNotEmpty) return delReino;
-    return _opcionesDocumentadas[tipo] ?? const <int>[];
-  }
-
-  /// Valores iniciales que documenta el contrato (§5.6) y que solo se usan
-  /// mientras la configuración del servidor no está disponible.
-  static const Map<TipoObjetivo, List<int>> _opcionesDocumentadas =
-      <TipoObjetivo, List<int>>{
-    TipoObjetivo.minutos: <int>[10, 20, 30, 45],
-    TipoObjetivo.actividades: <int>[1, 3, 5, 8],
-    TipoObjetivo.xp: <int>[50, 100, 200, 350],
-  };
-}
-
 /// Pantalla de Racha.
+///
+/// `ControladorConfigJuego` ya no se crea aquí: vive en el árbol desde
+/// `main.dart`. Lo tuvo esta pantalla en exclusiva mientras la configuración
+/// del Reino solo servía para pintar las opciones del objetivo diario; cuando
+/// el recordatorio local necesitó las horas de aviso, montar una segunda caché
+/// habría sido pedir dos veces lo mismo. Se pide al entrar por si nadie lo hizo
+/// —`cargar()` es idempotente y no repite la petición.
 class PantallaRacha extends StatelessWidget {
   const PantallaRacha({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider<ControladorConfigJuego>(
-      create: (BuildContext ctx) =>
-          ControladorConfigJuego(ctx.read<Repositorios>())..cargar(),
-      child: const _VistaRacha(),
-    );
+    unawaited(context.read<ControladorConfigJuego>().cargar());
+    return const _VistaRacha();
   }
 }
 

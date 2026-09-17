@@ -1118,7 +1118,18 @@ PARAMETROS: tuple[ParametroConfig, ...] = (
         key="notifications.reminder.window",
         value={"start": "08:00", "end": "21:30"},
         value_type="map",
-        is_public=False,
+        # Pública, y sus dos hermanas —`reminder.default_hour` y
+        # `last_call.hour`— ya lo eran. No hay nada que proteger aquí: es la
+        # franja en la que el aprendiz puede recibir un recordatorio, no un
+        # parámetro de coste ni un freno contra el abuso.
+        #
+        # Que fuera privada tenía dos consecuencias feas. En la pantalla de
+        # Ajustes el selector dejaba elegir las 23:30 y confirmaba «te
+        # avisaremos a las 23:30», mientras `hora_del_recordatorio()` la acotaba
+        # en silencio a las 21:30. Y el recordatorio local del teléfono no podía
+        # acotar como acota el servidor sin clavar el 08:00–21:30 en Dart, que
+        # es justo el literal que §8.10 prohíbe.
+        is_public=True,
         description="Franja horaria en la que puede enviarse el recordatorio.",
     ),
     ParametroConfig(

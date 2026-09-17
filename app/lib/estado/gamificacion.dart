@@ -408,15 +408,6 @@ class ControladorGamificacion extends ChangeNotifier {
     }
   }
 
-  /// Registra el token de push del dispositivo.
-  Future<void> registrarTokenPush(String token, {String? plataforma}) async {
-    try {
-      await _repos.gamificacion.registrarTokenPush(token, plataforma: plataforma);
-    } catch (_) {
-      // Sin push el aprendizaje sigue funcionando: no se avisa.
-    }
-  }
-
   /// Olvida todo al cerrar sesión.
   void limpiar() {
     _misiones = null;

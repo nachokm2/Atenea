@@ -31,6 +31,15 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+
+        // `flutter_local_notifications` usa `java.time` para programar la
+        // alarma, y esa biblioteca no existe por debajo de Android 8. El
+        // `minSdk` de Flutter es 24, o sea Android 7, asi que hace falta
+        // reescribirla en la compilacion.
+        //
+        // Sin esto el APK no compila, y el error no menciona ni el paquete ni
+        // esta linea: habla de clases de `java.time` que no se resuelven.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -80,6 +89,13 @@ android {
             )
         }
     }
+}
+
+dependencies {
+    // La biblioteca que hace posible `isCoreLibraryDesugaringEnabled`, arriba.
+    // La version la fija `flutter_local_notifications` en su documentacion; si
+    // se queda corta, el error que sale es el mismo que sin desugaring.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 flutter {

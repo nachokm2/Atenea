@@ -54,7 +54,14 @@ class MarcoCelebracion extends StatelessWidget {
     final ColaCelebraciones cola = context.watch<ColaCelebraciones>();
     final bool quieto = reducirMovimiento(context);
 
-    if (!quieto && hapticaFuerte) {
+    // Esta vibración colgaba de `quieto`, o sea del interruptor equivocado:
+    // «Reducir animaciones» la apagaba y «Vibración» no la tocaba. Ahora
+    // pregunta a quien debe.
+    //
+    // La decisión se toma aquí y no dentro de la llamada aplazada porque para
+    // entonces el `context` puede estar desmontado: la celebración se cierra
+    // sola. Por eso tampoco pasa por `Tacto`, que exige un `context` vivo.
+    if (hapticaFuerte && hapticaActiva(context)) {
       WidgetsBinding.instance.addPostFrameCallback((Duration _) {
         HapticFeedback.mediumImpact();
       });

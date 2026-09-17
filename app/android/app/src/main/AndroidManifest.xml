@@ -6,6 +6,23 @@
          el empaquetado de Android. -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- El recordatorio local tiene que sobrevivir a que se apague el telefono.
+         Sin esto, un reinicio borra todas las alarmas programadas y el aprendiz
+         deja de recibir avisos sin que nada falle a la vista: la app sigue
+         diciendo que los tiene encendidos.
+
+         `POST_NOTIFICATIONS` y `VIBRATE` no hacen falta aqui: los declara el
+         propio `flutter_local_notifications` en su manifiesto y el fusionador
+         los trae. Se dejan donde estan para que la version del permiso la
+         gobierne el paquete, no una copia nuestra que se quedaria vieja.
+
+         Lo que tampoco hay, a proposito, es `SCHEDULE_EXACT_ALARM` ni
+         `USE_EXACT_ALARM`. Una alarma exacta pide permiso aparte desde Android
+         14, o revision de la tienda. Un recordatorio de estudio diario no
+         necesita el minuto exacto, asi que se programa con entrega inexacta y
+         nos ahorramos las dos cosas. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+
     <application
         android:label="Atenea"
         android:name="${applicationName}"
@@ -43,6 +60,28 @@
                 <data android:scheme="atenea"/>
             </intent-filter>
         </activity>
+        <!-- Los dos receptores de `flutter_local_notifications`. Sin el primero
+             la alarma salta y no se pinta nada; sin el segundo, un reinicio del
+             telefono se lleva por delante lo programado.
+
+             `MY_PACKAGE_REPLACED` esta por la misma razon que `BOOT_COMPLETED`:
+             actualizar Atenea tambien borra las alarmas. Las dos variantes de
+             `QUICKBOOT_POWERON` son para fabricantes que no emiten el arranque
+             estandar; las pide el propio plugin en su documentacion. -->
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"/>
+        <receiver
+            android:exported="false"
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

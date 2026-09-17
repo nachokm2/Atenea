@@ -7,7 +7,6 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../../design/components.dart';
 import '../../../design/theme.dart';
@@ -52,7 +51,7 @@ class OpcionSeleccionable extends StatelessWidget {
             onTap: bloqueada
                 ? null
                 : () {
-                    HapticFeedback.selectionClick();
+                    Tacto.seleccion(context);
                     alTocar?.call();
                   },
             borderRadius: Redondeo.rTarjeta,
@@ -110,7 +109,7 @@ class MuestraColor extends StatelessWidget {
         child: ExcludeSemantics(
           child: InkWell(
             onTap: () {
-              HapticFeedback.selectionClick();
+              Tacto.seleccion(context);
               alTocar();
             },
             customBorder: const CircleBorder(),
@@ -177,7 +176,7 @@ class ChipOpcion extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: () {
-              HapticFeedback.selectionClick();
+              Tacto.seleccion(context);
               alTocar();
             },
             borderRadius: Redondeo.rPildora,
@@ -277,7 +276,7 @@ class SelectorPestanas extends StatelessWidget {
                     color: Colors.transparent,
                     child: InkWell(
                       onTap: () {
-                        HapticFeedback.selectionClick();
+                        Tacto.seleccion(context);
                         alCambiar(i);
                       },
                       borderRadius: Redondeo.rPildora,

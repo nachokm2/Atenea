@@ -48,6 +48,25 @@ dependencies:
   provider: ^6.1.5+1
   # Solo para derivar la clave de idempotencia con UUID v5 (SHA-1).
   crypto: ^3.0.6
+  # El recordatorio del propio teléfono.
+  #
+  # El servidor ya decide a quién avisar y cuándo —avisos.py y planificador.py,
+  # con horas de silencio, topes y claves de idempotencia— y lo escribe en la
+  # bandeja. Lo que faltaba era el último metro: que algo suene con la app
+  # cerrada. Eso no pide un servicio de push, pide una alarma local.
+  #
+  # `timezone` no es opcional ni decorativa: `zonedSchedule` exige un
+  # `TZDateTime`, y `flutter_timezone` es lo único que sabe en qué zona está el
+  # teléfono de verdad. Sin ella, `tz.local` es UTC y la repetición diaria se
+  # desfasa en cada cambio de horario.
+  #
+  # Ojo al compilar: `flutter_local_notifications` usa `java.time` y el
+  # `minSdk` de Flutter es 24, así que sin el desugaring de
+  # `android/app/build.gradle.kts` el APK no compila. El fallo aparece tarde y
+  # no menciona este paquete.
+  flutter_local_notifications: ^22.3.1
+  timezone: ^0.11.1
+  flutter_timezone: ^5.1.0
 
 dev_dependencies:
   flutter_test:

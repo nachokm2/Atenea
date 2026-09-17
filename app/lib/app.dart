@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import 'design/components.dart';
 import 'design/theme.dart';
 import 'estado/sesion.dart';
 import 'navegacion/armazon.dart';
@@ -27,6 +28,11 @@ class AplicacionAtenea extends StatelessWidget {
     );
     final bool reducirPorAjuste = context.select<ControladorSesion, bool>(
       (ControladorSesion s) => s.ajustes?.reducirMovimiento ?? false,
+    );
+    // Sin ajustes todavía —antes de entrar— el tacto se queda como estaba: sí.
+    // Ver `hapticaActiva` en design/components.dart.
+    final bool tacto = context.select<ControladorSesion, bool>(
+      (ControladorSesion s) => s.ajustes?.hapticaActivada ?? true,
     );
 
     return MaterialApp.router(
@@ -54,12 +60,18 @@ class AplicacionAtenea extends StatelessWidget {
           data: medios.copyWith(
             disableAnimations: medios.disableAnimations || reducirPorAjuste,
           ),
-          // Por encima de cualquier pantalla, incluidos los flujos inmersivos.
-          // `constructorDeCelebracion` entrega los overlays reales P13 y P14
-          // (subida de nivel e ítem desbloqueado) más el de racha.
-          child: CapaCelebraciones(
-            hijo: hijo ?? const SizedBox.shrink(),
-            constructor: constructorDeCelebracion,
+          // El tacto no tiene una preferencia estándar del sistema donde
+          // apoyarse como el movimiento, así que viaja en su propio portador.
+          child: PreferenciasDeTacto(
+            activa: tacto,
+            // Por encima de cualquier pantalla, incluidos los flujos
+            // inmersivos. `constructorDeCelebracion` entrega los overlays
+            // reales P13 y P14 (subida de nivel e ítem desbloqueado) más el
+            // de racha.
+            child: CapaCelebraciones(
+              hijo: hijo ?? const SizedBox.shrink(),
+              constructor: constructorDeCelebracion,
+            ),
           ),
         );
       },

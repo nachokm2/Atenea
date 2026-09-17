@@ -12,7 +12,6 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -82,7 +81,7 @@ class _PantallaAccesoState extends State<PantallaAcceso> {
       setState(() => _faltaAceptar = true);
     }
     if (!valido || (_registrando && !_acepta)) {
-      HapticFeedback.lightImpact();
+      Tacto.ligero(context);
       return;
     }
 

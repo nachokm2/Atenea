@@ -258,7 +258,6 @@ class Ajustes {
     this.sonidoActivado = true,
     this.hapticaActivada = true,
     this.pushActivado = false,
-    this.tokenPush,
     this.modoRecordatorio = ModoRecordatorio.inteligente,
     this.horaRecordatorio,
     this.ultimaLlamadaActivada = false,
@@ -279,7 +278,6 @@ class Ajustes {
         sonidoActivado: _bol(json['sound_enabled'], true),
         hapticaActivada: _bol(json['haptics_enabled'], true),
         pushActivado: _bol(json['push_enabled']),
-        tokenPush: _txtN(json['push_token']),
         modoRecordatorio: ModoRecordatorio.desdeApi(json['reminder_mode']),
         horaRecordatorio: HoraLocal.desdeTexto(json['reminder_time_local']),
         ultimaLlamadaActivada: _bol(json['last_call_enabled']),
@@ -308,8 +306,9 @@ class Ajustes {
   /// Permiso de notificaciones push concedido.
   final bool pushActivado;
 
-  /// Token FCM/APNs registrado.
-  final String? tokenPush;
+  // `tokenPush` se retiró: leía `json['push_token']`, y el servidor excluye ese
+  // campo a propósito (devuelve `has_push_token`). Era siempre nulo, así que el
+  // reenvío de `aJson` nunca se disparaba.
 
   /// Recordatorio inteligente, manual o apagado.
   final ModoRecordatorio modoRecordatorio;
@@ -351,7 +350,6 @@ class Ajustes {
         'sound_enabled': sonidoActivado,
         'haptics_enabled': hapticaActivada,
         'push_enabled': pushActivado,
-        if (tokenPush != null) 'push_token': tokenPush,
         'reminder_mode': modoRecordatorio.api,
         'reminder_time_local': horaRecordatorio?.texto,
         'last_call_enabled': ultimaLlamadaActivada,
@@ -372,7 +370,6 @@ class Ajustes {
     bool? sonidoActivado,
     bool? hapticaActivada,
     bool? pushActivado,
-    String? tokenPush,
     ModoRecordatorio? modoRecordatorio,
     HoraLocal? horaRecordatorio,
     bool? ultimaLlamadaActivada,
@@ -391,7 +388,6 @@ class Ajustes {
         sonidoActivado: sonidoActivado ?? this.sonidoActivado,
         hapticaActivada: hapticaActivada ?? this.hapticaActivada,
         pushActivado: pushActivado ?? this.pushActivado,
-        tokenPush: tokenPush ?? this.tokenPush,
         modoRecordatorio: modoRecordatorio ?? this.modoRecordatorio,
         horaRecordatorio: horaRecordatorio ?? this.horaRecordatorio,
         ultimaLlamadaActivada: ultimaLlamadaActivada ?? this.ultimaLlamadaActivada,

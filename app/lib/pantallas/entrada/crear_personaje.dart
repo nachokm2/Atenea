@@ -22,7 +22,6 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/errores.dart';
@@ -283,7 +282,7 @@ class _CuerpoCrearPersonajeState extends State<_CuerpoCrearPersonaje> {
 
     FocusScope.of(context).unfocus();
     if (!borrador.puedeConfirmar) {
-      HapticFeedback.lightImpact();
+      Tacto.ligero(context);
       return;
     }
 
@@ -299,7 +298,7 @@ class _CuerpoCrearPersonajeState extends State<_CuerpoCrearPersonaje> {
       return;
     }
 
-    HapticFeedback.mediumImpact();
+    Tacto.medio(context);
     // Primero la celebración (la capa vive por encima del enrutador), después
     // el cambio de fase que abre el Reino.
     celebraciones.encolar(creado.recompensas);
@@ -516,7 +515,7 @@ class _Retrato extends StatelessWidget {
                       onPressed: borrador.guardando
                           ? null
                           : () {
-                              HapticFeedback.selectionClick();
+                              Tacto.seleccion(context);
                               borrador.aleatorio();
                             },
                       icon: const Icon(

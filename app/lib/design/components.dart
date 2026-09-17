@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -39,6 +41,67 @@ enum Medallon {
 /// ¿El sistema pide reducir el movimiento?
 bool reducirMovimiento(BuildContext context) =>
     MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+
+/// ¿El aprendiz quiere que el móvil vibre?
+///
+/// El hermano de `reducirMovimiento`, y por la misma razón: esta biblioteca no
+/// conoce la sesión ni debe conocerla, así que el valor baja por el árbol y
+/// aquí sólo se lee. Lo inyecta `AplicacionAtenea` desde los ajustes.
+///
+/// El movimiento tuvo suerte: el sistema operativo ya tenía una preferencia
+/// estándar (`MediaQuery.disableAnimations`) donde apoyarse. El tacto no la
+/// tiene, así que la lleva este portador.
+///
+/// Por defecto, sí. Antes de iniciar sesión no hay ajustes que consultar, y en
+/// ese tramo —el acceso, la creación del héroe— el toque ya existía; callarlo
+/// por falta de datos sería un cambio que nadie pidió.
+bool hapticaActiva(BuildContext context) =>
+    PreferenciasDeTacto.maybeOf(context) ?? true;
+
+/// Portador de la preferencia de tacto. Ver `hapticaActiva`.
+class PreferenciasDeTacto extends InheritedWidget {
+  const PreferenciasDeTacto({
+    required this.activa,
+    required super.child,
+    super.key,
+  });
+
+  /// Lo que el aprendiz eligió en Ajustes.
+  final bool activa;
+
+  static bool? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<PreferenciasDeTacto>()?.activa;
+
+  @override
+  bool updateShouldNotify(PreferenciasDeTacto anterior) =>
+      anterior.activa != activa;
+}
+
+/// El toque háptico de Atenea: el de Flutter, pero obedeciendo a Ajustes.
+///
+/// Sustituye a `HapticFeedback` en toda la aplicación, y la diferencia que
+/// importa es el `context` obligatorio: sin él no hay forma de saber si el
+/// aprendiz quiere que el móvil vibre. Llamar a `HapticFeedback` directamente
+/// compilaba igual de bien y vibraba con el interruptor apagado; ese olvido,
+/// repetido en diez sitios, es justo lo que esto viene a cerrar.
+abstract final class Tacto {
+  /// Al elegir algo de una lista, una rejilla o un carrusel.
+  static void seleccion(BuildContext context) =>
+      _tocar(context, HapticFeedback.selectionClick);
+
+  /// Al rechazar una acción: un formulario incompleto, un botón que no procede.
+  static void ligero(BuildContext context) =>
+      _tocar(context, HapticFeedback.lightImpact);
+
+  /// Al celebrar: subida de nivel, ítem desbloqueado, héroe creado.
+  static void medio(BuildContext context) =>
+      _tocar(context, HapticFeedback.mediumImpact);
+
+  static void _tocar(BuildContext context, Future<void> Function() toque) {
+    if (!hapticaActiva(context)) return;
+    unawaited(toque());
+  }
+}
 
 /// Andamio estándar: fondo del tema, ancho de lectura contenido y padding
 /// consistente.
@@ -181,7 +244,7 @@ class TarjetaAtenea extends StatelessWidget {
             color: Colors.transparent,
             child: InkWell(
               onTap: () {
-                HapticFeedback.selectionClick();
+                Tacto.seleccion(context);
                 alTocar!();
               },
               borderRadius: Redondeo.rTarjeta,

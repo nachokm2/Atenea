@@ -19,6 +19,7 @@ import '../../estado/sesion.dart';
 import '../../navegacion/armazon.dart';
 import '../../navegacion/rutas.dart';
 import '../../nucleo/controlador_tema.dart';
+import '../../nucleo/recordatorio_local.dart';
 import '../personaje/widgets/piezas.dart';
 
 /// Versión visible de la aplicación (coincide con `pubspec.yaml`).
@@ -124,6 +125,46 @@ class _PantallaAjustesState extends State<PantallaAjustes> {
     }
   }
 
+  /// Enciende o apaga los recordatorios en este teléfono.
+  ///
+  /// El interruptor gobierna dos cosas distintas y esa distinción es lo que
+  /// antes no existía:
+  ///
+  /// - `push_enabled` es **la intención**, vive en la cuenta y viaja al
+  ///   servidor. Significa «quiero que mi teléfono me avise».
+  /// - El permiso de Android es **el hecho**, vive solo en este aparato y no
+  ///   sale de aquí jamás. Significa «este aparato puede».
+  ///
+  /// Se piden en ese orden a propósito: primero Android, y solo si concede se
+  /// escribe en el servidor. Guardar la intención de alguien a quien el sistema
+  /// está bloqueando deja el interruptor encendido sobre nada, que es
+  /// exactamente el pecado que esta pantalla arrastraba.
+  ///
+  /// Y al revés, cuando Android bloquea **no se apaga la intención**: negar el
+  /// permiso en el móvil viejo no puede dejar sin avisos al móvil nuevo, porque
+  /// la fila es de la cuenta y el permiso es del aparato.
+  Future<void> _cambiarAvisos(Ajustes a, bool encender) async {
+    final RecordatorioLocal recordatorio = context.read<RecordatorioLocal>();
+
+    if (encender && !await recordatorio.pedirPermiso()) {
+      if (!mounted) return;
+      // Android ya no vuelve a preguntar tras la segunda negativa, así que un
+      // reintento silencioso dejaría el interruptor rebotando sin explicación.
+      avisar(
+        context,
+        'Android está bloqueando los avisos de Atenea. Actívalos en los '
+        'ajustes del sistema.',
+        esError: true,
+      );
+      return;
+    }
+
+    await _aplicar(
+      a.copiarCon(pushActivado: encender),
+      (ControladorSesion s) => s.guardarAjustes(pushActivado: encender),
+    );
+  }
+
   Future<void> _elegirHora({
     required HoraLocal? actual,
     required String titulo,
@@ -149,8 +190,14 @@ class _PantallaAjustesState extends State<PantallaAjustes> {
   Widget build(BuildContext context) {
     final ControladorSesion sesion = context.watch<ControladorSesion>();
     final ControladorTema tema = context.watch<ControladorTema>();
+    final RecordatorioLocal recordatorio = context.watch<RecordatorioLocal>();
     final Ajustes a = _borrador ?? sesion.ajustes ?? const Ajustes();
     final bool sinAjustes = sesion.ajustes == null && _borrador == null;
+
+    // El aprendiz quiere avisos y Android no los deja pasar. Es un estado real
+    // y frecuente —basta con revocarlos desde los ajustes del sistema— y hasta
+    // ahora la pantalla no sabía distinguirlo de tenerlos apagados.
+    final bool bloqueado = a.pushActivado && !recordatorio.permitido;
 
     return PantallaAtenea(
       titulo: 'Ajustes',
@@ -234,7 +281,7 @@ class _PantallaAjustesState extends State<PantallaAjustes> {
                             alTocar: _guardando
                                 ? null
                                 : () {
-                                    tema.cambiar(_modoDe(t));
+                                    tema.cambiar(ControladorTema.modoDe(t));
                                     _aplicar(
                                       a.copiarCon(tema: t),
                                       (ControladorSesion s) =>
@@ -260,19 +307,16 @@ class _PantallaAjustesState extends State<PantallaAjustes> {
                               s.guardarAjustes(reducirMovimiento: v),
                         ),
               ),
-              _FilaSwitch(
-                icono: Icons.volume_up_rounded,
-                titulo: 'Sonido',
-                detalle: 'Aciertos, recompensas y subidas de nivel',
-                valor: a.sonidoActivado,
-                alCambiar: _guardando
-                    ? null
-                    : (bool v) => _aplicar(
-                          a.copiarCon(sonidoActivado: v),
-                          (ControladorSesion s) =>
-                              s.guardarAjustes(sonidoActivado: v),
-                        ),
-              ),
+              // Aquí vivía un interruptor de «Sonido» que prometía «aciertos,
+              // recompensas y subidas de nivel». Atenea no tiene sonido: ni un
+              // paquete de audio, ni un archivo, ni una llamada. El campo
+              // `sound_enabled` sigue en el servidor y en el DTO porque está en
+              // el contrato y no estorba; lo que no puede seguir es cobrar por
+              // adelantado algo que no existe.
+              //
+              // El día que haya diseño sonoro —cuatro o cinco sonidos cortos,
+              // no un paquete— este interruptor vuelve en media hora, y que lea
+              // `sonidoActivado` igual que `Tacto` lee `hapticaActivada`.
               _FilaSwitch(
                 icono: Icons.vibration_rounded,
                 titulo: 'Vibración',
@@ -293,19 +337,32 @@ class _PantallaAjustesState extends State<PantallaAjustes> {
             subtitulo: 'Nunca más de tres al día, y jamás en tus horas de '
                 'silencio',
             hijos: <Widget>[
+              // El título decía «Avisos en este dispositivo» y el detalle «sin
+              // esto, el Reino no te escribe». Las dos frases eran falsas: la
+              // preferencia es de la cuenta, no del aparato, y el Reino escribe
+              // igual —a la campana de Inicio, que es donde siempre estuvo la
+              // entrega—. Lo que faltaba no era el mensaje: era que sonara con
+              // Atenea cerrada.
               _FilaSwitch(
                 icono: Icons.notifications_active_rounded,
-                titulo: 'Avisos en este dispositivo',
-                detalle: 'Sin esto, el Reino no te escribe',
-                valor: a.pushActivado,
+                titulo: 'Recordatorios en el móvil',
+                detalle: bloqueado
+                    ? 'Android los está bloqueando. Actívalos en los ajustes '
+                        'del sistema.'
+                    : 'Te avisamos aunque no tengas Atenea abierta. Los '
+                        'mensajes del Reino siguen en la campana.',
+                valor: a.pushActivado && !bloqueado,
                 alCambiar: _guardando
                     ? null
-                    : (bool v) => _aplicar(
-                          a.copiarCon(pushActivado: v),
-                          (ControladorSesion s) =>
-                              s.guardarAjustes(pushActivado: v),
-                        ),
+                    : (bool v) => _cambiarAvisos(a, v),
               ),
+              if (bloqueado)
+                _FilaAccion(
+                  icono: Icons.open_in_new_rounded,
+                  titulo: 'Abrir los ajustes de Android',
+                  detalle: 'Ahí puedes volver a permitir los avisos',
+                  alTocar: recordatorio.abrirAjustesDelSistema,
+                ),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: Espacio.xs),
                 child: Column(
@@ -454,50 +511,26 @@ class _PantallaAjustesState extends State<PantallaAjustes> {
                 detalle: 'Cambia la intensidad en Racha',
                 alTocar: () => context.go(Rutas.racha),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: Espacio.xs),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Row(
-                      children: <Widget>[
-                        const Icon(Icons.translate_rounded),
-                        const SizedBox(width: Espacio.md),
-                        Expanded(
-                          child: Text(
-                            'Idioma del contenido',
-                            style: context.textos.titleMedium,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: Espacio.xs),
-                    Wrap(
-                      spacing: Espacio.xs,
-                      children: <Widget>[
-                        for (final MapEntry<String, String> idioma
-                            in _idiomas.entries)
-                          _ChipOpcion(
-                            texto: idioma.value,
-                            activo: a.idiomaContenido == idioma.key,
-                            alTocar: _guardando
-                                ? null
-                                : () => _aplicar(
-                                      a.copiarCon(
-                                        idiomaContenido: idioma.key,
-                                      ),
-                                      (ControladorSesion s) =>
-                                          s.guardarAjustes(
-                                        idiomaContenido: idioma.key,
-                                      ),
-                                      confirmacion:
-                                          'El contenido nuevo se generará en '
-                                          '${idioma.value.toLowerCase()}.',
-                                    ),
-                          ),
-                      ],
-                    ),
-                  ],
+              // Esto era un selector de idioma —Español o Inglés— que prometía
+              // «el contenido nuevo se generará en inglés». Nadie leía el
+              // ajuste: `content_language` existía como columna, esquema y
+              // migración, y ni el arquitecto de ruta ni el autor de lección lo
+              // miraban jamás.
+              //
+              // Lo que sí ocurre es más sensato que lo que se ofrecía: el
+              // contenido sale en el idioma del material, porque la ingesta lo
+              // detecta (`detectar_idioma` en extraccion.py) y la ruta lo
+              // hereda. Así que en vez de borrar la fila, se cuenta: nadie
+              // sabía que funcionaba así, y era la única forma de que el
+              // aprendiz entienda por qué su PDF en inglés le da lecciones en
+              // inglés.
+              const ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(Icons.translate_rounded),
+                title: Text('Idioma del contenido'),
+                subtitle: Text(
+                  'El de tu material. Atenea lo reconoce al subirlo y escribe '
+                  'las lecciones en ese mismo idioma.',
                 ),
               ),
             ],
@@ -573,16 +606,6 @@ class _PantallaAjustesState extends State<PantallaAjustes> {
     );
   }
 
-  static const Map<String, String> _idiomas = <String, String>{
-    'es': 'Español',
-    'en': 'Inglés',
-  };
-
-  static ThemeMode _modoDe(PreferenciaTema tema) => switch (tema) {
-        PreferenciaTema.sistema => ThemeMode.system,
-        PreferenciaTema.oscuro => ThemeMode.dark,
-        PreferenciaTema.claro => ThemeMode.light,
-      };
 }
 
 // ---------------------------------------------------------------------------
