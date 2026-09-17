@@ -91,8 +91,33 @@ Future<void> main() async {
       // Cualquier cambio de Ajustes pasa por aquí, porque guardar termina
       // siempre en `notifyListeners()`. Así el espejo se mantiene al día sin
       // un gancho por interruptor.
-      unawaited(recordatorio.anotarAjustes(sesion.ajustes));
-      if (!habiaSesion) unawaited(config.cargar());
+      final Future<void> anotado = recordatorio.anotarAjustes(sesion.ajustes);
+
+      if (habiaSesion) {
+        unawaited(anotado);
+      } else {
+        // Solo al ENTRAR, y la distinción importa: esta rama no se ejecuta una
+        // vez por sesión sino en cada `notifyListeners()` del controlador
+        // —anotar el personaje, refrescar el héroe, guardar un ajuste—, así que
+        // lo que se cuelgue aquí sin condición se paga doce escrituras de disco
+        // cada vez.
+        //
+        // Al entrar hay que reponer las horas del Reino: cerrar sesión borró el
+        // espejo entero, también las cuatro horas, que no son del aprendiz sino
+        // de `game_configs`. Y el puente que las repone —el oyente de `config`—
+        // no vuelve a dispararse, porque `cargar()` sale por su guarda sin
+        // notificar cuando ya tiene la configuración en memoria. Sin esto, el
+        // segundo inicio de sesión de una misma ejecución se quedaba sin
+        // `horaPorDefecto` y la cadena salía vacía por la primera regla.
+        //
+        // Encadenado con `.then` y no en paralelo: las dos escrituras van al
+        // mismo espejo, y lanzadas a la vez los borrados de la primera pueden
+        // aterrizar después de los valores de la segunda.
+        unawaited(
+          anotado.then((_) => recordatorio.anotarDelReino(config.anotarEn)),
+        );
+        unawaited(config.cargar());
+      }
     }
     habiaSesion = hay;
   });

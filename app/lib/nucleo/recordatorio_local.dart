@@ -111,6 +111,15 @@ class RecordatorioLocal extends ChangeNotifier with WidgetsBindingObserver {
   /// No pide permiso: pedirlo al arrancar es la forma más rápida de que te lo
   /// nieguen para siempre. El permiso se pide donde tiene sentido, que es al
   /// encender el interruptor de Ajustes. Ver [pedirPermiso].
+  ///
+  /// **Nunca lanza.** Se llama desde el `Future.wait` de `main()`, donde una
+  /// excepción se lleva por delante el arranque entero de Atenea: un fallo del
+  /// plugin de notificaciones dejaría la aplicación sin abrir. Media docena de
+  /// llamadas de aquí cruzan un canal de plataforma, que es precisamente lo que
+  /// puede fallar en un teléfono concreto y en ninguna prueba.
+  ///
+  /// Si algo de eso falla, el recordatorio se queda apagado y el Reino sigue
+  /// funcionando: la bandeja, la racha y las lecciones no dependen de él.
   Future<void> iniciar() async {
     if (_listo || !_hayAlarmas) return;
 
@@ -126,33 +135,66 @@ class RecordatorioLocal extends ChangeNotifier with WidgetsBindingObserver {
       // desde luego mejor que no arrancar.
     }
 
-    await _plugin.initialize(
-      settings: const InitializationSettings(
-        // Un escudo monocromo, no el icono de lanzamiento. Android pinta este
-        // recurso como silueta blanca y descarta el color, así que cualquier
-        // icono con relleno sale como una mancha del tamaño del lienzo.
-        //
-        // El recurso lo busca el plugin **por nombre**, en tiempo de ejecución.
-        // De ahí que esté listado en `android/app/src/main/res/raw/keep.xml`:
-        // sin eso, `shrinkResources` lo borraría del APK de release sin que
-        // nada fallase al compilar.
-        android: AndroidInitializationSettings('@drawable/ic_aviso'),
-      ),
-      onDidReceiveNotificationResponse: _alTocarElAviso,
-    );
-
-    // El aprendiz pudo tocar un aviso con la app cerrada del todo. En ese caso
-    // el toque no llega por la respuesta de arriba, sino por aquí.
-    final NotificationAppLaunchDetails? arranque =
-        await _plugin.getNotificationAppLaunchDetails();
-    if (arranque?.didNotificationLaunchApp ?? false) {
-      _anotarDestino(arranque?.notificationResponse?.payload);
+    // El plugin arrancó? Solo `initialize` decide eso. Lo que venga después
+    // puede fallar por su cuenta sin dejar el recordatorio inservible.
+    bool arranco = false;
+    try {
+      await _plugin.initialize(
+        settings: const InitializationSettings(
+          // Un escudo monocromo, no el icono de lanzamiento. Android pinta este
+          // recurso como silueta blanca y descarta el color, así que cualquier
+          // icono con relleno sale como una mancha del tamaño del lienzo.
+          //
+          // El recurso lo busca el plugin **por nombre**, en tiempo de
+          // ejecución. De ahí que esté listado en
+          // `android/app/src/main/res/raw/keep.xml`: sin eso,
+          // `shrinkResources` lo borraría del APK de release sin que nada
+          // fallase al compilar.
+          android: AndroidInitializationSettings('@drawable/ic_aviso'),
+        ),
+        onDidReceiveNotificationResponse: _alTocarElAviso,
+      );
+      arranco = true;
+    } catch (_) {
+      // El plugin no arrancó. No se marca `_listo` ni se registra el observador
+      // del ciclo de vida, y eso último es lo que importa: con el observador
+      // puesto, cada ida a segundo plano llamaría a `sincronizar()` contra un
+      // plugin muerto, dentro de un `unawaited`, y el recordatorio aparentaría
+      // estar vivo mientras ensucia la zona de errores.
+      //
+      // Pero **no se sale todavía**: abajo hay que cancelar igual. Ver el
+      // comentario de `cancelarTodo()`.
     }
 
-    _permitido = await _consultarPermiso();
-    _espejo = (await _memoria.leer()).copiarCon(permisoConcedido: _permitido);
-    _listo = true;
-    WidgetsBinding.instance.addObserver(this);
+    if (arranco) {
+      // Estas dos pueden fallar por su cuenta, y ninguna impide programar nada.
+      // Meterlas en el `try` de arriba dejaba el recordatorio muerto para
+      // siempre en esa instalación por un fallo que no era el suyo.
+      try {
+        // El aprendiz pudo tocar un aviso con la app cerrada del todo. En ese
+        // caso el toque no llega por la respuesta de arriba, sino por aquí.
+        final NotificationAppLaunchDetails? arranque =
+            await _plugin.getNotificationAppLaunchDetails();
+        if (arranque?.didNotificationLaunchApp ?? false) {
+          _anotarDestino(arranque?.notificationResponse?.payload);
+        }
+      } catch (_) {
+        // Se pierde el destino de un toque. El enrutador lleva a Inicio de
+        // todas formas al arrancar con sesión, así que no se nota.
+      }
+
+      try {
+        _permitido = await _consultarPermiso();
+      } catch (_) {
+        // Sin respuesta del sistema se asume que no hay permiso, que es la
+        // suposición que no programa nada.
+        _permitido = false;
+      }
+
+      _espejo = (await _memoria.leer()).copiarCon(permisoConcedido: _permitido);
+      _listo = true;
+      WidgetsBinding.instance.addObserver(this);
+    }
 
     // La cadena de anoche se cancela aquí, y no puede esperar a un `resumed`.
     //
@@ -167,7 +209,21 @@ class RecordatorioLocal extends ChangeNotifier with WidgetsBindingObserver {
     // Es justo la invariante que hace ciertos los textos: si un aviso suena, es
     // que nadie abrió la aplicación desde que se programó. Abrirla tiene que
     // borrarla, venga por donde venga.
-    await cancelarTodo();
+    //
+    // Y se intenta **aunque `initialize` haya fallado**, que es lo que hace que
+    // esto merezca su propio bloque. En el código Java del plugin, `cancelAll`
+    // baja a `NotificationManagerCompat` y `AlarmManager` con el contexto que se
+    // fija al enganchar el motor, no al inicializar: no depende de `initialize`.
+    //
+    // Si se hubiera salido antes, el día que el plugin reviente el aprendiz
+    // abriría Atenea y le seguirían sonando los avisos de anoche con la
+    // aplicación delante —justo la invariante que esto sostiene.
+    try {
+      await cancelarTodo();
+    } catch (_) {
+      // Una cancelación fallida deja alarmas de más, no de menos. Molesto y no
+      // grave, y desde luego no motivo para no arrancar.
+    }
 
     notifyListeners();
   }
@@ -344,26 +400,37 @@ class RecordatorioLocal extends ChangeNotifier with WidgetsBindingObserver {
   /// Un aviso cuyo instante ya pasó se descarta en vez de programarse: Android
   /// no se queja de una alarma en el pasado, sencillamente no suena, que es el
   /// peor de los dos comportamientos posibles.
+  /// Nunca lanza, por la misma razón que [iniciar]: se llama con `unawaited`
+  /// desde el ciclo de vida, y una excepción ahí no la recoge nadie.
   Future<void> reprogramar(List<AvisoLocal> avisos) async {
-    if (!_hayAlarmas) return;
+    // `_listo` y no solo `_hayAlarmas`: si el plugin no llegó a inicializarse,
+    // no hay nada que programar **ni que cancelar**. Sin esta guarda, el bucle
+    // de limpieza de abajo le pedía a un plugin muerto que cancelase cuatro
+    // identificadores, uno por uno.
+    if (!_hayAlarmas || !_listo) return;
 
-    final Set<int> puestos = <int>{};
-    if (_permitido) {
-      final tz.TZDateTime ahora = tz.TZDateTime.now(tz.local);
-      for (final AvisoLocal aviso in avisos) {
-        final tz.TZDateTime cuando =
-            tz.TZDateTime.from(aviso.instante, tz.local);
-        if (!cuando.isAfter(ahora)) continue;
-        await _programar(aviso, cuando);
-        puestos.add(aviso.id);
+    try {
+      final Set<int> puestos = <int>{};
+      if (_permitido) {
+        final tz.TZDateTime ahora = tz.TZDateTime.now(tz.local);
+        for (final AvisoLocal aviso in avisos) {
+          final tz.TZDateTime cuando =
+              tz.TZDateTime.from(aviso.instante, tz.local);
+          if (!cuando.isAfter(ahora)) continue;
+          await _programar(aviso, cuando);
+          puestos.add(aviso.id);
+        }
       }
-    }
 
-    // Lo que no se ha puesto en esta pasada, sobra. La lista de identificadores
-    // es cerrada justamente para poder hacer esto sin preguntarle a Android qué
-    // tiene pendiente.
-    for (final int id in idsDeLaCadena) {
-      if (!puestos.contains(id)) await _plugin.cancel(id: id);
+      // Lo que no se ha puesto en esta pasada, sobra. La lista de
+      // identificadores es cerrada justamente para poder hacer esto sin
+      // preguntarle a Android qué tiene pendiente.
+      for (final int id in idsDeLaCadena) {
+        if (!puestos.contains(id)) await _plugin.cancel(id: id);
+      }
+    } catch (_) {
+      // Un fallo a mitad deja la cadena incompleta, y eso es lo de menos: el
+      // siguiente cierre la rehace entera. Lo que no puede es escaparse.
     }
   }
 
@@ -401,6 +468,38 @@ class RecordatorioLocal extends ChangeNotifier with WidgetsBindingObserver {
   // Ciclo de vida: aquí vive la invariante
   // ---------------------------------------------------------------------------
 
+  /// ¿Está el aprendiz mirando Atenea ahora mismo?
+  ///
+  /// Se escribe de forma **síncrona** dentro del `switch`, antes de cualquier
+  /// `await`, y esa es toda la gracia: el estado del ciclo de vida llega en el
+  /// momento, mientras que el trabajo que dispara tarda. Sin este campo, las dos
+  /// ramas se entrelazan en cada punto de suspensión.
+  ///
+  /// Arranca en `true` porque un arranque en frío ocurre con la aplicación ya
+  /// delante —es lo mismo que da por cierto `iniciar()` al cancelar sin esperar
+  /// un `resumed`. Ponerlo en `false` rompería la invariante por el otro lado:
+  /// un aviso sonando con Atenea abierta.
+  bool _enPrimerPlano = true;
+
+  /// Cola de un solo hueco: el trabajo del ciclo de vida se encadena.
+  ///
+  /// Cancelar y programar tocan el mismo puñado de alarmas por identificador, y
+  /// si se solapan el resultado depende de qué `await` termine antes. Esto los
+  /// pone en fila sin bloquear a nadie.
+  ///
+  /// **La regla, que no se deduce del código: aquí se encolan las entradas del
+  /// ciclo de vida, y nada más.** Por dentro nunca se encola: si `olvidar()` o
+  /// `iniciar()` —que también cancelan— pasaran por aquí, un trabajo encolado
+  /// esperaría a otro trabajo encolado y la cola de un hueco se quedaría
+  /// atascada para siempre, sin excepción y sin ruido.
+  ///
+  /// El `catchError` tampoco es adorno: sin él, una excepción del plugin
+  /// envenena el futuro de la cola y no se vuelve a programar nada nunca más.
+  Future<void> _cola = Future<void>.value();
+
+  Future<void> _enCola(Future<void> Function() trabajo) =>
+      _cola = _cola.then((_) => trabajo()).catchError((Object _) {});
+
   // El parámetro conserva el nombre inglés del framework porque es un
   // `override`: renombrarlo aquí es lo único de este archivo que el análisis
   // rechaza, y tiene razón —quien lea la firma la compara con la de Flutter.
@@ -410,12 +509,24 @@ class RecordatorioLocal extends ChangeNotifier with WidgetsBindingObserver {
       // Está mirando la app: sobra cualquier aviso. Y se revisa el permiso,
       // que puede haber cambiado en los ajustes de Android mientras no mirábamos.
       case AppLifecycleState.resumed:
-        unawaited(revisarPermiso().then((_) => cancelarTodo()));
+        _enPrimerPlano = true;
+        unawaited(_enCola(() async {
+          await revisarPermiso();
+          // Comprobar otra vez, y no por manía: revisar el permiso cruza un
+          // canal de plataforma contra un hilo principal que está rearrancando
+          // la Activity, y si además el permiso cambió se escriben doce claves
+          // en disco. En esa ventana —segundos, no milisegundos— cabe de sobra
+          // que el aprendiz salga de la aplicación. Cancelar entonces borraría
+          // la cadena que `paused` acaba de programar, y el teléfono se
+          // quedaría sin ningún aviso.
+          if (_enPrimerPlano) await cancelarTodo();
+        }));
 
       // Se va. Ahora es cuando la cadena tiene sentido, y se monta con lo que
       // se sabe en este preciso instante.
       case AppLifecycleState.paused:
-        unawaited(sincronizar());
+        _enPrimerPlano = false;
+        unawaited(_enCola(sincronizar));
 
       // `inactive` es una llamada entrante o el conmutador de apps: no es irse.
       // `hidden` y `detached` llegan sin margen para trabajo asíncrono fiable.

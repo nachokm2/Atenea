@@ -24,16 +24,35 @@ class AlmacenTokens {
 
   bool get usaAlmacenSeguro => !kIsWeb;
 
+  /// Lee los tokens guardados. **Nunca lanza.**
+  ///
+  /// Se llama desde `sesion.arrancar()`, que es uno de los futuros del
+  /// `Future.wait` de `main()`: una excepción aquí no deja a Atenea sin sesión,
+  /// la deja sin arrancar. Y el almacén seguro sí falla en la práctica —un
+  /// almacén de claves corrupto tras una actualización del sistema, o al
+  /// restaurar una copia de seguridad en un teléfono distinto, lanza
+  /// `PlatformException` al leer.
+  ///
+  /// Si no se puede leer, se sigue sin tokens: el aprendiz ve la pantalla de
+  /// acceso y vuelve a entrar con su correo. Perder la sesión es mucho menos
+  /// grave que perder la aplicación, y el progreso está a salvo en el Reino.
   Future<void> cargar() async {
     if (_cargado) return;
-    if (usaAlmacenSeguro) {
-      _accesoEnMemoria = await _seguro.read(key: _claveAcceso);
-      _refrescoEnMemoria = await _seguro.read(key: _claveRefresco);
-    } else {
-      final SharedPreferences prefs = await SharedPreferences.getInstance();
-      _accesoEnMemoria = prefs.getString(_claveAcceso);
-      _refrescoEnMemoria = prefs.getString(_claveRefresco);
+    try {
+      if (usaAlmacenSeguro) {
+        _accesoEnMemoria = await _seguro.read(key: _claveAcceso);
+        _refrescoEnMemoria = await _seguro.read(key: _claveRefresco);
+      } else {
+        final SharedPreferences prefs = await SharedPreferences.getInstance();
+        _accesoEnMemoria = prefs.getString(_claveAcceso);
+        _refrescoEnMemoria = prefs.getString(_claveRefresco);
+      }
+    } catch (_) {
+      _accesoEnMemoria = null;
+      _refrescoEnMemoria = null;
     }
+    // Se marca cargado incluso tras fallar: reintentar en cada petición contra
+    // un almacén roto solo repite el error, y la respuesta ya se sabe.
     _cargado = true;
   }
 
