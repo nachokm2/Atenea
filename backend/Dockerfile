@@ -23,6 +23,10 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Capa de dependencias primero: se reaprovecha mientras requirements.txt no cambie.
+#
+# Ese archivo lo genera pip-compile con el cierre transitivo entero fijado, no
+# se edita a mano: las directas estan en requirements.in. Asi la imagen que se
+# despliega es exactamente la que se probo, y no una resuelta al construir.
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 

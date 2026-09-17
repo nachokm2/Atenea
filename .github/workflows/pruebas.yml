@@ -61,9 +61,16 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements*.txt
 
+      # Solo el de desarrollo: se genera incluyendo al de ejecución, así que ya
+      # es el conjunto entero. Instalar los dos no hacía daño —las versiones son
+      # las mismas— pero invita a creer que son dos listas independientes, y
+      # entonces alguien edita una sola.
+      #
+      # `--require-hashes` no, todavía: el bloqueo no lleva hashes. Añadirlos es
+      # el siguiente escalón y obliga a regenerar con `--generate-hashes`.
       - name: Instalar dependencias
         working-directory: backend
-        run: pip install -r requirements.txt -r requirements-dev.txt
+        run: pip install -r requirements-dev.txt
 
       - name: Estilo
         working-directory: backend

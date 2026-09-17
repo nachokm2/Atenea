@@ -1,0 +1,69 @@
+# Dependencias **directas** del backend de Atenea. Se editan aquí y solo aquí.
+#
+# Lo que se instala no es este archivo: es `requirements.txt`, que lo genera
+# `pip-compile` con el cierre transitivo entero fijado. Aquí se declara lo que
+# Atenea usa a sabiendas; allí queda anotado todo lo demás que viene detrás.
+#
+# ## Por qué hacía falta separar los dos
+#
+# Antes esto *era* `requirements.txt`: lo directo fijado y lo transitivo suelto.
+# Eso significa que el contenedor que se despliega no es el que nadie ha probado,
+# porque resuelve versiones en el momento de construirse.
+#
+# No es teórico. La integración continua estuvo roja desde el 13 de septiembre y
+# la causa fue justo esto: `starlette` empezó a avisar de algo sobre `anyio`, y
+# `filterwarnings = ["error"]` convierte un aviso en un fallo. En local nunca
+# pasaba —las dependencias ya instaladas no cambian—, solo con una instalación
+# nueva. Hoy `anyio==4.15.1` y `starlette==0.41.3` están escritas.
+#
+# ## Cómo se regenera
+#
+# **En Linux, no en Windows.** `uvicorn[standard]` arrastra `uvloop`, `httptools`
+# y `watchfiles`, que no existen para Windows: compilado aquí, el bloqueo saldría
+# sin ellas y el contenedor arrancaría con otra cosa.
+#
+#     docker run --rm -v "$PWD:/w" -w /w python:3.12-slim sh -c "#       pip install pip-tools==7.5.1 && #       pip-compile --strip-extras --output-file=requirements.txt requirements.in && #       pip-compile --strip-extras --output-file=requirements-dev.txt requirements-dev.in"
+#
+# Para subir una versión: se cambia aquí, se regenera, y se vuelve a pasar
+# `alembic upgrade head` y la suite. Verificadas contra PostgreSQL 16.15 +
+# pgvector 0.8.6 con Python 3.12.
+
+# --- API HTTP -------------------------------------------------------------
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.32
+slowapi==0.1.10
+
+# --- Configuración y validación ------------------------------------------
+pydantic==2.10.3
+pydantic-settings==2.7.0
+email-validator==2.3.0
+orjson==3.12.0
+
+# --- Base de datos (psycopg3 SÍNCRONO; prohibido async en la capa de datos)
+SQLAlchemy==2.0.36
+alembic==1.14.0
+psycopg[binary]==3.1.18
+pgvector==0.5.0
+
+# --- Seguridad ------------------------------------------------------------
+PyJWT==2.10.1
+passlib[bcrypt]==1.7.4
+bcrypt==4.2.1
+
+# --- Proveedores de IA y clientes HTTP ------------------------------------
+anthropic==0.117.0
+httpx==0.28.1
+tenacity==9.1.4
+
+# --- Ingesta documental ---------------------------------------------------
+pypdf==6.18.0
+python-docx==1.2.0
+markdown-it-py==4.2.0
+
+# --- Corrección técnica determinista (sandbox SQL del worker) -------------
+duckdb==1.5.5
+sqlglot==30.18.0
+
+# --- Observabilidad -------------------------------------------------------
+structlog==26.1.0
