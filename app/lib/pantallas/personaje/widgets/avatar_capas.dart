@@ -123,9 +123,16 @@ class AvatarCapas extends StatelessWidget {
       for (final CapaAvatar c in capas)
         if (c.assetKey.isNotEmpty && c.z < zDelCuerpo) c,
     ];
+    // Y de lo que va por delante, los guantes van aparte porque van sobre la
+    // mano: se pintan después de ella, no antes. El resto —el arma incluida— va
+    // debajo, que es lo que hace que la mano parezca agarrarla.
     final List<CapaAvatar> delante = <CapaAvatar>[
       for (final CapaAvatar c in capas)
-        if (c.assetKey.isNotEmpty && c.z >= zDelCuerpo) c,
+        if (c.assetKey.isNotEmpty && c.z >= zDelCuerpo && c.ranura != RanuraItem.guantes) c,
+    ];
+    final List<CapaAvatar> sobreLasManos = <CapaAvatar>[
+      for (final CapaAvatar c in capas)
+        if (c.assetKey.isNotEmpty && c.z >= zDelCuerpo && c.ranura == RanuraItem.guantes) c,
     ];
 
     final List<String> puestos = <String>[
@@ -189,34 +196,6 @@ class AvatarCapas extends StatelessWidget {
                 ),
               ),
             ),
-            // Las manos, cada una con su piel teñida, aparte del cuerpo.
-            //
-            // Hoy se dibujan siempre las dos y el resultado es idéntico píxel a
-            // píxel al cuerpo de una pieza: `separar_manos.py` lo comprueba en
-            // cada ejecución y se niega a escribir si deja de cumplirse.
-            //
-            // Están aparte para poder **apagar** la que sostiene algo, que es lo
-            // que arregla las dos manos que se ven al equipar un arma. Eso
-            // todavía no se hace, y a propósito: se compuso la pila fuera de la
-            // aplicación y se miró. El puño que cada arma trae dibujado no está
-            // donde está la mano —hace falta moverla entre 133 px hacia arriba
-            // y 184 px hacia abajo según la pieza, y mide entre 0,29 y 5,47
-            // veces la mano— así que apagarla deja el antebrazo cortado en seco
-            // con el puño flotando aparte. Y aunque encajara, ese puño va
-            // pintado dentro del arma y no se tiñe: sería naranja sobre una piel
-            // de cualquiera de los otros cinco tonos.
-            //
-            // Lo que falta es arte de arma **sin puño**, con la empuñadura en el
-            // sitio de la mano. Entonces agarra esta, que sí se tiñe.
-            if (apilando)
-              for (final bool derecha in <bool>[true, false]) ...<Widget>[
-                _CapaDelCuerpo(ruta: Arte.mano(clave, derecha: derecha), lado: tamano),
-                _Tinte(
-                  ruta: Arte.manoPiel(clave, derecha: derecha),
-                  color: CatalogoAvatar.piel(r.tonoPiel),
-                  lado: tamano,
-                ),
-              ],
             // La piel y el pelo del aprendiz, teñidos con lo que eligió.
             //
             // Van pegados al cuerpo y debajo de todo el equipo, que es su sitio
@@ -240,6 +219,37 @@ class AvatarCapas extends StatelessWidget {
             // Y lo que va por delante, en el orden que manda el Reino.
             if (apilando)
               for (final CapaAvatar capa in delante) _Capa(capa: capa, figura: clave, lado: tamano),
+            // Las manos, cada una con su piel teñida, y **sobre el arma**.
+            //
+            // Son ellas las que agarran. Cada pieza empuñada traía su propio
+            // puño dibujado, porque al generarla se le prohibía al modelo tocar
+            // las manos existentes y a la vez se le pedía un arma empuñada; en
+            // pantalla salían dos manos, y así lo encontró el primer aprendiz
+            // que equipó una espada.
+            //
+            // `scripts/quitar_punos.py` le quitó ese puño a las piezas y las
+            // corrió para que la empuñadura caiga donde está esta mano. Por eso
+            // el orden importa: debajo del arma se vería el puño de la pieza
+            // —naranja, y sin teñir, sobre cualquiera de los seis tonos de
+            // piel—; encima, agarra la del aprendiz, que sí se tiñe.
+            //
+            // Dibujarlas siempre y no apagar ninguna no es pereza: apagarla deja
+            // el antebrazo cortado en seco, y se vio componiendo la pila fuera
+            // de la aplicación.
+            if (apilando)
+              for (final bool derecha in <bool>[true, false]) ...<Widget>[
+                _CapaDelCuerpo(ruta: Arte.mano(clave, derecha: derecha), lado: tamano),
+                _Tinte(
+                  ruta: Arte.manoPiel(clave, derecha: derecha),
+                  color: CatalogoAvatar.piel(r.tonoPiel),
+                  lado: tamano,
+                ),
+              ],
+            // Y los guantes al final, que van sobre la mano. Un guante debajo de
+            // ella es un guante que no se ve.
+            if (apilando)
+              for (final CapaAvatar capa in sobreLasManos)
+                _Capa(capa: capa, figura: clave, lado: tamano),
             // Las fichas del equipo, en los dos márgenes que la figura deja
             // libres. Es lo único que se podía hacer mientras cada pieza fuera
             // una ficha de catálogo con su propio encuadre, y sigue siendo la

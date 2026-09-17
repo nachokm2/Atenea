@@ -58,6 +58,10 @@ Future<void> _pintar(WidgetTester tester, List<CapaAvatar> capas) async {
   await tester.pump();
 }
 
+/// Dónde acaba la capa que `_capa` fabrica: el cliente le pone delante la
+/// carpeta de la familia, que el servidor no manda.
+String _pieza(String clave) => 'assets/arte/capas/masculino/lo_que_sea_$clave.webp';
+
 /// Las rutas de imagen que el avatar pintó de verdad.
 List<String> _pintadas(WidgetTester tester) => tester
     .widgetList<Image>(find.byType(Image))
@@ -127,12 +131,12 @@ void main() {
 
   testWidgets('equipar algo no le quita ninguna mano al cuerpo',
       (WidgetTester tester) async {
-    // Hoy no, y es deliberado: ver la cabecera. Apagarla con el arte de ahora
-    // deja un muñón, que es peor que las dos manos que arregla.
+    // Apagar una mano deja el antebrazo cortado en seco: se compuso la pila
+    // fuera de la aplicación y se miró. Lo que se hizo en su lugar fue quitarle
+    // el puño al arma y ponerla donde está la mano.
     await _pintar(tester, <CapaAvatar>[
       _capa('weapon', RanuraItem.arma, 130),
       _capa('offhand', RanuraItem.secundaria, 80),
-      _capa('gloves', RanuraItem.guantes, 70),
     ]);
     final List<String> rutas = _pintadas(tester);
 
@@ -140,5 +144,45 @@ void main() {
     expect(rutas, contains(Arte.mano(figura, derecha: false)));
     expect(rutas, contains(Arte.manoPiel(figura, derecha: true)));
     expect(rutas, contains(Arte.manoPiel(figura, derecha: false)));
+  });
+
+  testWidgets('la mano se pinta SOBRE el arma, que es lo que la hace agarrarla',
+      (WidgetTester tester) async {
+    // Debajo, se vería el puño que la pieza traía dibujado —naranja, y sin
+    // teñir sobre cualquiera de los seis tonos de piel—. Encima, agarra la del
+    // aprendiz. El arreglo entero vive en este orden.
+    await _pintar(tester, <CapaAvatar>[_capa('weapon', RanuraItem.arma, 130)]);
+    final List<String> rutas = _pintadas(tester);
+
+    // Primero que el arma esté; si no, comparar posiciones compara con -1 y la
+    // prueba pasa sin haber mirado nada. Me pasó al escribirla.
+    expect(rutas, contains(_pieza('weapon')));
+    expect(
+      rutas.indexOf(Arte.mano(figura, derecha: true)),
+      greaterThan(rutas.indexOf(_pieza('weapon'))),
+    );
+  });
+
+  testWidgets('pero los guantes van sobre la mano', (WidgetTester tester) async {
+    // Y por eso no pueden viajar con el resto del equipo: van por z=70, antes
+    // que el arma, así que el orden del Reino los dejaría debajo de la mano. Un
+    // guante debajo de la mano es un guante que no se ve, y el aprendiz habría
+    // pagado por él.
+    await _pintar(tester, <CapaAvatar>[
+      _capa('gloves', RanuraItem.guantes, 70),
+      _capa('weapon', RanuraItem.arma, 130),
+    ]);
+    final List<String> rutas = _pintadas(tester);
+
+    expect(rutas, containsAll(<String>[_pieza('gloves'), _pieza('weapon')]));
+    expect(
+      rutas.indexOf(_pieza('gloves')),
+      greaterThan(rutas.indexOf(Arte.mano(figura, derecha: true))),
+    );
+    // Y el arma sigue debajo de la mano, que es lo otro que hay que conservar.
+    expect(
+      rutas.indexOf(_pieza('weapon')),
+      lessThan(rutas.indexOf(Arte.mano(figura, derecha: true))),
+    );
   });
 }

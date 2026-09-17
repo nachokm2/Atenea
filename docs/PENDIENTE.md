@@ -141,53 +141,49 @@ unas 60 líneas de cliente, cero backend, cero contrato.
 > `assessment`, así que el desafío no se pinta en el mapa. Es más grande que el
 > anterior: el dato no existe en el agregado, hay que construirlo.
 
-### 4.3 Las dos manos al equipar un arma — medido, a medias
+### 4.3 Las dos manos al equipar un arma — arreglado sin gastar arte
 
 Rodrigo lo encontró en el móvil: al equipar una espada se ven **dos manos**, la
-del arma y la suya. Cada pieza empuñada trae su propio puño dibujado porque al
+del arma y la suya. Cada pieza empuñada traía su propio puño dibujado porque al
 generarla se le prohibía al modelo tocar las manos existentes y a la vez se le
 pedía un arma empuñada; obedecer a las dos cosas solo se puede dibujando un puño
 nuevo.
 
-**Hecho y subido:** el cuerpo se dibuja en tres piezas —tronco sin manos y cada
-mano por su lado— y la capa de piel igual, que es la que hace falta para poder
-apagar una mano. `scripts/separar_manos.py` las deriva sin gastar API y se niega
-a escribir si recomponer las tres no devuelve el original píxel a píxel. Hoy se
-dibujan siempre las dos, así que **en pantalla no ha cambiado nada**: es la
-infraestructura, no el arreglo.
+El arreglo son tres piezas, y **ninguna gastó una llamada a la API**:
 
-**Por qué no se apaga todavía**, que es lo que no se deduce del código. Se
-compuso la pila fuera de la aplicación y se miró (`arte/diagnostico/`):
+1. `scripts/separar_manos.py` saca las manos del cuerpo —y de la capa de piel,
+   que se dibuja encima y las repintaba enteras— midiendo dónde se estrecha la
+   muñeca. Se niega a escribir si recomponer las piezas no devuelve el original
+   píxel a píxel, que es lo que protege al aprendiz sin arma, que es la mayoría.
+2. `scripts/quitar_punos.py` le quita a cada arma el puño que traía dibujado y la
+   corre para que la empuñadura caiga donde está la mano de la figura.
+3. El cliente dibuja las manos **sobre** el equipo de mano. Así agarra la del
+   aprendiz, que sí se tiñe con el tono que eligió.
 
-1. El puño del arma **no cae donde está la mano**. Hace falta mover la pieza
-   entre 133 px hacia arriba y 184 px hacia abajo según cuál sea, y no hay
-   constante posible: cada una lo puso donde quiso. Apagar la mano sin mover el
-   arma deja el antebrazo **cortado en seco** con el puño flotando aparte.
-2. Aunque encajara, ese puño va pintado dentro del arma y **no se tiñe**. Mide
-   entre 0,29 y 5,47 veces la mano del cuerpo. Sobre la piel «Ébano» es un puño
-   naranja en un brazo marrón oscuro: los seis tonos de piel volverían a ser
-   seis tonos que no se aplican a todo.
+**Cómo distingue un puño de un palo:** por la forma. El color no sirve, y se
+midió: el predicado de piel da 78 % en `baston_aprendiz` y 66 % en `arco_fresno`,
+porque la madera clara es del mismo color que la piel. Pero un puño es compacto
+(alargamiento 1,16 a 1,45) y una vara alargada (1,63 a 12,25), y ahí no hay
+solape.
 
-**Lo que sí funciona, probado en cuatro piezas:** borrar el puño del arma,
-mover la pieza para que la empuñadura caiga en la mano, y dibujar la mano del
-cuerpo **por encima**. Entonces agarra ella, y se tiñe. Se ve en
-`arte/diagnostico/tres_caminos.png`.
+**Lo que quedó sin tocar, a propósito.** Ocho de las treinta piezas conservan su
+puño porque no se pudo separar con seguridad, y valía más una pieza intacta que
+una pieza rota: `arco_bosque_antiguo` masculino y `arco_fresno` femenino no tienen
+puño reconocible, y en las piezas de madera o cuero —`baculo`, `cetro`, `bastón`,
+`tomo_erudito`— se salta el borrado fino de restos, porque ahí el color ya no
+informa y se comía la vara. Se vio en las hojas de contactos: con el borrado
+subido, el arco, el bastón y `escudo_primer_desafío` salían partidos por la mitad.
 
-**Dónde se atasca:** borrar el puño se hace por color, y la madera es del mismo
-color que la piel. En `baston_aprendiz` el 78 % de la pieza da «piel» por color y
-en `arco_fresno` el 66 %; en las espadas y cetros, del 15 al 23 %. Borrar por
-color arregla el metal y **destruiría el arco y el bastón**.
+Los escudos **no se mueven**, solo se les quita la mano: van atados al antebrazo,
+no agarrados en el centro de la mano, y llevarlos allí sacaba a
+`escudo_blason_reino` medio fuera del cuadro.
 
-Dos salidas, y la elección es de Rodrigo porque una cuesta dinero:
+**Si algún día se quiere cerrar del todo**, lo que falta es regenerar esas ocho
+piezas pidiendo el arma **sin mano**, con la empuñadura a la altura de la mano de
+la figura canónica. Serían ocho generaciones, no treinta.
 
-- **Regenerar las 30 piezas sin puño**, con la empuñadura en el sitio de la mano.
-  Limpio y definitivo, y el arte por capas queda bien para siempre. Cuesta ~30
-  generaciones más las que se repitan.
-- **Afinar el borrado sin gastar**: distinguir el puño de la madera por forma y
-  no por color —un puño es compacto, una vara es alargada—. Gratis, pero no hay
-  garantía de que salga en las seis piezas de madera.
-
-Medidas, guiones de diagnóstico y las imágenes están en `arte/diagnostico/`.
+Las hojas de contactos de las dos familias y los guiones de medición están en
+`arte/diagnostico/` (ignorado por git; se regeneran con los guiones).
 
 ---
 
