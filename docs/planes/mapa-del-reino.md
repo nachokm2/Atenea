@@ -1,0 +1,89 @@
+<!-- Estudio del 16-09-2026. Un plan, no una decision tomada: leelo con
+     ojo critico y comprueba lo que afirme antes de ejecutarlo. Los numeros
+     de linea envejecen. Ver docs/PENDIENTE.md para el contexto. -->
+
+# PLAN — Frente: El mapa del Reino (P22)
+
+## 1. EL VEREDICTO
+
+**Qué hay:** el servidor tiene el mapa entero y funcionando — `GET /api/v1/territories` (`backend/app/modules/content/router.py:217-243`) devuelve `Page[TerritoryOut]` con estado, dominio y zonas calculados por usuario en cuatro agregados (`backend/app/modules/content/areas.py:291-381`), sobre siete territorios sembrados con nombre narrativo, icono y descripción (`backend/app/seeds/areas.py:59-190`); y el cliente tiene el camino construido hasta el último metro: `RepoConocimiento.territorios()` (`app/lib/datos/repositorios.dart:681-691`), el DTO `Territorio` (`app/lib/datos/dtos.dart:1604-1675`), el enum `EstadoTerritorio` con etiquetas en español (`app/lib/datos/modelos.dart:246-258`) y el widget `EmblemaTerritorio` con silueta y resplandor (`app/lib/pantallas/aventura/widgets/comunes_aventura.dart:146-205`).
+
+**Qué falta:** la llamada. Nadie invoca `repos.conocimiento` en toda la app — `territorios()`, `areas()`, `area()` y `miConocimiento()` son código muerto — y la única cosa del mapa que se ve en pantalla es `_porDescubrir()` (`app/lib/pantallas/aventura/aventura.dart:310-333`), un `for (int i = 0; i < 4; i++)` de cuatro siluetas constantes bajo la frase "Cada ruta que abres ilumina uno".
+
+**La sospecha se confirma**, en su forma más limpia y más barata de cerrar: aquí no hay que construir el "abajo", solo pisarlo. Los tres lectores aciertan en lo esencial y he verificado cada afirmación central; dos matices: (i) la Lente 1 mezcla dos frentes — `content_status`, `assessment` y `coverage` son del **mapa de la Ruta (P07)**, no del mapa del Reino, aunque su hallazgo es real y lo recojo abajo porque vale más que todo este frente junto; (ii) la Lente 2 dice que `accent_color` "ya viaja en `FilaTerritorio`" — no viaja como campo, viaja el objeto `KnowledgeArea` completo, que sí tiene la columna (`backend/app/models/content.py:120`); el efecto práctico es el mismo (`fila.knowledge_area.accent_color`), pero no es un campo del dataclass.
+
+## 2. LA DECISIÓN: **conectarlo**
+
+No por entusiasmo, por aritmética. Recortar cuesta más que conectar: borrar son ~110 líneas de cliente **más** la decisión sobre un endpoint que `CONTRACT.md` declara normativo en §7.4 (línea 3067) y en la tabla de enums (`TerritoryStatus`, línea 1014), con prueba verde propia (`backend/tests/content/test_content_router.py:253-260`) y su tabla en la 1227. Recortar el cliente no borra nada de eso: deja el contrato prometiendo una ruta que ningún cliente usa, que es exactamente la misma enfermedad mirando al otro lado. Conectar son ~60 líneas de cliente, cero backend, cero migración, cero enmienda de contrato y una petición GET más al abrir Aventura.
+
+Y hay una razón que no es de coste: aquí no hay una promesa vaga, hay **una frase concreta y verificablemente falsa en pantalla**. "Territorios en la bruma. Cada ruta que abres ilumina uno" (`aventura.dart:314`) y "El mapa del Reino crece contigo" (`:327-329`) describen exactamente lo que `estado_territorio` (`areas.py:291-303`) ya calcula y nadie pide. Conectar vuelve verdaderas las dos frases sin reescribir ni una palabra.
+
+**Pero el primer paso del día no es este.** Ver §4, P0: `content_status` en los tres nodos del mapa de la Ruta son tres líneas de backend y hoy impiden abrir **cualquier** lección desde P07. Si el otro frente de la sesión no lo tiene ya adjudicado, va antes que todo lo de aquí.
+
+## 3. EL PASO MÁS PEQUEÑO QUE YA SE NOTA
+
+**Que "Por descubrir" deje de ser un bucle de cuatro y pase a ser el mapa real de siete territorios con su estado.** Un solo paso, cuatro ficheros, sin tocar el backend ni el contrato:
+
+1. **`app/lib/datos/dtos.dart:1630-1632`** — añadir `'knowledge_name'` a la lista de `_alguna` de `nombreConocimiento`, sin quitar `knowledge_area_name` ni `area_name`. El servidor manda `knowledge_name` (`backend/app/modules/content/schemas.py:171`); el DTO se escribió copiando los alias de `ResumenRuta` y hoy devolvería `null` siempre. *Una línea.* Va primero: es la que impide que el cambio parezca un fallo del backend.
+2. **`app/lib/estado/aventura.dart`** — campo `List<Territorio> _territorios` junto a `_mias`/`_delReino` (`:113-114`), getter `territorios` junto a `mias`/`delReino` (`:151-155`), limpieza en `limpiar()` (`:610-612`), y un `cargarTerritorios()` **fuera** del `Future.wait` de `cargarRutas` (`:261-268`), con su propio `try` y **sin** error propio: si no llegan, la sección no se pinta. Su guard mira `_territorios.isEmpty`, nunca `_mias`. *~15 líneas.*
+3. **`app/lib/pantallas/aventura/aventura.dart:310-333`** — `_porDescubrir()` recibe la lista y pinta un `Wrap` (no un `Row`: siete emblemas de 56 dp desbordan en móvil) con una celda por territorio: `EmblemaTerritorio(enSilueta: t.estado == EstadoTerritorio.bruma, resplandor: t.estado == EstadoTerritorio.completado, iconoKey: t.iconoKey, nombre: t.nombre, colorAcento: t.colorAcento)` y el nombre debajo, dos líneas máximo. Sin `onTap` (ver §6). *~35 líneas por las 24 que sustituye.*
+4. **`app/lib/pantallas/aventura/widgets/comunes_aventura.dart:37-71`** — cinco claves en `_emblemasPorClave`: `vault`, `aqueduct`, `tower`, `forge`, `council_hall`. Los `icon_hint` sembrados son `castle`, `vault`, `aqueduct`, `tower`, `cloud_keep`, `forge`, `council_hall` (`seeds/areas.py`, campo `territory_icon`); hoy solo aciertan `castle` y `cloud_keep` (por la subcadena `cloud`), y los otros cinco caen al reparto por hash entre seis iconos de reserva, donde dos territorios distintos pueden salir con el mismo sello. *Cinco líneas.*
+
+**Dos decisiones de texto dentro de este mismo paso**, porque si no se toman ahora la pantalla tendrá dos sentidos de la palabra "territorio" a la vez:
+- El encabezado pasa a ser **"El mapa del Reino"** con subtítulo honesto ("Siete territorios. Los que dominas se despejan."), porque la sección ya no muestra solo los que están en la bruma sino el mapa entero con su estado.
+- **"Mis territorios"** (`aventura.dart:230`, y `:219` en los esqueletos) pasa a **"Mis rutas"**. Son Rutas, no territorios: un conocimiento con dos rutas sale dos veces y uno con dominio sin ruta no sale nunca. Dos cadenas.
+
+**Accesibilidad, no se pierde:** hoy la silueta lleva `Semantics(label: 'Territorio por descubrir')` (`comunes_aventura.dart:184-186`) precisamente para que el estado no dependa del color. Con datos reales la etiqueta debe ser nombre + estado (`'Castillo de las Consultas, En la bruma'`), usando `EstadoTerritorio.etiqueta`, que ya está escrito en español.
+
+**Cómo se comprueba hoy, sin móvil:** el test de parseo del §5.1 (segundos) y `flutter test`. En emulador o en el móvil de Rodrigo: abrir Aventura con una cuenta nueva → siete nombres en la bruma; hacer una lección de SQL → el Castillo de las Consultas se enciende al volver (por eso el guard no puede colgar de `_mias`).
+
+## 4. EL RESTO, por valor
+
+**P0 · `content_status` en los tres nodos del mapa de la Ruta — [pequeño, ~6 líneas] — NO ES DE ESTE FRENTE, PERO VA ANTES.**
+Verificado: `ModuleNodeOut`, `TopicNodeOut` y `LessonNodeOut` (`backend/app/modules/content/schemas.py:248-284`) no llevan el campo, y `NodoModulo`/`NodoTema`/`NodoLeccion` (`backend/app/modules/progress/progreso.py:68-108`) tampoco, aunque `estado_mapa_ruta` ya tiene los ORM `modulo`, `topic` y `leccion` cargados en la mano (`progreso.py:623-676`). En Dart el defecto de `EstadoContenido.desdeApi` es `pendiente` (`modelos.dart:388`), así que `ResumenLeccion.estaLista` (`dtos.dart:2020`) es siempre `false` y `_estiloLeccion` (`mapa_ruta.dart:71-77`) devuelve `enConstruccion` para toda lección no completada: tocarla responde "Esta lección se está escribiendo ahora mismo" (`mapa_ruta.dart:141-147`). **Desde el mapa de la Ruta no se puede empezar ni una sola lección hoy**; el único acceso vivo es la tarjeta Continuar del Inicio (`inicio.dart:88`). Tres líneas de dataclass, tres de asignación, tres de schema, tres de router. El cliente ya lo lee. Si el otro frente no lo ha tomado, es el mejor cambio del día. Hay que arreglar **los tres** nodos en el mismo commit: si se olvida el tema, el síntoma es idéntico y silencioso.
+
+**P1 · El paso de §3 — [~60 líneas de cliente, 4 ficheros].** Todo el valor de este frente está aquí.
+
+**P2 · `accent_color` en `TerritoryOut` — [pequeño].**
+`backend/app/modules/content/schemas.py:163-176` (campo nuevo) y `router.py:228-240` (`accent_color=fila.knowledge_area.accent_color`, la columna existe en `models/content.py:120`). No bloquea P1 porque las siluetas ignoran el acento (`comunes_aventura.dart:177-179` usa `p.textoSecundario` en silueta); importa en cuanto un territorio se descubre, o los siete encendidos salen del mismo morado arcano.
+
+**P3 · `icon_key` y `accent_color` en `PathSummaryOut` — [pequeño, alcance grande].**
+`schemas.py:183-208` y `_ruta_out` en `router.py:249-279`, que ya tiene `fila.path.knowledge_area` a mano. Arregla de una vez el emblema y el color de **todas** las tarjetas de ruta, la cabecera de P07 (`mapa_ruta.dart:526, :540`) y la sugerencia de la pantalla de generación. Hoy el emblema lo decide una búsqueda de subcadenas en el título y, si falla, `nombre.hashCode % 6`. **Trampa concreta:** los `icon_key` de conocimiento son `scroll_query, vault_data, aqueduct, oracle_eye, sky_citadel, serpent_quill, banner_chart`, y `_emblemasPorClave` recorre sus entradas **en orden de inserción**: `'art'` (línea 61) casa dentro de `banner_chart` y le pondría una paleta de pintor a Business Intelligence. Si se hace P3, hay que añadir esas siete claves **antes** que las genéricas, o el servidor empezará a mandar una pista que el cliente interpreta mal — peor que ignorarla.
+
+**P4 · `mastery` en `PathDetailOut` — [pequeño].**
+`schemas.py:286-300` y `router.py:282-298`. El medallón "Dominio del territorio" de la cabecera de P07 (`mapa_ruta.dart:591-596`) marca **0 % a todo el mundo, siempre**, incluso con la ruta completada, porque `ruta.dominio` lee un campo que nadie envía. Una cifra falsa en primer plano de la pantalla que el aprendiz abre cada día. El dato sale de `UserAreaProgress`, que `areas.py:_progreso_por_area` ya sabe leer.
+
+**P5 · Crear la fila `Territory` al nacer un conocimiento del usuario — [medio].**
+`backend/app/modules/content/rutas.py:201-228`, donde ya se crea la `KnowledgeArea` no canónica y se registra `KNOWLEDGE_AREA_CREATED`. Verificado: `Territory(` **solo** aparece en `models/content.py:145`; ninguna ruta de producción instancia uno. `listar_territorios` itera la tabla `territories` (`areas.py:314-318`), no las áreas: un conocimiento inventado por el aprendiz ("Repostería") no tendrá territorio nunca y desaparecerá del mapa sin error ni hueco. El mínimo honesto es crear la fila con el nombre del área y sin `icon_hint`; el bautizo por IA, después. No bloquea P1 —la sección habla del Reino canónico— pero sí es la razón por la que `/territories` no puede alimentar "Mis rutas".
+
+**P6 · `zones_completed` en el DTO — [pequeño].** `dtos.dart:1604-1675` no lo lee y el servidor lo manda. Solo hace falta si la ficha crece a "3 de 8 zonas". No antes.
+
+**P7 · Cursor real en `/territories` — [pequeño, deuda].** Verificado: `_pagina` (`router.py:107-114`) devuelve `next_cursor=None` y puede devolver `has_more=true` a la vez, y el endpoint ni declara `cursor`, que el repositorio sí envía (`repositorios.dart:685-689`). Con siete áreas y `limite=50` no se nota. Anotarlo y **no montar scroll infinito encima**.
+
+**P8 · `TERRITORY_NAMING` — [grande, no ahora].** El tipo de trabajo existe en `enums.py:361`, en el comentario del modelo (`content.py:176`), en la migración inicial y en `CONTRACT.md:574`; no lo encola nadie y `backend/tests/ingestion/test_cola.py:281-284` confirma que hoy termina en `NEEDS_ATTENTION`. Después de P5, no antes: P5 da territorio a todos; P8 solo le pone un nombre bonito.
+
+## 5. LAS PRUEBAS
+
+**Sin móvil, hoy:**
+
+1. **Parseo del DTO contra el esquema real** (`dart test`, patrón exacto de `app/test/vocabulario_reporte_test.dart`, que ya prueba un vocabulario de API sin red): un JSON copiado literal de `TerritoryOut` (`schemas.py:163-176`) pasado por `Territorio.desdeJson`, afirmando `nombreConocimiento == 'SQL y Bases de Datos'` y `estado == EstadoTerritorio.bruma`. **Esta prueba es la que falta desde siempre**: es la que habría cazado `knowledge_name` vs `knowledge_area_name` años antes de que alguien conectara la pantalla.
+2. **Unitaria de `estado_territorio`** (`pytest`, sin base de datos: la función es pura, `areas.py:291-303`): los tres caminos — `rutas_completadas>0 → COMPLETED`, `zonas>0 o mastery>0 → DISCOVERED`, resto → `FOGGED`.
+3. **Widget de la sección** (`flutter test` con `app/test/ayudas.dart`, que ya monta controladores reales sin red): con tres territorios falsos —uno en bruma, uno descubierto, uno completado— afirmar que hay **tres** emblemas y no cuatro, que el nombre narrativo aparece como texto, y que el semántico del que está en bruma incluye su nombre. Es la prueba que hace imposible que el `4` literal vuelva.
+4. **Del diccionario de emblemas**: para cada uno de los siete `territory_icon` sembrados, `iconoDeTerritorio(hint)` devuelve iconos **distintos entre sí** y ninguno del array de reserva. Afirma la ausencia del hash, que es el fallo real.
+5. **Backend de `/territories`**: extender `backend/tests/content/test_content_router.py:253-260` con un usuario que tenga un módulo desbloqueado, afirmando `status == "discovered"` y `zones_unlocked == 1`. Hoy la prueba existe pero solo mira que el endpoint responda.
+
+**Si se hace P0, la prueba tiene que afirmar sobre el estilo del nodo o sobre `estaLista`, nunca sobre la existencia de la lección.** `app/test/contrato_vivo_test.dart:113-124` saca las lecciones del mapa y abre la primera **por ID** (`repos.leccion.leccion(lecciones.first.id)`), saltándose `estaLista` por completo: por eso el mapa lleva roto con la suite en verde. Mismo patrón que la auditoría del 12-09.
+
+**Solo con móvil:** el desbordamiento del `Wrap` con siete emblemas en pantalla estrecha, el resplandor del territorio completado, y el refresco al volver de una lección (que el guard de caché no congele el mapa justo cuando empieza a tener algo que contar).
+
+## 6. LO QUE NO HAY QUE HACER
+
+- **No meter `/territories` en el `Future.wait` de `cargarRutas`** (`estado/aventura.dart:261-268`). Ese `catch` pone `_errorRutas` y la pantalla entera muestra "El Reino no responde" (`aventura.dart:188-196`) aunque las dos listas de rutas hubieran llegado perfectas. Se degradaría una pantalla que funciona por adornar una sección.
+- **No heredar el guard `if (!forzar && _mias.isNotEmpty) return;`** (`:254`). Justo el aprendiz con rutas —el único cuyo `status` cambia— nunca refrescaría los territorios.
+- **No hacer el territorio tocable todavía.** `TerritoryOut` no manda `learning_path_id` (el `rutaId` del DTO, `dtos.dart:1637-1639`, será `null` siempre) y no existe pantalla de detalle de conocimiento: `/knowledge-areas/{id}` es también código muerto en el cliente. Un sello tocable sin destino es exactamente la enfermedad que se está cerrando hoy. Informativo, sin `onTap`, hasta que haya destino y se decida qué pasa cuando un conocimiento tiene varias rutas.
+- **No dibujar un mapa navegable.** El brief lo pide (`docs/00-brief-producto.md:372-376`), pero §7.4 ofrece una lista plana sin coordenadas ni adyacencias (`listar_territorios` ordena por nombre, `areas.py:378`) y la propia pantalla lo dice en su cabecera: "No hay mapa navegable: cada Ruta es un territorio" (`aventura.dart:3-4`). Inventar posiciones en el cliente es volver a pintar píxeles que no responden a nadie. Y **no hay arte**: `app/assets/arte/` solo tiene capas de avatar, ítems y personajes; no hay nada huérfano que aprovechar. Una rejilla de emblemas con datos reales ya cumple.
+- **No derivar el estado del territorio en Dart.** "Si dominio > 0 entonces descubierto" duplicaría la regla de `estado_territorio` (`areas.py:291-303`), que es la misma condición que dispara `TERRITORY_UNLOCKED` (`dominio.py:1103-1112`) y alimenta `ACH_CARTOGRAPHER`. Dos verdades que se desincronizan en cuanto cambie el umbral. El cliente solo lee `status`.
+- **No parchear P07 en el cliente.** Derivar `estaLista` del estado de progreso sería repetir `DetalleRuta._esperaConfirmacion` (`dtos.dart:2359-2374`), el parche que ya se pagó con `can_confirm`: funciona, y mueve al cliente una decisión que es del servidor y que el servidor **ya tiene cargada en memoria** (`progreso.py:632`).
+- **No renombrar campos del servidor.** `knowledge_name` está en `CONTRACT.md`, que es normativo. El desajuste se arregla añadiendo el alias en el cliente. Los campos nuevos (P2, P3, P4) se escriben primero en `CONTRACT.md` §7.4/§7.5 y después en el código.
+- **No inventar parámetros de territorio en `game_configs`.** Aquí no hay literales de juego: el umbral vive en lógica derivada. Si algún día se quiere un "dominio mínimo para despejar", va a `game_configs` y lo lee el servidor — nunca un número en el widget. (El `4` de `for (int i = 0; i < 4; i++)` es hoy justamente eso, un parámetro escrito a mano en la interfaz; desaparece solo al conectar y no debe sobrevivir en ninguna forma recortada de la sección.)
+- **No empezar P5/P8 en el mismo commit que P1.** Son frentes distintos: P1 es cliente puro y se verifica en una tarde; P5 toca la creación de conocimientos y P8 es un manejador de IA nuevo. Mezclarlos es la forma de que el mapa se quede otra vez a medias — que es, exactamente, lo que se está cerrando hoy.
