@@ -54,6 +54,19 @@ class AvisoLocal {
 /// Minutos desde medianoche. Compara horas sin pelearse con las fechas.
 int _minutos(HoraLocal h) => h.hora * 60 + h.minuto;
 
+/// El día de calendario [desplazamiento] días después de [base], a medianoche.
+///
+/// **No vale `add(Duration(days: n))` para esto.** Esa suma añade 24 horas de
+/// reloj, y un día de calendario no siempre dura 24 horas: el domingo en que
+/// los relojes atrasan dura 25, así que medianoche más 24 horas son las 23:00
+/// del *mismo* día. Con eso, «mañana» y «hoy» salían con la misma fecha y dos
+/// avisos de la cadena se pisaban. Chile cambia la hora dos veces al año.
+///
+/// Sumar al componente `day` deja que Dart normalice el calendario —el 32 de
+/// enero es el 1 de febrero— sin que el reloj intervenga.
+DateTime _dia(DateTime base, int desplazamiento) =>
+    DateTime(base.year, base.month, base.day + desplazamiento);
+
 /// ¿Cae `hora` dentro de la franja de silencio?
 ///
 /// La franja cruza la medianoche cuando el inicio es mayor que el fin, que es
@@ -89,9 +102,7 @@ DateTime fueraDelSilencio(DateTime momento, HoraLocal? desde, HoraLocal? hasta) 
   // medianoche sale al día siguiente, lo que cae después sale hoy mismo.
   final bool cruzaMedianoche = _minutos(desde!) > _minutos(hasta!);
   final bool esLaMitadDeAntes = cruzaMedianoche && _minutos(hora) >= _minutos(desde);
-  final DateTime dia = esLaMitadDeAntes
-      ? momento.add(const Duration(days: 1))
-      : momento;
+  final DateTime dia = esLaMitadDeAntes ? _dia(momento, 1) : momento;
 
   return DateTime(dia.year, dia.month, dia.day, hasta.hora, hasta.minuto);
 }
@@ -316,7 +327,7 @@ List<AvisoLocal> planificarCadena(
     if (k == 0 && practicadoHoy) continue;
 
     final DateTime? instante =
-        _instanteValido(base, hoy.add(Duration(days: k)), ahoraLocal, espejo);
+        _instanteValido(base, _dia(hoy, k), ahoraLocal, espejo);
     if (instante == null) continue;
 
     cadena.add(AvisoLocal(
@@ -351,7 +362,31 @@ List<AvisoLocal> planificarCadena(
     }
   }
 
-  return cadena;
+  return _unaVozPorInstante(cadena);
+}
+
+/// Descarta los avisos que caerían a la vez que otro anterior.
+///
+/// El caso que esto arregla no se ve con la franja de fábrica, y por eso las
+/// primeras pruebas no lo cazaron: pide unas horas de silencio que **no** crucen
+/// la medianoche —de 12:00 a 22:00, el turno de noche— con el recordatorio a las
+/// 13:00. El aviso del día cae dentro del silencio y se corre a las 22:00; la
+/// última llamada de las 21:30 cae dentro y se corre a las 22:00 también. La
+/// regla que descarta lo que cambia de día no los toca, porque ninguno lo hace.
+///
+/// El resultado eran dos notificaciones en el mismo segundo diciendo cosas
+/// distintas: «todavía no hay práctica de hoy» y «se acaba el día».
+///
+/// Gana el primero de la cadena, que está ordenada por cercanía: el recordatorio
+/// del día antes que el de la noche. Es la elección menos sorprendente —el
+/// aprendiz recibe el aviso normal, no el de urgencia— y sobre todo es
+/// determinista, que importa más que cuál de los dos sobreviva.
+List<AvisoLocal> _unaVozPorInstante(List<AvisoLocal> cadena) {
+  final Set<DateTime> ocupados = <DateTime>{};
+  return <AvisoLocal>[
+    for (final AvisoLocal aviso in cadena)
+      if (ocupados.add(aviso.instante)) aviso,
+  ];
 }
 
 /// El instante de un aviso, o `null` si no debe programarse.

@@ -285,6 +285,100 @@ void main() {
     });
   });
 
+  group('los tres fallos que encontró la revisión', () {
+    test('cada desfase cae en un día de calendario distinto', () {
+      // `hoy.add(Duration(days: k))` suma 24 horas de reloj, y un día no siempre
+      // dura 24: el domingo en que atrasan los relojes dura 25, así que
+      // medianoche más 24 horas son las 23:00 del *mismo* día. Con eso, «hoy» y
+      // «mañana» salían con la misma fecha.
+      //
+      // Aquí no se puede simular el cambio de hora —`DateTime` usa la zona de
+      // la máquina—, así que se comprueba la propiedad que el cambio rompía: los
+      // tres avisos del día caen en tres fechas distintas y consecutivas.
+      final List<AvisoLocal> cadena = planificarCadena(enMarcha, elMartes(9));
+      final List<DateTime> dias = <DateTime>[
+        for (final AvisoLocal a in cadena)
+          if (a.id != 1200) DateTime(a.instante.year, a.instante.month, a.instante.day),
+      ];
+
+      expect(dias, <DateTime>[
+        DateTime(2026, 9, 15),
+        DateTime(2026, 9, 16),
+        DateTime(2026, 9, 17),
+      ]);
+    });
+
+    test('cruzar el fin de mes no descoloca la cadena', () {
+      // La otra mitad de la misma propiedad: sumar al componente `day` deja que
+      // Dart normalice el calendario. El 30 de septiembre + 2 es el 2 de octubre.
+      final List<AvisoLocal> cadena =
+          planificarCadena(enMarcha, DateTime(2026, 9, 30, 9));
+      final List<DateTime> dias = <DateTime>[
+        for (final AvisoLocal a in cadena)
+          if (a.id != 1200) DateTime(a.instante.year, a.instante.month, a.instante.day),
+      ];
+
+      expect(dias, <DateTime>[
+        DateTime(2026, 9, 30),
+        DateTime(2026, 10, 1),
+        DateTime(2026, 10, 2),
+      ]);
+    });
+
+    test('nunca suenan dos avisos en el mismo instante', () {
+      // El turno de noche: silencio de 12:00 a 22:00, que **no** cruza la
+      // medianoche. El aviso del día a las 13:00 cae dentro y se corre a las
+      // 22:00; la última llamada de las 21:30 cae dentro y se corre a las 22:00
+      // también. Antes salían los dos, en el mismo segundo, diciendo cosas
+      // distintas.
+      final List<AvisoLocal> cadena = planificarCadena(
+        enMarcha.copiarCon(
+          horaManual: const HoraLocal(13, 0),
+          silencioDesde: const HoraLocal(12, 0),
+          silencioHasta: const HoraLocal(22, 0),
+          ventanaDesde: const HoraLocal(0, 0),
+          ventanaHasta: const HoraLocal(23, 59),
+        ),
+        elMartes(9),
+      );
+
+      final List<DateTime> instantes =
+          cadena.map((AvisoLocal a) => a.instante).toList();
+      expect(
+        instantes.toSet().length,
+        instantes.length,
+        reason: 'dos avisos a la vez: $instantes',
+      );
+      // Y gana el del día, que es el primero de la cadena.
+      expect(cadena.first.id, 1000);
+      expect(cadena.map((AvisoLocal a) => a.id), isNot(contains(1200)));
+    });
+
+    test('con cualquier franja de silencio, jamás hay dos a la vez', () {
+      // La propiedad, no el caso: se barren todas las franjas de silencio en
+      // saltos de una hora, crucen o no la medianoche.
+      for (int desde = 0; desde < 24; desde++) {
+        for (int hasta = 0; hasta < 24; hasta++) {
+          final List<AvisoLocal> cadena = planificarCadena(
+            enMarcha.copiarCon(
+              silencioDesde: HoraLocal(desde, 0),
+              silencioHasta: HoraLocal(hasta, 0),
+            ),
+            elMartes(9),
+          );
+          final List<DateTime> instantes =
+              cadena.map((AvisoLocal a) => a.instante).toList();
+          expect(
+            instantes.toSet().length,
+            instantes.length,
+            reason: 'con silencio de $desde:00 a $hasta:00 coincidieron: '
+                '$instantes',
+          );
+        }
+      }
+    });
+  });
+
   test('ningún texto local repite un titular del servidor', () {
     // Los ocho que escribe `planificador.py`. Copiar uno sería copiar una
     // afirmación que el teléfono no puede sostener: la racha caduca sola, las

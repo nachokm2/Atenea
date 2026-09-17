@@ -153,6 +153,22 @@ class RecordatorioLocal extends ChangeNotifier with WidgetsBindingObserver {
     _espejo = (await _memoria.leer()).copiarCon(permisoConcedido: _permitido);
     _listo = true;
     WidgetsBinding.instance.addObserver(this);
+
+    // La cadena de anoche se cancela aquí, y no puede esperar a un `resumed`.
+    //
+    // `didChangeAppLifecycleState` solo avisa de **cambios** de estado, y
+    // registrarse como observador no reproduce el estado actual: en un arranque
+    // en frío la aplicación ya está en primer plano cuando esto se ejecuta, así
+    // que ese `resumed` no llega nunca. Sin esta línea, las alarmas programadas
+    // al cerrar seguían armadas mientras el aprendiz estaba dentro de Atenea, y
+    // podía sonarle «en este teléfono todavía no hay práctica de hoy» con la
+    // aplicación abierta delante.
+    //
+    // Es justo la invariante que hace ciertos los textos: si un aviso suena, es
+    // que nadie abrió la aplicación desde que se programó. Abrirla tiene que
+    // borrarla, venga por donde venga.
+    await cancelarTodo();
+
     notifyListeners();
   }
 
