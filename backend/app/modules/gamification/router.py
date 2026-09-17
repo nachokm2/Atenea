@@ -33,7 +33,7 @@ from app.models.enums import (
     NotificationStatus,
 )
 from app.models.gamification import Notification, UserMission
-from app.modules.gamification import avisos, eventos, logros, misiones, niveles, rachas
+from app.modules.gamification import avisos, eventos, logros, misiones, motor, niveles, rachas
 from app.modules.gamification.recompensas import ReciboRecompensas
 from app.modules.gamification.servicio_config import ServicioConfig
 
@@ -239,11 +239,50 @@ def _mision_out(mision: UserMission) -> MissionOut:
 # ---------------------------------------------------------------------------
 
 
+def _pagar_autorreclamadas(db: DbSession, cfg: ServicioConfig, usuario_id: uuid.UUID) -> None:
+    """Expira lo vencido y paga de verdad lo que el autorreclamo da por cobrado.
+
+    `missions.claim.auto_on_expiry` promete que «al expirar el periodo se
+    reclaman solas las misiones completadas», y `expirar_vencidas` mueve la fila
+    a `CLAIMED`. Pero la recompensa no la otorga el estado de la fila sino el
+    evento: sin este bucle, el aprendiz cumplía su misión del día, se le pasaba
+    reclamarla antes de medianoche, y la perdía entera —además de recibir un 409
+    si lo intentaba después, porque `claimed_at` ya no era nulo.
+
+    La clave de idempotencia es determinista y cuelga de la misión, así que abrir
+    el tablón dos veces no paga dos veces; y como `registrar_evento` reconstruye
+    el recibo de un evento ya existente, tampoco lo hace una petición reintentada.
+
+    El recibo se descarta aquí a sabiendas: `MissionsOut` no lo transporta, así
+    que la recompensa llega al monedero sin celebración. Es peor que celebrarla y
+    mucho mejor que perderla; encolar la celebración es trabajo aparte y no debe
+    colarse en una petición de lectura.
+    """
+    for mision in misiones.expirar_vencidas(db, cfg, usuario_id):
+        if mision.status != MissionStatus.CLAIMED:
+            continue
+        eventos.registrar_evento(
+            db,
+            usuario_id=usuario_id,
+            tipo=eventos.TipoEvento.MISSION_CLAIMED,
+            payload={
+                "user_mission_id": str(mision.id),
+                "auto": True,
+                "reward": {"xp": int(mision.reward_xp), "gold": int(mision.reward_gold)},
+            },
+            idempotency_key=motor.clave_derivada(
+                "mission-claimed-auto", usuario_id, mision.id
+            ),
+            source_module="gamification",
+            cfg=cfg,
+        )
+
+
 @router.get("/missions", response_model=MissionsOut, summary="Misiones del día y de ruta")
 def listar_misiones(db: DbSession, usuario: CurrentUser) -> MissionsOut:
     """Devuelve las misiones diarias (generadas de forma perezosa) y las especiales."""
     cfg, zona, hoy = _contexto(db, usuario)
-    misiones.expirar_vencidas(db, cfg, usuario.id)
+    _pagar_autorreclamadas(db, cfg, usuario.id)
     objetivo = rachas.obtener_o_crear_objetivo(db, cfg, usuario.id, hoy)
     diarias = misiones.asignar_misiones_diarias(
         db,

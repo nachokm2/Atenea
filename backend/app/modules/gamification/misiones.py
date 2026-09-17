@@ -599,7 +599,22 @@ def avanzar_por_evento(
 def expirar_vencidas(
     db: Session, cfg: ServicioConfig, usuario_id: uuid.UUID, *, momento: datetime | None = None
 ) -> list[UserMission]:
-    """Expira las misiones vencidas; con `missions.claim.auto_on_expiry` autorreclama."""
+    """Expira las misiones vencidas; con `missions.claim.auto_on_expiry` autorreclama.
+
+    **Autorreclamar no es pagar, y quien llama tiene que pagarlo.** Este módulo
+    no sabe de eventos a propósito —no importa `eventos` ni `motor`—, así que
+    aquí solo se mueve el estado de la fila. La recompensa vive en la rama
+    `MISSION_CLAIMED` del despachador, y si nadie emite ese evento el aprendiz
+    se queda sin su experiencia y sin su oro.
+
+    Eso es exactamente lo que estuvo pasando en producción: la misión figuraba
+    reclamada, no se había pagado nada, y el reclamo manual devolvía luego un
+    409 porque `claimed_at` ya no era nulo.
+
+    Las autorreclamadas son las que vuelven con `status == CLAIMED`: las que
+    estaban activas pasan a `EXPIRED`, y una completada sin autorreclamo se
+    queda como estaba.
+    """
     instante = momento or utcnow()
     auto = cfg.obtener_bool("missions.claim.auto_on_expiry")
     vencidas = list(
