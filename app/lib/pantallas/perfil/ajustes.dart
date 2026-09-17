@@ -16,9 +16,11 @@ import '../../datos/repositorios.dart';
 import '../../design/components.dart';
 import '../../design/tokens.dart';
 import '../../estado/sesion.dart';
+import '../../estado/config_juego.dart';
 import '../../navegacion/armazon.dart';
 import '../../navegacion/rutas.dart';
 import '../../nucleo/controlador_tema.dart';
+import '../../nucleo/plan_recordatorio.dart';
 import '../../nucleo/recordatorio_local.dart';
 import '../personaje/widgets/piezas.dart';
 
@@ -165,11 +167,31 @@ class _PantallaAjustesState extends State<PantallaAjustes> {
     );
   }
 
+  /// Pide una hora al aprendiz.
+  ///
+  /// Con [dentroDeLaFranja], la hora se aprieta contra los bordes en los que el
+  /// Reino puede avisar, y el aviso que se le devuelve al aprendiz dice la hora
+  /// de verdad.
+  ///
+  /// Hacía falta porque esta pantalla mentía sin saberlo: el selector dejaba
+  /// elegir las 23:30, la confirmación decía «te avisaremos a las 23:30», y
+  /// `hora_del_recordatorio()` la acotaba a las 21:30 en silencio. El aprendiz
+  /// se enteraba la noche siguiente, si es que se enteraba.
+  ///
+  /// `showTimePicker` no admite un rango, así que se acota después. La franja
+  /// llega de `notifications.reminder.window` y no se escribe aquí: es un
+  /// parámetro de juego, y mientras no haya llegado la configuración no se
+  /// acota nada, en vez de inventarse unos bordes.
   Future<void> _elegirHora({
     required HoraLocal? actual,
     required String titulo,
-    required void Function(HoraLocal hora) alElegir,
+    required void Function(HoraLocal hora, String confirmacion) alElegir,
+    bool dentroDeLaFranja = false,
   }) async {
+    final ControladorConfigJuego config = context.read<ControladorConfigJuego>();
+    final HoraLocal? desde = dentroDeLaFranja ? config.ventanaDesde : null;
+    final HoraLocal? hasta = dentroDeLaFranja ? config.ventanaHasta : null;
+
     final TimeOfDay? elegida = await showTimePicker(
       context: context,
       helpText: titulo,
@@ -179,7 +201,18 @@ class _PantallaAjustesState extends State<PantallaAjustes> {
       ),
     );
     if (!mounted || elegida == null) return;
-    alElegir(HoraLocal(elegida.hour, elegida.minute));
+
+    final HoraLocal pedida = HoraLocal(elegida.hour, elegida.minute);
+    final HoraLocal hora = acotar(pedida, desde, hasta);
+    final bool movida = hora.texto != pedida.texto;
+
+    alElegir(
+      hora,
+      movida
+          ? 'El Reino solo avisa entre las ${desde!.texto} y las '
+              '${hasta!.texto}. Te esperamos a las ${hora.texto}.'
+          : 'Te avisaremos a las ${hora.texto}.',
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -411,11 +444,12 @@ class _PantallaAjustesState extends State<PantallaAjustes> {
                   alTocar: () => _elegirHora(
                     actual: a.horaRecordatorio,
                     titulo: 'Hora del recordatorio',
-                    alElegir: (HoraLocal h) => _aplicar(
+                    dentroDeLaFranja: true,
+                    alElegir: (HoraLocal h, String confirmacion) => _aplicar(
                       a.copiarCon(horaRecordatorio: h),
                       (ControladorSesion s) =>
                           s.guardarAjustes(horaRecordatorio: h),
-                      confirmacion: 'Te avisaremos a las ${h.texto}.',
+                      confirmacion: confirmacion,
                     ),
                   ),
                 ),
@@ -441,11 +475,11 @@ class _PantallaAjustesState extends State<PantallaAjustes> {
                 alTocar: () => _elegirHora(
                   actual: a.silencioDesde,
                   titulo: 'Silencio desde',
-                  alElegir: (HoraLocal desde) async {
+                  alElegir: (HoraLocal desde, String _) async {
                     await _elegirHora(
                       actual: a.silencioHasta,
                       titulo: 'Silencio hasta',
-                      alElegir: (HoraLocal hasta) => _aplicar(
+                      alElegir: (HoraLocal hasta, String _) => _aplicar(
                         a.copiarCon(
                           silencioDesde: desde,
                           silencioHasta: hasta,

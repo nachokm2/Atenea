@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Recursos que R8 no puede borrar.
+
+  `isShrinkResources = true` elimina todo recurso al que nadie apunte desde el
+  codigo, y `ic_aviso` no lo referencia nadie: el plugin de notificaciones lo
+  busca **por nombre en tiempo de ejecucion**, con `getIdentifier()`. Sin esta
+  lista, el APK compila sin una queja, se instala sin una queja, y la primera
+  notificacion no se pinta o sale con un hueco.
+
+  Es el peor tipo de fallo que tiene Android: no ocurre en depuracion —donde no
+  hay reduccion de recursos— y solo aparece en release, en el telefono, cuando
+  el aviso ya deberia estar sonando.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_aviso" />

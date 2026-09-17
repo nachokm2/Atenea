@@ -128,10 +128,15 @@ class RecordatorioLocal extends ChangeNotifier with WidgetsBindingObserver {
 
     await _plugin.initialize(
       settings: const InitializationSettings(
-        // El icono de lanzamiento vale mientras no haya uno monocromo propio.
-        // Android lo pinta en blanco sobre la barra de estado, así que un icono
-        // con color acaba siendo una mancha blanca: es feo, no roto.
-        android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+        // Un escudo monocromo, no el icono de lanzamiento. Android pinta este
+        // recurso como silueta blanca y descarta el color, así que cualquier
+        // icono con relleno sale como una mancha del tamaño del lienzo.
+        //
+        // El recurso lo busca el plugin **por nombre**, en tiempo de ejecución.
+        // De ahí que esté listado en `android/app/src/main/res/raw/keep.xml`:
+        // sin eso, `shrinkResources` lo borraría del APK de release sin que
+        // nada fallase al compilar.
+        android: AndroidInitializationSettings('@drawable/ic_aviso'),
       ),
       onDidReceiveNotificationResponse: _alTocarElAviso,
     );
