@@ -32,7 +32,6 @@ import '../../design/tokens.dart';
 import '../personaje/widgets/avatar_capas.dart';
 import '../../estado/celebraciones.dart';
 import '../../estado/sesion.dart';
-import 'widgets/avatar_lienzo.dart';
 import 'widgets/catalogo_avatar.dart';
 import 'widgets/piezas.dart';
 
@@ -216,7 +215,7 @@ class ControladorCreacionPersonaje extends ChangeNotifier {
 // Pantalla
 // ---------------------------------------------------------------------------
 
-/// Creación del héroe: Orden, cuerpo, rostro, cabello y nombre.
+/// Creación del héroe: Orden, cuerpo, figura, color de pelo y nombre.
 class PantallaCrearPersonaje extends StatelessWidget {
   const PantallaCrearPersonaje({super.key});
 
@@ -385,13 +384,13 @@ class _CuerpoCrearPersonajeState extends State<_CuerpoCrearPersonaje> {
                           'Orden',
                           'Cuerpo',
                           'Figura',
-                          'Cabello',
+                          'Color',
                         ],
                         iconos: const <IconData>[
                           Icons.shield_rounded,
                           Icons.accessibility_new_rounded,
                           Icons.face_retouching_natural_rounded,
-                          Icons.content_cut_rounded,
+                          Icons.palette_rounded,
                         ],
                         indice: _pestana,
                         alCambiar: borrador.guardando
@@ -975,6 +974,22 @@ class _FichaFigura extends StatelessWidget {
   }
 }
 
+/// Color del cabello. El peinado viene con la figura.
+///
+/// Aquí había ocho estilos —Corta, Ondulada, Larga, Coleta, Rizada, Moño,
+/// Trenzas, Rapada— y ninguno se dibujaba: el avatar saca el pelo de la figura
+/// elegida y solo lo tiñe. El aprendiz podía tocar «Trenzas», ver la vista
+/// previa sin cambiar, y quedarse pensando que había tocado mal.
+///
+/// Honrarlos de verdad pedía arte nuevo. Hay seis ilustraciones de peinado en
+/// `assets/arte/items/cabello/`, pero son fichas de ítem: 512 px y recortadas a
+/// su contenido, mientras que una capa comparte el lienzo de 1024×1024 con la
+/// pieza ya colocada dentro. Apilarlas daría el collage que el arte por capas
+/// vino a evitar, así que no sirven tal cual.
+///
+/// De modo que se cuenta en vez de ofrecerse. Cada figura trae su propio
+/// peinado, que es la verdad, y así el aprendiz sabe dónde mirar si quiere otro.
+/// `hair_style_id` sigue viajando al servidor: está en el contrato y es inerte.
 class _PanelCabello extends StatelessWidget {
   const _PanelCabello({required this.borrador});
 
@@ -987,20 +1002,28 @@ class _PanelCabello extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const TituloBloque(texto: 'Estilo'),
-        Wrap(
-          spacing: Espacio.xs,
-          runSpacing: Espacio.xs,
-          children: <Widget>[
-            for (final OpcionAvatar o in CatalogoAvatar.cabellos)
-              _FichaRasgo(
-                etiqueta: o.etiqueta,
-                seleccionada: r.cabello == o.clave,
-                alTocar: () => borrador.fijarRasgos(cabello: o.clave),
-                rasgos: r.copiarCon(cabello: o.clave),
-                orden: borrador.orden,
+        Padding(
+          padding: const EdgeInsets.only(bottom: Espacio.xs),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Icon(
+                Icons.info_outline_rounded,
+                size: 18,
+                color: context.paleta.textoSecundario,
               ),
-          ],
+              const SizedBox(width: Espacio.xs),
+              Expanded(
+                child: Text(
+                  'El peinado viene con la figura que elegiste. Cámbiala en la '
+                  'pestaña Figura si quieres otro.',
+                  style: context.textos.bodySmall?.copyWith(
+                    color: context.paleta.textoSecundario,
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         const TituloBloque(texto: 'Color'),
         Wrap(
@@ -1021,77 +1044,3 @@ class _PanelCabello extends StatelessWidget {
   }
 }
 
-/// Ficha de un rasgo con su propia vista previa del rostro.
-class _FichaRasgo extends StatelessWidget {
-  const _FichaRasgo({
-    required this.etiqueta,
-    required this.seleccionada,
-    required this.alTocar,
-    required this.rasgos,
-    required this.orden,
-  });
-
-  final String etiqueta;
-  final bool seleccionada;
-  final VoidCallback alTocar;
-  final RasgosAvatar rasgos;
-  final Arquetipo orden;
-
-  @override
-  Widget build(BuildContext context) {
-    final AteneaPalette paleta = context.paleta;
-    return OpcionSeleccionable(
-      seleccionada: seleccionada,
-      alTocar: alTocar,
-      semantica: etiqueta,
-      padding: const EdgeInsets.symmetric(
-        horizontal: Espacio.xs,
-        vertical: Espacio.xs,
-      ),
-      hijo: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          // Solo la cabeza: el muñeco se pinta entero y se recorta arriba,
-          // para que la muestra sea exactamente lo que se va a ver.
-          SizedBox(
-            width: 62,
-            height: 68,
-            child: ClipRRect(
-              borderRadius: Redondeo.rChip,
-              child: OverflowBox(
-                alignment: Alignment.topCenter,
-                minWidth: 104,
-                maxWidth: 104,
-                minHeight: 150,
-                maxHeight: 150,
-                child: LienzoAvatar(
-                  rasgos: rasgos,
-                  orden: orden,
-                  alto: 150,
-                  ancho: 104,
-                  conMarco: false,
-                  semantica: '',
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: Espacio.xxs),
-          SizedBox(
-            width: 62,
-            child: Text(
-              etiqueta,
-              textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
-              style: context.textos.bodySmall?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: seleccionada
-                    ? paleta.textoPrimario
-                    : paleta.textoSecundario,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
