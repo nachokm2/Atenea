@@ -169,7 +169,7 @@ class AvatarCapas extends StatelessWidget {
             if (apilando)
               for (final CapaAvatar capa in detras) _Capa(capa: capa, figura: clave, lado: tamano),
             Image.asset(
-              apilando ? Arte.cuerpo(clave) : Arte.personaje(clave),
+              apilando ? Arte.cuerpoSinManos(clave) : Arte.personaje(clave),
               height: tamano,
               fit: BoxFit.contain,
               filterQuality: FilterQuality.medium,
@@ -189,6 +189,34 @@ class AvatarCapas extends StatelessWidget {
                 ),
               ),
             ),
+            // Las manos, cada una con su piel teñida, aparte del cuerpo.
+            //
+            // Hoy se dibujan siempre las dos y el resultado es idéntico píxel a
+            // píxel al cuerpo de una pieza: `separar_manos.py` lo comprueba en
+            // cada ejecución y se niega a escribir si deja de cumplirse.
+            //
+            // Están aparte para poder **apagar** la que sostiene algo, que es lo
+            // que arregla las dos manos que se ven al equipar un arma. Eso
+            // todavía no se hace, y a propósito: se compuso la pila fuera de la
+            // aplicación y se miró. El puño que cada arma trae dibujado no está
+            // donde está la mano —hace falta moverla entre 133 px hacia arriba
+            // y 184 px hacia abajo según la pieza, y mide entre 0,29 y 5,47
+            // veces la mano— así que apagarla deja el antebrazo cortado en seco
+            // con el puño flotando aparte. Y aunque encajara, ese puño va
+            // pintado dentro del arma y no se tiñe: sería naranja sobre una piel
+            // de cualquiera de los otros cinco tonos.
+            //
+            // Lo que falta es arte de arma **sin puño**, con la empuñadura en el
+            // sitio de la mano. Entonces agarra esta, que sí se tiñe.
+            if (apilando)
+              for (final bool derecha in <bool>[true, false]) ...<Widget>[
+                _CapaDelCuerpo(ruta: Arte.mano(clave, derecha: derecha), lado: tamano),
+                _Tinte(
+                  ruta: Arte.manoPiel(clave, derecha: derecha),
+                  color: CatalogoAvatar.piel(r.tonoPiel),
+                  lado: tamano,
+                ),
+              ],
             // La piel y el pelo del aprendiz, teñidos con lo que eligió.
             //
             // Van pegados al cuerpo y debajo de todo el equipo, que es su sitio
@@ -202,7 +230,11 @@ class AvatarCapas extends StatelessWidget {
             // había dos tonos de piel, uno por familia, y seis colores de pelo
             // soldados cada uno a su figura.
             if (apilando) ...<Widget>[
-              _Tinte(ruta: Arte.piel(clave), color: CatalogoAvatar.piel(r.tonoPiel), lado: tamano),
+              _Tinte(
+                ruta: Arte.pielSinManos(clave),
+                color: CatalogoAvatar.piel(r.tonoPiel),
+                lado: tamano,
+              ),
               _Tinte(ruta: Arte.pelo(clave), color: CatalogoAvatar.cabello(r.colorCabello), lado: tamano),
             ],
             // Y lo que va por delante, en el orden que manda el Reino.
@@ -835,4 +867,28 @@ class _PintorAvatar extends CustomPainter {
     }
     return true;
   }
+}
+
+/// Una pieza del propio cuerpo: una mano.
+///
+/// Aparte de `_Capa` porque no es equipo: no se tiñe con el color de un ítem, no
+/// se ajusta de talla ni de sitio —es del cuerpo, ya está donde tiene que
+/// estar— y si faltara no hay ficha al margen que la sustituya.
+class _CapaDelCuerpo extends StatelessWidget {
+  const _CapaDelCuerpo({required this.ruta, required this.lado});
+
+  final String ruta;
+  final double lado;
+
+  @override
+  Widget build(BuildContext context) => Image.asset(
+        ruta,
+        height: lado,
+        fit: BoxFit.contain,
+        filterQuality: FilterQuality.medium,
+        // Sin la mano el cuerpo sigue siendo un cuerpo. Mejor una figura sin
+        // manos que una pantalla rota.
+        errorBuilder: (BuildContext context, Object error, StackTrace? pila) =>
+            const SizedBox.shrink(),
+      );
 }

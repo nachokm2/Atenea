@@ -72,7 +72,13 @@ void main() {
         (WidgetTester tester) async {
       await pintar(tester, const <CapaAvatar>[]);
 
-      expect(imagen('assets/arte/capas/cuerpos/base_masculino_001.webp'), findsOneWidget);
+      // El cuerpo va en tres piezas desde que una espada tuvo que poder tapar
+      // una mano: el tronco sin manos, y cada mano por su lado. El cuerpo de
+      // una pieza sigue en disco pero ya no se pinta nunca.
+      expect(imagen('assets/arte/capas/cuerpos/base_masculino_001_sin_manos.webp'), findsOneWidget);
+      expect(imagen('assets/arte/capas/cuerpos/base_masculino_001_hand_right.webp'), findsOneWidget);
+      expect(imagen('assets/arte/capas/cuerpos/base_masculino_001_hand_left.webp'), findsOneWidget);
+      expect(imagen('assets/arte/capas/cuerpos/base_masculino_001.webp'), findsNothing);
       expect(imagen('assets/arte/personajes/base_masculino_001.webp'), findsNothing);
     });
 
@@ -195,9 +201,9 @@ void main() {
         CapaAvatar(clave: 'hair_front', z: 100),
       ]);
 
-      // Tres: el cuerpo y sus dos capas teñibles, la piel y el pelo. Ninguna
-      // imagen de equipo.
-      expect(find.byType(Image), findsNWidgets(3));
+      // Siete: el cuerpo sin manos, las dos manos con su piel cada una, y las
+      // dos capas teñibles del resto, la piel y el pelo. Ninguna de equipo.
+      expect(find.byType(Image), findsNWidgets(7));
       expect(tester.takeException(), isNull);
     });
 
@@ -222,8 +228,12 @@ void main() {
         // teñibles, que son parte del aprendiz y no del equipo: una armadura
         // tapa la piel, no al revés.
         'assets/arte/capas/masculino/a.webp',
-        'assets/arte/capas/cuerpos/base_masculino_001.webp',
-        'assets/arte/capas/cuerpos/base_masculino_001_piel.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001_sin_manos.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001_hand_right.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001_piel_hand_right.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001_hand_left.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001_piel_hand_left.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001_piel_sin_manos.webp',
         'assets/arte/capas/cuerpos/base_masculino_001_pelo.webp',
         'assets/arte/capas/masculino/b.webp',
         'assets/arte/capas/masculino/c.webp',
@@ -248,8 +258,12 @@ void main() {
           .toList();
       expect(pedidas, <String>[
         'assets/arte/capas/masculino/atras.webp',
-        'assets/arte/capas/cuerpos/base_masculino_001.webp',
-        'assets/arte/capas/cuerpos/base_masculino_001_piel.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001_sin_manos.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001_hand_right.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001_piel_hand_right.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001_hand_left.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001_piel_hand_left.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001_piel_sin_manos.webp',
         'assets/arte/capas/cuerpos/base_masculino_001_pelo.webp',
         'assets/arte/capas/masculino/delante.webp',
       ]);
@@ -370,11 +384,21 @@ void main() {
         ),
       );
 
-      final Image capa = tester.widget<Image>(
-        imagen('assets/arte/capas/cuerpos/base_masculino_001_piel.webp'),
-      );
-      expect(capa.color, CatalogoAvatar.piel('skin_06'));
-      expect(capa.colorBlendMode, BlendMode.modulate);
+      // Las tres piezas de piel, no solo el tronco: desde que las manos se
+      // pueden apagar, cada una lleva la suya. Una que se quedara sin teñir
+      // saldría del color del dibujo, y el aprendiz vería el tono que eligió
+      // en el cuerpo y otro distinto en las manos.
+      for (final String pieza in <String>[
+        'assets/arte/capas/cuerpos/base_masculino_001_piel_sin_manos.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001_piel_hand_right.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001_piel_hand_left.webp',
+      ]) {
+        final Image capa = tester.widget<Image>(imagen(pieza));
+        expect(capa.color, CatalogoAvatar.piel('skin_06'), reason: pieza);
+        expect(capa.colorBlendMode, BlendMode.modulate, reason: pieza);
+      }
+      // Y la piel entera ya no se pinta: tapaba las manos apagadas.
+      expect(imagen('assets/arte/capas/cuerpos/base_masculino_001_piel.webp'), findsNothing);
     });
 
     testWidgets('y el color de pelo a la capa de pelo', (WidgetTester tester) async {

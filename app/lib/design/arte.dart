@@ -125,7 +125,42 @@ abstract final class Arte {
     'base_femenino_003',
   };
 
-  /// Cuerpo desnudo de una figura: el fondo de la pila de dibujado.
+  /// Cuerpo desnudo de una figura, **sin las manos**.
+  ///
+  /// El cuerpo se dibuja en tres piezas —este y las dos manos— y no en una,
+  /// para que un arma pueda apagar la mano que ocupa. Ver [mano].
+  ///
+  /// El cuerpo entero sigue en el paquete porque es de donde
+  /// `scripts/separar_manos.py` saca las tres piezas, pero ya no lo pinta nadie.
+  static String cuerpoSinManos(String clave) =>
+      '$_raiz/capas/cuerpos/${clave}_sin_manos.webp';
+
+  /// Una mano suelta de esa figura.
+  ///
+  /// Existe para poder **quitarla**. Cada pieza empuñada del catálogo trae su
+  /// propio puño dibujado —el modelo lo añadió porque no se le dejaba tocar las
+  /// manos existentes— y ese puño no tapa del todo a la mano de debajo: asoma
+  /// por el borde entre diecinueve y cuarenta y siete píxeles, y se ven dos.
+  ///
+  /// Moverla no sirve, porque el puño dibujado es más pequeño que la mano. Lo
+  /// que sirve es apagar la de debajo.
+  ///
+  /// `derecha` es desde quien mira, igual que en el taller: la mano que aparece
+  /// a la derecha de la imagen es la que sostiene el arma, y la izquierda la
+  /// que lleva el escudo.
+  static String mano(String clave, {required bool derecha}) =>
+      '$_raiz/capas/cuerpos/${clave}_hand_${derecha ? 'right' : 'left'}.webp';
+
+  /// La piel de una mano suelta, para teñirla con el tono del aprendiz.
+  ///
+  /// Va con [mano] y se apaga con ella. Sin este recorte el arreglo entero no
+  /// se vería: [piel] es la silueta completa y se dibuja **por encima** del
+  /// cuerpo, así que repintaba el cien por cien de la mano que se acababa de
+  /// apagar. Se midió, y era el cien por cien en las seis figuras.
+  static String manoPiel(String clave, {required bool derecha}) =>
+      '$_raiz/capas/cuerpos/${clave}_piel_hand_${derecha ? 'right' : 'left'}.webp';
+
+  /// Cuerpo desnudo entero. Ya no se pinta: ver [cuerpoSinManos].
   static String cuerpo(String clave) => '$_raiz/capas/cuerpos/$clave.webp';
 
   /// La piel de esa figura, sola y lista para teñir.
@@ -141,7 +176,15 @@ abstract final class Arte {
   /// `scripts/separar_piel_y_pelo.py` sin generar arte nuevo.
   static String piel(String clave) => '$_raiz/capas/cuerpos/${clave}_piel.webp';
 
+  /// La piel de esa figura **sin las manos**, que es la que se pinta.
+  ///
+  /// La entera ya no: tapaba las manos apagadas. Ver [manoPiel].
+  static String pielSinManos(String clave) =>
+      '$_raiz/capas/cuerpos/${clave}_piel_sin_manos.webp';
+
   /// El pelo de esa figura, solo y listo para teñir. Ver [piel].
+  ///
+  /// Este no se parte: se midió y no toca ni un píxel de las manos.
   static String pelo(String clave) => '$_raiz/capas/cuerpos/${clave}_pelo.webp';
 
   /// Pieza de equipo dentro del juego de capas de su familia.

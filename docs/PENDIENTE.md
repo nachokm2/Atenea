@@ -14,7 +14,7 @@ sobrevive a su sesión es otra cosa que promete y no cumple.
 | | |
 |---|---|
 | Rama | `main`, todo subido a `origin` |
-| Pruebas del cliente | **129 verdes**, cero saltadas (eran 83 al empezar el 16) |
+| Pruebas del cliente | **142 verdes**, cero saltadas (eran 83 al empezar el 16) |
 | Pruebas del servidor | **verde entera**, `ruff` limpio |
 | `flutter analyze` | limpio |
 | APK de release | compila y está firmado |
@@ -93,7 +93,7 @@ Con el APK instalado, en este orden:
 
 ---
 
-## 4. Los dos huecos que quedan del proyecto
+## 4. Los huecos que quedan del proyecto
 
 Estudiados hoy en paralelo. **Los planes completos están en `docs/planes/`** —
 son largos, concretos y citan fichero y línea. Aquí solo el veredicto.
@@ -140,6 +140,54 @@ unas 60 líneas de cliente, cero backend, cero contrato.
 > **Queda un hueco hermano, sin verificar:** el nodo de módulo no manda
 > `assessment`, así que el desafío no se pinta en el mapa. Es más grande que el
 > anterior: el dato no existe en el agregado, hay que construirlo.
+
+### 4.3 Las dos manos al equipar un arma — medido, a medias
+
+Rodrigo lo encontró en el móvil: al equipar una espada se ven **dos manos**, la
+del arma y la suya. Cada pieza empuñada trae su propio puño dibujado porque al
+generarla se le prohibía al modelo tocar las manos existentes y a la vez se le
+pedía un arma empuñada; obedecer a las dos cosas solo se puede dibujando un puño
+nuevo.
+
+**Hecho y subido:** el cuerpo se dibuja en tres piezas —tronco sin manos y cada
+mano por su lado— y la capa de piel igual, que es la que hace falta para poder
+apagar una mano. `scripts/separar_manos.py` las deriva sin gastar API y se niega
+a escribir si recomponer las tres no devuelve el original píxel a píxel. Hoy se
+dibujan siempre las dos, así que **en pantalla no ha cambiado nada**: es la
+infraestructura, no el arreglo.
+
+**Por qué no se apaga todavía**, que es lo que no se deduce del código. Se
+compuso la pila fuera de la aplicación y se miró (`arte/diagnostico/`):
+
+1. El puño del arma **no cae donde está la mano**. Hace falta mover la pieza
+   entre 133 px hacia arriba y 184 px hacia abajo según cuál sea, y no hay
+   constante posible: cada una lo puso donde quiso. Apagar la mano sin mover el
+   arma deja el antebrazo **cortado en seco** con el puño flotando aparte.
+2. Aunque encajara, ese puño va pintado dentro del arma y **no se tiñe**. Mide
+   entre 0,29 y 5,47 veces la mano del cuerpo. Sobre la piel «Ébano» es un puño
+   naranja en un brazo marrón oscuro: los seis tonos de piel volverían a ser
+   seis tonos que no se aplican a todo.
+
+**Lo que sí funciona, probado en cuatro piezas:** borrar el puño del arma,
+mover la pieza para que la empuñadura caiga en la mano, y dibujar la mano del
+cuerpo **por encima**. Entonces agarra ella, y se tiñe. Se ve en
+`arte/diagnostico/tres_caminos.png`.
+
+**Dónde se atasca:** borrar el puño se hace por color, y la madera es del mismo
+color que la piel. En `baston_aprendiz` el 78 % de la pieza da «piel» por color y
+en `arco_fresno` el 66 %; en las espadas y cetros, del 15 al 23 %. Borrar por
+color arregla el metal y **destruiría el arco y el bastón**.
+
+Dos salidas, y la elección es de Rodrigo porque una cuesta dinero:
+
+- **Regenerar las 30 piezas sin puño**, con la empuñadura en el sitio de la mano.
+  Limpio y definitivo, y el arte por capas queda bien para siempre. Cuesta ~30
+  generaciones más las que se repitan.
+- **Afinar el borrado sin gastar**: distinguir el puño de la madera por forma y
+  no por color —un puño es compacto, una vara es alargada—. Gratis, pero no hay
+  garantía de que salga en las seis piezas de madera.
+
+Medidas, guiones de diagnóstico y las imágenes están en `arte/diagnostico/`.
 
 ---
 

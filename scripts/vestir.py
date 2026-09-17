@@ -97,13 +97,44 @@ MODELO = "gpt-image-2"
 #: Los rasgos del estilo van nombrados uno a uno porque "el mismo estilo" no
 #: significa nada para un modelo que no ve la ilustración como referencia de
 #: estilo, sino como una imagen que hay que editar.
+#: Cómo se dibuja. Esto no cambia nunca.
 ESTILO = (
     "Estilo de ilustración obligatorio, idéntico al de la imagen de partida: "
     "contorno de tinta oscura de grosor constante alrededor de cada forma, "
     "sombreado plano en dos o tres tonos planos por celdas, sin aerógrafo, sin "
     "degradados suaves y sin brillos especulares. Proporciones de seis cabezas y "
-    "media, no alargadas. No cambies la cara, el peinado, el tono de piel, las "
-    "manos, la altura ni la pose: los brazos siguen caídos a los costados."
+    "media, no alargadas."
+)
+
+#: Qué de la figura se conserva. Esto sí cambia según lo que se pida.
+#:
+#: Iba dentro de `ESTILO`, y ahí hizo un destrozo que tardó en verse: prohibía
+#: tocar «las manos», y una espada empuñada **es** tocar una mano. El modelo
+#: obedeció las dos cosas a la vez de la única forma posible —dejó la mano
+#: quieta y **dibujó una mano nueva** más arriba agarrando el arma—, así que
+#: cada una de las quince piezas empuñadas trae su propio puño dibujado, noventa
+#: y cinco píxeles por encima de la mano del cuerpo. En pantalla eso son dos
+#: manos, y así lo describió el primer aprendiz que lo vio.
+#:
+#: Es el mismo fallo que ya costó dos tandas de imágenes —«sigue DESCALZO» en
+#: las botas, «brazos desnudos» en las armas— y por el que existe
+#: `_lo_que_no_contradice`. Lo que faltaba era aplicar esa misma idea aquí.
+SIN_TOCAR_LA_FIGURA = (
+    " No cambies la cara, el peinado, el tono de piel, las manos, la altura ni "
+    "la pose: los brazos siguen caídos a los costados."
+)
+
+#: Lo mismo, para cuando la pieza va EN la mano.
+#:
+#: La figura se conserva igual —cara, peinado, altura, brazos caídos— pero la
+#: mano tiene permiso para cerrarse sobre lo que sujeta, que es justo lo que se
+#: le está pidiendo. Sin este permiso el modelo no dibuja el arma en absoluto:
+#: se comprobó dos veces y volvió el brazo vacío las dos.
+SIN_TOCAR_LA_FIGURA_SALVO_LA_MANO = (
+    " No cambies la cara, el peinado, el tono de piel, la altura ni la pose: el "
+    "brazo sigue caído junto al costado y a la misma altura. Lo único que cambia "
+    "es que los dedos de esa mano, sin moverse de sitio, se cierran alrededor de "
+    "lo que sujeta."
 )
 
 
@@ -238,6 +269,16 @@ class Banda:
     izquierda.
     """
 
+    medio_ancho: int = 95
+    """Mitad del ancho del rectángulo de la mano, en píxeles.
+
+    Noventa y cinco sirve para lo que es sobre todo largo —una hoja, una vara,
+    un arco— porque lo que sobresale de la mano lo hace hacia arriba y hacia
+    abajo. Un escudo redondo no: mide casi lo mismo de ancho que de alto, y con
+    este valor salía recortado contra el borde de su propia banda y con el brazo
+    comido por el recorte.
+    """
+
     ancho_maximo: int = 10_000
     """Descarta un trozo más ancho que esto, en píxeles.
 
@@ -312,7 +353,9 @@ BANDAS: dict[str, Banda] = {
     # deja la punta por encima de la cabeza; con trescientos treinta la hoja
     # llegaba al techo de la banda y salía cortada a ras.
     "arma": Banda(desde=-400, hasta=230, mano="diestra"),
-    "escudo": Banda(desde=-200, hasta=200, mano="zurda"),
+    # Un escudo redondo es tan ancho como alto, al revés que todo lo demás que se
+    # empuña. Con el medio ancho de fábrica salía cortado por su propia banda.
+    "escudo": Banda(desde=-230, hasta=260, mano="zurda", medio_ancho=155),
     # La cara, y solo para los anteojos, que son la única pieza del catálogo que
     # la toca. Iba de 150 a 215, que sobre el cuerpo desnudo es el cuello y los
     # hombros: los 195 de «línea de ojos» venían de otra escala. Con la cabeza
@@ -469,7 +512,7 @@ def _junto_a_la_mano(alfa: np.ndarray, top: int, banda: Banda) -> np.ndarray:
     """
     cx, cy = _centro_de_la_mano(alfa, top, banda.mano or "diestra")
     zona = np.zeros_like(alfa)
-    x0, x1 = max(0, cx - 95), min(LIENZO, cx + 95)
+    x0, x1 = max(0, cx - banda.medio_ancho), min(LIENZO, cx + banda.medio_ancho)
     y0, y1 = max(0, cy + banda.desde), min(LIENZO, cy + banda.hasta)
     zona[y0:y1, x0:x1] = True
     return zona
@@ -965,7 +1008,7 @@ def main(argv: list[str] | None = None) -> int:
     bruto = pedir_edicion(
         (destino / f"partida_{nombre}.png").read_bytes(),
         (destino / f"mascara_{nombre}.png").read_bytes(),
-        f"{args.prompt}. {ESTILO}"
+        f"{args.prompt}. {ESTILO}{_como_se_conserva(args.ranura)}"
         + (
             f" {DESNUDEZ}"
             if args.ranura.startswith("base")
@@ -1014,12 +1057,23 @@ def trasladar(pieza: Pieza, familia: str, origen: str) -> int:
     return 0
 
 
+#: Las ranuras donde la pieza va EN la mano y la mano tiene que cerrarse.
+EN_LA_MANO = ("manos", "empunado", "arma", "escudo")
+
+
+def _como_se_conserva(ranura: str) -> str:
+    """Qué de la figura queda intocable, según dónde va la pieza."""
+    if ranura in EN_LA_MANO:
+        return SIN_TOCAR_LA_FIGURA_SALVO_LA_MANO
+    return SIN_TOCAR_LA_FIGURA
+
+
 def _lo_que_no_contradice(ranura: str) -> str:
     """De las dos advertencias, las que no chocan con lo que se está pidiendo."""
     sobra: list[str] = []
     if ranura != "botas":
         sobra.append(SIN_CALZADO)
-    if ranura not in ("manos", "empunado", "arma", "escudo"):
+    if ranura not in EN_LA_MANO:
         sobra.append(SIN_MANGAS)
     return "".join(sobra)
 
