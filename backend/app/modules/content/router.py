@@ -322,6 +322,7 @@ def _detalle_out(detalle: servicio_rutas.DetalleRuta) -> PathDetailOut:
                                 position=leccion.position,
                                 estimated_seconds=leccion.estimated_seconds,
                                 status=leccion.status,
+                                content_status=leccion.content_status,
                                 completion_count=leccion.completion_count,
                                 accuracy_pct=leccion.accuracy_pct,
                             )

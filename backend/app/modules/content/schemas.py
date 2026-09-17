@@ -247,13 +247,20 @@ class PathConfirmIn(EntradaBase):
 
 
 class LessonNodeOut(EsquemaBase):
-    """Lección dentro del mapa de la ruta."""
+    """Lección dentro del mapa de la ruta.
+
+    `content_status` viaja porque el cliente lo necesita para decidir si el nodo
+    se puede abrir (P07 pinta «en construcción» y no navega mientras no esté
+    `ready`). Faltaba, el cliente lo leía igual, y al no encontrarlo caía a
+    `pending`: ninguna lección de ninguna ruta era abrible desde el mapa.
+    """
 
     lesson_id: uuid.UUID
     title: str
     position: int
     estimated_seconds: int
     status: ProgressState
+    content_status: ContentStatus
     completion_count: int = 0
     accuracy_pct: float | None = None
 

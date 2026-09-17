@@ -309,6 +309,29 @@ def test_el_mapa_de_la_ruta_trae_modulos_temas_y_lecciones(cliente, contenido):
     assert len(primer_modulo["topics"][0]["lessons"]) == 2
 
 
+def test_cada_leccion_del_mapa_dice_si_esta_lista(cliente, contenido):
+    """Sin `content_status` en el nodo, P07 no deja abrir ni una lección.
+
+    No es un campo informativo: el cliente pinta «en construcción» y **se niega
+    a navegar** mientras la lección no esté `ready` (`mapa_ruta.dart`). El nodo
+    no lo serializaba, el cliente lo leía igual, y al no encontrarlo caía a
+    `pending` —así que todas las lecciones de todas las rutas eran inabribles
+    desde el mapa, y el aprendiz solo veía «esta lección se está escribiendo
+    ahora mismo» para siempre.
+
+    Ninguna prueba lo notó porque ninguna miraba este campo. Esta es la primera,
+    y es la razón de que compruebe el valor y no solo la presencia: las
+    lecciones de la fixture están `READY`, así que un nodo que dijera `pending`
+    estaría mintiendo.
+    """
+    respuesta = cliente.get(f"/api/v1/paths/{contenido.ruta.id}")
+
+    assert respuesta.status_code == 200
+    lecciones = respuesta.json()["modules"][0]["topics"][0]["lessons"]
+    assert lecciones
+    assert all(leccion["content_status"] == "ready" for leccion in lecciones)
+
+
 def test_listar_rutas_filtra_por_ambito(cliente, contenido):
     """`GET /paths?scope=seed` solo trae Rutas del Reino (§7.5)."""
     respuesta = cliente.get("/api/v1/paths", params={"scope": "seed"})

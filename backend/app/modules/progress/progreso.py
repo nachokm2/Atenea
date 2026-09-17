@@ -68,7 +68,14 @@ class ResultadoLeccion:
 
 @dataclass(slots=True)
 class NodoLeccion:
-    """Una lección en el mapa de la ruta."""
+    """Una lección en el mapa de la ruta.
+
+    `content_status` no es informativo: es lo que decide si el nodo se puede
+    abrir. El mapa pinta «en construcción» y se niega a navegar mientras la
+    lección no esté `READY`, así que omitirlo aquí equivale a decir que ninguna
+    lo está —que es exactamente lo que pasaba, y dejaba la Ruta entera sin un
+    solo nodo que se pudiera tocar.
+    """
 
     lesson_id: uuid.UUID
     title: str
@@ -77,6 +84,7 @@ class NodoLeccion:
     status: ProgressState
     completion_count: int
     accuracy_pct: float | None
+    content_status: ContentStatus = ContentStatus.PENDING
 
 
 @dataclass(slots=True)
@@ -644,6 +652,7 @@ class ServicioProgreso:
                     accuracy_pct=a_float(progreso_leccion.accuracy_pct, 0.0)
                     if progreso_leccion and progreso_leccion.accuracy_pct is not None
                     else None,
+                    content_status=leccion.content_status,
                 )
             )
 
