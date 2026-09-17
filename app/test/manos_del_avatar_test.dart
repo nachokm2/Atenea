@@ -1,23 +1,27 @@
-/// El cuerpo se dibuja en tres piezas, y cada mano lleva su piel.
+/// El cuerpo se dibuja en tres piezas, y la mano se aparta cuando sobra.
 ///
-/// Está partido para poder **apagar** la mano que sostiene algo. Cada pieza
-/// empuñada del catálogo trae su propio puño dibujado —el modelo lo añadió
-/// porque el estilo le prohibía tocar las manos existentes y a la vez se le
-/// pedía un arma empuñada— y ese puño no tapa la mano de debajo: se ven dos.
+/// Cada pieza empuñada del catálogo venía con un puño dibujado dentro: el modelo
+/// lo añadió porque el estilo le prohibía tocar las manos existentes y a la vez
+/// se le pedía un arma empuñada. En pantalla salían **dos manos**, y así lo
+/// encontró el primer aprendiz que equipó una espada.
 ///
-/// Apagarla todavía no se hace. Se compuso la pila fuera de la aplicación y se
-/// miró: el puño del arma no cae donde está la mano —de 133 px por encima a
-/// 184 px por debajo según la pieza— así que apagarla deja el antebrazo cortado
-/// con el puño flotando aparte. Y ese puño va pintado dentro del arma, así que
-/// no se tiñe: sería naranja sobre cualquiera de los otros cinco tonos de piel.
-/// Falta arte de arma sin puño, con la empuñadura en el sitio de la mano.
+/// El arreglo no fue borrar ese puño ni taparlo —las dos se probaron y se
+/// midieron: borrarlo deja un hueco que la mano del cuerpo no alcanza a tapar
+/// porque es más pequeña que él, y taparlo deja un fleco naranja alrededor—.
+/// Fue reconocer que ese puño **ya agarra el arma**, porque se dibujó
+/// agarrándola, y que lo único que le faltaba era ser del color del aprendiz.
+/// Así que se saca a su propia capa, se tiñe, y la mano del cuerpo de ese lado
+/// se quita de en medio.
 ///
-/// Mientras tanto lo que se comprueba aquí es que partir el cuerpo **no cambió
-/// nada**, que es el riesgo de hoy: el aprendiz sin arma —la mayoría— tiene que
-/// ver exactamente la misma figura. La igualdad píxel a píxel la garantiza
-/// `scripts/separar_manos.py`, que se niega a escribir si recomponer las tres
-/// piezas no devuelve el original; lo de aquí es la otra mitad, que la pila las
-/// pida todas y ninguna se quede sin teñir.
+/// Aquí se fijan las dos mitades, que son las dos formas de estropearlo:
+///
+/// - **Apagar una mano sin tener puño que ponga en su sitio** deja el brazo
+///   cortado en seco. Pasa con las dos piezas a las que no se les pudo sacar.
+/// - **No apagarla teniendo puño** devuelve las dos manos, que es el fallo que
+///   esto venía a arreglar.
+///
+/// Ninguna de las dos lanza nada ni rompe ninguna prueba de maquetación: se ven,
+/// y ya está. Por eso están escritas.
 library;
 
 import 'package:atenea/datos/dtos.dart';
@@ -129,11 +133,11 @@ void main() {
     expect(_pintadas(tester), contains(Arte.pelo(figura)));
   });
 
-  testWidgets('equipar algo no le quita ninguna mano al cuerpo',
+  testWidgets('una pieza SIN puño propio no le quita la mano al cuerpo',
       (WidgetTester tester) async {
-    // Apagar una mano deja el antebrazo cortado en seco: se compuso la pila
-    // fuera de la aplicación y se miró. Lo que se hizo en su lugar fue quitarle
-    // el puño al arma y ponerla donde está la mano.
+    // A dos piezas del catálogo no se les pudo sacar el puño: a una no se le
+    // encuentra y a la otra le quedaría demasiada muñeca al aire. Esas tienen
+    // que seguir teniendo la mano del cuerpo debajo, o el brazo acaba cortado.
     await _pintar(tester, <CapaAvatar>[
       _capa('weapon', RanuraItem.arma, 130),
       _capa('offhand', RanuraItem.secundaria, 80),
@@ -145,6 +149,68 @@ void main() {
     expect(rutas, contains(Arte.manoPiel(figura, derecha: true)));
     expect(rutas, contains(Arte.manoPiel(figura, derecha: false)));
   });
+
+  testWidgets('una pieza CON puño propio sí se la quita, y solo esa',
+      (WidgetTester tester) async {
+    // Las dos mitades del arreglo en una sola prueba: si no se apaga, vuelven
+    // las dos manos; si se apagan las dos, la izquierda se queda sin nada.
+    await _pintar(tester, <CapaAvatar>[
+      const CapaAvatar(
+        clave: 'weapon',
+        ranura: RanuraItem.arma,
+        assetKey: 'espada_corta_acero_weapon.webp',
+        z: 130,
+      ),
+    ]);
+    final List<String> rutas = _pintadas(tester);
+
+    expect(
+      rutas,
+      isNot(contains(Arte.mano(figura, derecha: true))),
+      reason: 'el arma trae la suya; con las dos se ven dos manos',
+    );
+    expect(
+      rutas,
+      contains(Arte.mano(figura, derecha: false)),
+      reason: 'la izquierda no sostiene nada y se quedaría manca',
+    );
+  });
+
+  testWidgets('y el puño de la pieza se tiñe con el tono elegido',
+      (WidgetTester tester) async {
+    // Es el motivo de sacarlo a una capa aparte. Dentro del arma se quedaba
+    // naranja: sobre la piel «Ébano» era un puño naranja en un brazo marrón
+    // oscuro, y los seis tonos volvían a ser seis tonos que no se aplican.
+    // Sin esta comprobación, olvidar el tinte no rompe nada: solo se ve.
+    const String src = 'espada_corta_acero_weapon.webp';
+    await _pintar(tester, const <CapaAvatar>[
+      CapaAvatar(clave: 'weapon', ranura: RanuraItem.arma, assetKey: src, z: 130),
+    ]);
+
+    final Image puno = tester.widget<Image>(
+      find.byWidgetPredicate(
+        (Widget w) =>
+            w is Image &&
+            w.image is AssetImage &&
+            (w.image as AssetImage).assetName ==
+                Arte.punoDeLaPieza(figura: figura, src: src),
+      ),
+    );
+    expect(puno.color, CatalogoAvatar.piel('skin_06'));
+    expect(puno.colorBlendMode, BlendMode.modulate);
+  });
+
+  testWidgets('un guante no cuenta como puño, aunque vaya en la mano',
+      (WidgetTester tester) async {
+    // Se dibuja encima de la mano y la necesita debajo: un guante sin mano es
+    // un guante flotando. Es el caso que más fácil se cuela al escribir la regla.
+    await _pintar(tester, <CapaAvatar>[_capa('gloves', RanuraItem.guantes, 70)]);
+    final List<String> rutas = _pintadas(tester);
+
+    expect(rutas, contains(Arte.mano(figura, derecha: true)));
+    expect(rutas, contains(Arte.mano(figura, derecha: false)));
+  });
+
 
   testWidgets('la mano se pinta SOBRE el arma, que es lo que la hace agarrarla',
       (WidgetTester tester) async {

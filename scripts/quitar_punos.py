@@ -1,4 +1,4 @@
-"""Le quita a cada arma el puño que trae dibujado y la lleva a la mano.
+"""Saca a capa aparte la mano que cada arma trae dibujada, para poder teñirla.
 
 ## Por qué
 
@@ -8,29 +8,39 @@ pedía un arma empuñada: obedecer a las dos cosas solo se puede dibujando una m
 nueva. En pantalla salen **dos**, y así lo encontró el primer aprendiz que equipó
 una espada.
 
-Apagar la del cuerpo no basta, y se comprobó componiendo la pila fuera de la
-aplicación y mirándola. Dos razones:
+## Dos caminos que se probaron, se midieron y no valen
 
-1. **El puño no cae donde está la mano.** Hace falta mover la pieza entre 133 px
-   hacia arriba y 184 px hacia abajo según cuál sea, y no hay constante posible:
-   cada una lo puso donde quiso. Apagar sin mover deja el antebrazo cortado en
-   seco con el puño flotando aparte.
-2. **Ese puño no se tiñe.** Va pintado dentro del arma, así que se queda naranja
-   elija el aprendiz el tono de piel que elija. Sobre «Ébano» es un puño naranja
-   en un brazo marrón oscuro, y los seis tonos volverían a ser seis tonos que no
-   se aplican del todo.
+Se dejan escritos porque son el motivo de que el bueno sea el tercero, y porque
+los dos parecen razonables hasta que se miden.
 
-Lo que hace este guion es quitar el puño dibujado y mover la pieza para que la
-empuñadura quede donde está la mano del cuerpo. Entonces agarra esa —que sí se
-tiñe, y que es la de esta figura— y no hay nada que apagar.
+1. **Borrar el puño del arma** y dejar que agarre la mano del cuerpo. Abre un
+   hueco en la pieza, y la mano del cuerpo —que tendría que taparlo— es **más
+   pequeña que el puño dibujado**: asomaban entre 434 y 2.204 px del hueco en las
+   dieciocho armas. Una revisión pieza a pieza los llamó mordiscos en el gavilán
+   y en la hoja.
+2. **Taparlo**, dibujando la mano del cuerpo por encima sin borrar nada. Mejor
+   —de 114 a 1.071 px— pero lo que queda a la vista es un filo naranja alrededor
+   de una mano oscura, y se ve.
 
-No gasta ninguna llamada a la API. El arte que ya se pagó se recorta y se coloca.
+## El que sí
+
+Ese puño **ya agarra el arma**: se dibujó agarrándola, con los dedos cerrados
+sobre la empuñadura, que es algo que la mano en reposo del cuerpo no sabe hacer.
+Lo único que le faltaba era ser del color del aprendiz.
+
+Así que se saca a su propia capa, normalizada como la piel del cuerpo para que el
+cliente pueda teñirla, y se borra de la pieza —sin dejar hueco, porque la capa
+vuelve exactamente encima—. La pieza se corre además hasta la mano de la figura,
+que es lo que hace que el brazo acabe donde empieza el puño. El cliente tiñe esa
+capa y apaga la mano del cuerpo de ese lado.
+
+No gasta ninguna llamada a la API: el arte que ya se pagó se recorta y se coloca.
 
 ## Cómo distingue un puño de un palo
 
 Por la forma, no por el color. El color no vale: el predicado de piel da 78 % de
 «piel» en `baston_aprendiz` y 66 % en `arco_fresno`, porque la madera clara es
-del mismo color que la piel. Borrar por color destruiría el bastón y el arco.
+del mismo color que la piel.
 
 Pero un puño es **compacto** y una vara es **alargada**, y ahí no hay solape:
 
@@ -39,16 +49,26 @@ Pero un puño es **compacto** y una vara es **alargada**, y ahí no hay solape:
 
 ## Lo que no toca
 
-Una pieza a la que no se le encuentra puño se deja **exactamente como está** y se
-dice por qué. Es el caso de `arco_bosque_antiguo`, que parece no llevar ninguno.
-Vale más una pieza sin tocar que una pieza rota.
+**Nada de la mano secundaria.** Un escudo tapa el brazo, así que la mano que el
+modelo le dibujó encima no compite con ninguna otra: no hay nada que arreglar. Y
+tocarla salía caro —en un escudo la mano va pintada sobre la cara y debajo no hay
+nada, así que sacarla dejaba el agujero a la vista—.
 
-Los originales se guardan en `_con_puno/` dentro de la misma carpeta, así que el
-guion se puede repetir sin degradar nada: siempre parte del original.
+**Ni las piezas que quedarían peor.** Si a una no se le encuentra puño, o si el
+que tiene dejaría demasiada muñeca al aire al apagar la mano del cuerpo, se deja
+**exactamente como está** y se dice por qué. Son dos de las dieciocho. Vale más
+una pieza sin tocar que una pieza rota, y eso hay que decírselo al cliente: por
+eso el guion termina emitiendo la lista de las que sí tienen puño propio, que es
+la que va en `Arte.conPunoPropio`.
+
+Los originales se guardan en `_con_puno/` dentro de la misma carpeta, y el guion
+**restaura desde ahí en cada ejecución antes de decidir nada**. Así, endurecer un
+criterio no deja detrás el recorte que hizo la versión anterior: una pieza que el
+guion decide no tocar queda como si el guion no existiera.
 
 Uso:
 
-    python scripts/quitar_punos.py            # las 30 piezas, y una hoja de contactos
+    python scripts/quitar_punos.py            # las armas de las dos familias
     python scripts/quitar_punos.py --simular  # dice qué haría y no escribe
 """
 
@@ -130,7 +150,69 @@ FRAGMENTO_JUNTOS_MINIMO = 900
 #: **y sean pequeñas**. El tamaño es lo que salva la madera: la rama del arco
 #: mide 3.873 px y la vara del bastón 6.144, así que ninguna entra aquí.
 ASTILLA_MAXIMA = 1200
-ASTILLA_DISTANCIA = 25
+
+#: Y a qué distancia del puño se deja de buscar.
+#:
+#: Sesenta y no veinticinco: con el radio corto se quedaba fuera un trozo de
+#: antebrazo que el modelo dibujó separado de los dedos, y se veía como una curva
+#: naranja al lado de la mano —naranja en los seis tonos de piel, porque lo que
+#: no entra en la capa no se tiñe—. De 25 a 60 se recogen 2.800 px más en las
+#: dieciséis piezas, unos 175 por pieza. Por encima de 60 ya no aparece casi
+#: nada: a 90 solo son 330 px más en total.
+ASTILLA_DISTANCIA = 60
+
+#: Y a qué distancia de color del puño deja de ser parte del puño.
+#:
+#: Distancia euclídea en RGB entre el tono medio del trozo y el del puño. Sesenta
+#: separa el naranja plano de la mano del filo cálido de una hoja y del latón de
+#: una vara, que es lo que se estaba comiendo.
+ASTILLA_COLOR = 60.0
+
+#: Cuánto se crece la mano para llevarse la tinta con que está dibujada.
+#:
+#: El perfil y las sombras de un puño no son piel —son más oscuros— así que el
+#: recorte por color se lleva el relleno y deja el dibujo. Y lo que se queda en
+#: la pieza no se tiñe: se veía como una curva naranja junto a la mano.
+CONTORNO_CRECE = 5
+
+#: Y qué cuenta como tinta de la mano y no del arma.
+#:
+#: El perfil de una mano es marrón: su canal rojo va bastante por encima del
+#: azul. El acero de una guarda tiene los tres canales juntos, así que se queda.
+TINTA_CALIDA = 25
+
+#: El puño no se borra ni se tapa: se **saca a su propia capa y se tiñe**.
+#:
+#: Las dos primeras ideas están medidas y descartadas, y las medidas se dejan
+#: escritas porque son el motivo:
+#:
+#: - **Borrarlo** abre un hueco en la pieza que tendría que tapar la mano del
+#:   cuerpo, y la mano es más pequeña que el puño dibujado: entre 434 y 2.204 px
+#:   del hueco asomaban en las dieciocho armas. Una revisión pieza a pieza los
+#:   llamó mordiscos en el gavilán y en la hoja.
+#: - **Taparlo** con la mano del cuerpo por encima deja a la vista de 114 a
+#:   1.071 px de puño naranja alrededor de una mano oscura. Mejor, pero se ve.
+#:
+#: Lo que sí sale bien es reconocer que ese puño **ya está donde tiene que
+#: estar**: agarra el arma, porque se dibujó agarrándola. Lo único que le falta
+#: es ser del color del aprendiz. Así que se saca a una capa aparte, se
+#: normaliza como la piel del cuerpo, y el cliente la tiñe y apaga la mano del
+#: cuerpo de ese lado. No queda hueco —la capa vuelve exactamente encima— ni
+#: fleco —no hay dos manos que solapen— y no se gasta arte nuevo.
+#:
+#: La pieza se sigue moviendo hasta la mano, y eso importa: es lo que hace que
+#: el brazo acabe donde empieza el puño.
+
+#: Cuánta muñeca se tolera al aire.
+#:
+#: Apagada la mano del cuerpo, el antebrazo acaba en un corte que tiene que tapar
+#: el puño del arma. Medido, quedan de 0 a 204 px en quince de las dieciséis; la
+#: que se pasa —`espada_entrenamiento` masculina, con 712— se queda sin tocar,
+#: porque su puño es la mitad de grande que los demás.
+MUNON_AL_AIRE = 260
+
+#: Qué parte de la mano cuenta como muñeca, desde su borde superior.
+ALTO_DE_LA_MUNECA = 45
 
 #: Y solo en las piezas donde el color signifique algo.
 #:
@@ -145,14 +227,20 @@ ASTILLA_DISTANCIA = 25
 #: 78 % en el bastón.
 PIEL_QUE_YA_NO_INFORMA = 0.40
 
-#: Las piezas de la mano secundaria no se mueven, solo se les quita la mano.
+#: La mano secundaria no se toca. Nada de nada.
 #:
-#: Un escudo va atado al antebrazo, no agarrado en el centro de la mano, así que
-#: llevar su puño al centro de la mano es justo lo que no hay que hacer:
-#: `escudo_blason_reino` se iba medio fuera del cuadro por la izquierda. Se vio
-#: en la hoja de contactos. Sin mover, los cinco escudos caen donde caían, que
-#: es donde estaban bien.
-NO_SE_MUEVEN = ("offhand",)
+#: Aquí borrar el puño **agujerea la pieza**, y es por dónde está dibujado. En un
+#: arma el puño va delante de la empuñadura: al quitarlo aparece la empuñadura,
+#: que ya estaba pintada debajo. En un escudo la mano va pintada **sobre la cara
+#: del escudo**, y debajo no hay nada, así que queda el hueco. Ampliadas se ve
+#: perfectamente: `escudo_blason_reino` salía con un agujero de lado a lado,
+#: `escudo_primer_desafio` sin un trozo del borde y `tomo_erudito` con un hueco
+#: blanco. Los tres estaban mejor antes.
+#:
+#: Y no hace falta tocarlos: un escudo tapa el brazo, así que la mano que el
+#: modelo dibujó encima no compite con ninguna otra. El problema de las dos manos
+#: es de las armas.
+NO_SE_TOCAN = ("offhand",)
 
 
 def _piel(a: np.ndarray) -> np.ndarray:
@@ -241,9 +329,25 @@ def con_astillas(a: np.ndarray, puno: np.ndarray) -> np.ndarray:
     donde viven la rama del arco y la vara del bastón.
     """
     piel = _piel(a)
+
+    # Y solo donde el color signifique algo. En una pieza de madera clara «lo que
+    # tiene color de piel» puede ser la propia vara: `baston_aprendiz` da 78 % y
+    # `arco_fresno` 66 %. Se probó sin esta guarda y el bastón perdió un tramo
+    # entero de la empuñadura tallada —el 11,9 % de la pieza—, visto comparando
+    # el antes y el después. Ahí, solo el puño que la forma confirmó.
     dibujo = int((a[:, :, 3] > OPACO).sum())
     if dibujo and piel.sum() / dibujo > PIEL_QUE_YA_NO_INFORMA:
         return puno
+
+    # Y del **mismo color** que el puño, no solo de color de piel.
+    #
+    # «Color de piel» es un abanico ancho: dentro caen el filo cálido de una hoja
+    # y el latón de una vara, y si están pegados al puño se los llevaba por
+    # delante. Se dibujó lo que se borraba —rojo el puño, cian lo añadido— y ahí
+    # se vio: el cian mordía el gavilán de `espada_entrenamiento` y un tramo de
+    # la vara de `cetro_bigquery`. El puño, en cambio, es un naranja plano, así
+    # que exigir que el trozo tenga su mismo color deja fuera al metal.
+    tono = a[puno][:, :3].astype(float).mean(axis=0)
 
     cerca = ndimage.binary_dilation(puno, np.ones((3, 3)), iterations=ASTILLA_DISTANCIA)
     etiquetas, cuantas = ndimage.label(piel)
@@ -252,9 +356,57 @@ def con_astillas(a: np.ndarray, puno: np.ndarray) -> np.ndarray:
         trozo = etiquetas == i
         if (trozo & puno).any():
             continue
-        if trozo.sum() <= ASTILLA_MAXIMA and (trozo & cerca).any():
-            junto |= trozo
+        if trozo.sum() > ASTILLA_MAXIMA or not (trozo & cerca).any():
+            continue
+        if np.linalg.norm(a[trozo][:, :3].astype(float).mean(axis=0) - tono) > ASTILLA_COLOR:
+            continue
+        junto |= trozo
     return junto
+
+
+#: Percentil de luminancia que se lleva al blanco al normalizar, como en
+#: `separar_piel_y_pelo.py`: el cliente tiñe multiplicando, así que solo puede
+#: oscurecer, y sin llevar los brillos al blanco el tono elegido saldría apagado.
+BRILLO = 95
+
+
+def _normalizar(rgb: np.ndarray, mascara: np.ndarray) -> np.ndarray:
+    """Lleva los brillos de la región al blanco conservando el sombreado."""
+    salida = rgb.astype(np.float32).copy()
+    zona = rgb[mascara].astype(np.float32)
+    if zona.size == 0:
+        return rgb
+    referencia = np.maximum(np.percentile(zona, BRILLO, axis=0), 12.0)
+    salida[mascara] = np.clip(zona / referencia * 255.0, 0, 255)
+    return salida.astype(np.uint8)
+
+
+def _banda_de_muneca(figura: str, lado: str) -> np.ndarray:
+    """La parte alta de la mano del cuerpo: si queda al aire, se ve el corte."""
+    mano = mascara_de_la_mano(figura, lado)
+    arriba = int(np.where(mano)[0].min())
+    banda = mano.copy()
+    banda[arriba + ALTO_DE_LA_MUNECA :, :] = False
+    return banda
+
+
+def mascara_de_la_mano(figura: str, lado: str) -> np.ndarray:
+    """La mano suelta del cuerpo, que es la que tapará el hueco."""
+    ruta = CUERPOS / f"{figura}_hand_{lado}.webp"
+    if not ruta.exists():
+        raise SystemExit(f"falta {ruta}: ejecuta antes scripts/separar_manos.py")
+    return np.array(Image.open(ruta).convert("RGBA"))[:, :, 3] > OPACO
+
+
+def _correr(m: np.ndarray, dx: int, dy: int) -> np.ndarray:
+    """La misma máscara, movida: donde acabará el hueco una vez colocada la pieza."""
+    alto, ancho = m.shape
+    fuera = np.zeros_like(m)
+    oy0, oy1 = max(0, dy), min(alto, alto + dy)
+    ox0, ox1 = max(0, dx), min(ancho, ancho + dx)
+    if oy0 < oy1 and ox0 < ox1:
+        fuera[oy0:oy1, ox0:ox1] = m[oy0 - dy : oy1 - dy, ox0 - dx : ox1 - dx]
+    return fuera
 
 
 def centro_de_la_mano(figura: str, lado: str) -> tuple[float, float]:
@@ -283,19 +435,53 @@ def _mover(a: np.ndarray, dx: int, dy: int) -> np.ndarray | None:
     return movido
 
 
-def procesar(origen: pathlib.Path, figura: str, simular: bool) -> dict[str, object]:
-    ranura = origen.stem.rsplit("_", 1)[-1]
-    lado = EN_LA_MANO[ranura]
+def con_su_contorno(a: np.ndarray, mano: np.ndarray) -> np.ndarray:
+    """La mano más la tinta con que está dibujada: su perfil y sus sombras.
 
-    # Siempre se parte del original, para que repetir no degrade.
+    Sin esto, la piel se lleva el relleno y **el dibujo se queda**: el perfil del
+    pulgar seguía en la capa del arma, en naranja, y como lo que no entra en la
+    capa no se tiñe, se veía una curva naranja al lado de la mano en los seis
+    tonos de piel. Se localizó separando la pila capa a capa y mirándolas.
+
+    Crece solo sobre tinta **cálida** —el perfil de una mano es marrón, no gris—
+    para no llevarse el acero de la guarda, que tiene los tres canales juntos.
+    Da igual pasarse un poco: lo que entra aquí no se borra, se tiñe, así que el
+    peor caso es un píxel del arma del color de la piel, no un agujero.
+    """
+    r = a[:, :, 0].astype(int)
+    b = a[:, :, 2].astype(int)
+    calido = (a[:, :, 3] > 0) & (r > b + TINTA_CALIDA)
+    crecida = ndimage.binary_dilation(mano, np.ones((3, 3)), iterations=CONTORNO_CRECE)
+    return mano | (crecida & calido)
+
+
+def _original(origen: pathlib.Path, simular: bool) -> pathlib.Path:
+    """Devuelve la pieza a su estado original y dice de dónde leerla.
+
+    Restaurar **siempre**, y no solo leer del respaldo, es lo que hace que
+    cambiar las reglas no deje basura detrás. Costó un susto: al endurecer el
+    criterio, `arco_bosque_antiguo` pasó a estar en la lista de las que no se
+    tocan, y se quedó con el recorte que le había hecho la versión anterior del
+    guion, porque saltarla significaba no volver a escribirla. Una pieza que el
+    guion decide no tocar tiene que quedar como si el guion no existiera.
+    """
     guardado = origen.parent / "_con_puno" / origen.name
-    if guardado.exists():
-        fuente = guardado
-    else:
-        fuente = origen
+    if not guardado.exists():
         if not simular:
             guardado.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(origen, guardado)
+        return origen
+    if not simular:
+        shutil.copy2(guardado, origen)
+    return guardado
+
+
+def procesar(origen: pathlib.Path, figura: str, simular: bool) -> dict[str, object]:
+    ranura = origen.stem.rsplit("_", 1)[-1]
+    fuente = _original(origen, simular)
+    if ranura in NO_SE_TOCAN:
+        return {"pieza": origen.stem, "estado": "mano secundaria; no se toca"}
+    lado = EN_LA_MANO[ranura]
 
     a = np.array(Image.open(fuente).convert("RGBA"))
     hallazgo = puno_de(a)
@@ -303,28 +489,54 @@ def procesar(origen: pathlib.Path, figura: str, simular: bool) -> dict[str, obje
         return {"pieza": origen.stem, "estado": "sin puño; se deja como está"}
 
     puno, como = hallazgo
-    # El sitio se toma del puño solo: es lo que agarra. Las astillas de muñeca se
-    # borran también, pero moverían el centro hacia el codo si contaran.
     f = _forma(puno)
-    mascara = con_astillas(a, puno)
-    if ranura in NO_SE_MUEVEN:
-        dx = dy = 0
-    else:
-        hx, hy = centro_de_la_mano(figura, lado)
-        dx, dy = int(round(hx - f["cx"])), int(round(hy - f["cy"]))
 
-    # Se borra el puño y su contorno de tinta, que va pegado a la piel y sin él
-    # quedaría el dibujo de la mano sin relleno.
-    limpia = a.copy()
-    fuera = ndimage.binary_dilation(mascara, np.ones((3, 3)), iterations=5)
-    limpia[:, :, 3] = np.where(fuera, 0, a[:, :, 3])
+    # Dos destinos distintos, y confundirlos fue el fallo que más tardó en verse.
+    #
+    # A la **capa teñible** va solo el puño y la tinta con que está dibujado: es
+    # la mano que agarra, y es lo que sustituye a la del cuerpo.
+    #
+    # Lo demás que el modelo dibujó de piel alrededor —muñeca, un trozo de
+    # antebrazo, un pedazo de manga— **se borra**. No es que estorbe: es que el
+    # cuerpo ya tiene su antebrazo, y además la pieza se mueve, así que ese
+    # segundo antebrazo acaba cruzado en diagonal por encima del pantalón. Se vio
+    # montando la pila paso a paso: aparecía justo al añadir la capa del puño.
+    mano = con_su_contorno(a, puno)
+    de_sobra = con_astillas(a, puno) & ~mano
 
-    movida = _mover(limpia, dx, dy)
+    hx, hy = centro_de_la_mano(figura, lado)
+    dx, dy = int(round(hx - f["cx"])), int(round(hy - f["cy"]))
+
+    # La capa de la mano del cuerpo se apaga cuando esta pieza está puesta, así
+    # que el puño tiene que tapar la muñeca que queda al aire. Se comprueba, y
+    # contando solo lo que de verdad va a quedar dibujado.
+    queda = _correr((a[:, :, 3] > OPACO) & ~de_sobra, dx, dy)
+    munon = int((_banda_de_muneca(figura, lado) & ~_correr(mano, dx, dy) & ~queda).sum())
+    if munon > MUNON_AL_AIRE:
+        return {
+            "pieza": origen.stem,
+            "estado": f"dejaría {munon} px de muñeca al aire; se deja como está",
+        }
+
+    movida = _mover(a, dx, dy)
     if movida is None:
         return {
             "pieza": origen.stem,
             "estado": f"no cabe movida ({dx:+d},{dy:+d}); se deja como está",
         }
+
+    # El puño sale a su propia capa, normalizado para poder teñirlo, y se borra
+    # de la pieza. No queda hueco: la capa vuelve exactamente encima.
+    capa = np.zeros_like(a)
+    capa[mano] = a[mano]
+    capa[:, :, :3] = _normalizar(capa[:, :, :3], mano)
+    capa_movida = _mover(capa, dx, dy)
+    # Y de la pieza se quita el puño —que vuelve en la capa— y también lo que
+    # sobraba, que no vuelve en ninguna parte.
+    movida[:, :, 3] = np.where(_correr(mano | de_sobra, dx, dy), 0, movida[:, :, 3])
+    if not simular:
+        Image.fromarray(capa_movida).save(origen.parent / f"{origen.stem}_puno.png")
+    como = f"{como}, sobraban {int(de_sobra.sum())} px de brazo, muñeca al aire {munon} px"
 
     if not simular:
         Image.fromarray(movida).save(origen)
@@ -356,6 +568,7 @@ def main(argv: list[str] | None = None) -> int:
             if f.stem.rsplit("_", 1)[-1] in EN_LA_MANO
             and not f.stem.startswith(INTERMEDIOS)
             and not f.stem.endswith(VISTAS)
+            and not f.stem.endswith("_puno")
         )
         print(f"\n=== {figura} — {len(piezas)} piezas empuñadas ===")
         for pieza in piezas:
@@ -363,9 +576,26 @@ def main(argv: list[str] | None = None) -> int:
             hechas += bool(r.get("hecha"))
             print(f"  {r['pieza']:34} {r['estado']}")
 
-    print(f"\n{hechas} piezas sin puño y colocadas.")
+    print(f"\n{hechas} piezas con el puño sacado a capa y colocadas.")
+
+    # El cliente necesita saber cuáles traen puño propio **antes** de dibujar,
+    # porque de eso depende que apague o no la mano del cuerpo, y preguntárselo
+    # al disco en mitad de un `build` no se puede. Así que la lista se emite
+    # aquí y se pega en `Arte.conPunoPropio`: este es el único sitio que la sabe.
+    # Y **por familia**, no en una lista sola: tres piezas tienen puño en una
+    # familia y no en la otra —a una no se le encuentra y a otra le quedaría
+    # demasiada muñeca al aire—. Con una lista común, el cliente apagaría la mano
+    # del cuerpo de la figura equivocada y le dejaría el brazo cortado.
+    print("\nPara `Arte.conPunoPropio` en app/lib/design/arte.dart:\n")
+    for figura in CANONICAS:
+        familia = "masculino" if "masculino" in figura else "femenino"
+        nombres = sorted(f.stem[: -len("_puno")] for f in (TALLER / figura).glob("*_puno.png"))
+        print(f"    '{familia}': <String>{{  // {len(nombres)}")
+        for nombre in nombres:
+            print(f"      '{nombre}',")
+        print("    },")
     if not args.simular:
-        print("Ahora: python scripts/exportar_capas.py")
+        print("\nAhora: python scripts/exportar_capas.py")
     return 0
 
 

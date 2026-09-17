@@ -219,32 +219,36 @@ class AvatarCapas extends StatelessWidget {
             // Y lo que va por delante, en el orden que manda el Reino.
             if (apilando)
               for (final CapaAvatar capa in delante) _Capa(capa: capa, figura: clave, lado: tamano),
-            // Las manos, cada una con su piel teñida, y **sobre el arma**.
+            // Las manos, cada una con su piel teñida.
             //
-            // Son ellas las que agarran. Cada pieza empuñada traía su propio
-            // puño dibujado, porque al generarla se le prohibía al modelo tocar
-            // las manos existentes y a la vez se le pedía un arma empuñada; en
-            // pantalla salían dos manos, y así lo encontró el primer aprendiz
-            // que equipó una espada.
-            //
-            // `scripts/quitar_punos.py` le quitó ese puño a las piezas y las
-            // corrió para que la empuñadura caiga donde está esta mano. Por eso
-            // el orden importa: debajo del arma se vería el puño de la pieza
-            // —naranja, y sin teñir, sobre cualquiera de los seis tonos de
-            // piel—; encima, agarra la del aprendiz, que sí se tiñe.
-            //
-            // Dibujarlas siempre y no apagar ninguna no es pereza: apagarla deja
-            // el antebrazo cortado en seco, y se vio componiendo la pila fuera
-            // de la aplicación.
+            // Van **sobre** el equipo de mano, porque son ellas las que agarran,
+            // y se apagan cuando la pieza trae la suya. Ver [Arte.conPunoPropio]:
+            // cada arma venía con un puño dibujado dentro y en pantalla salían
+            // dos manos, que es como lo encontró el primer aprendiz que equipó
+            // una espada. Ese puño ya agarra bien —se dibujó agarrando— así que
+            // lo que se hace es sacarlo a su propia capa, teñirlo con el tono
+            // elegido, y quitar de en medio la mano del cuerpo de ese lado.
             if (apilando)
-              for (final bool derecha in <bool>[true, false]) ...<Widget>[
-                _CapaDelCuerpo(ruta: Arte.mano(clave, derecha: derecha), lado: tamano),
-                _Tinte(
-                  ruta: Arte.manoPiel(clave, derecha: derecha),
-                  color: CatalogoAvatar.piel(r.tonoPiel),
-                  lado: tamano,
-                ),
-              ],
+              for (final bool derecha in <bool>[true, false])
+                if (!_piezaConPuno(capas, clave, derecha: derecha)) ...<Widget>[
+                  _CapaDelCuerpo(ruta: Arte.mano(clave, derecha: derecha), lado: tamano),
+                  _Tinte(
+                    ruta: Arte.manoPiel(clave, derecha: derecha),
+                    color: CatalogoAvatar.piel(r.tonoPiel),
+                    lado: tamano,
+                  ),
+                ],
+            // Y las manos que traen las propias piezas, teñidas igual que la del
+            // cuerpo: son la misma mano del aprendiz, solo que dibujada ya
+            // cerrada sobre el arma.
+            if (apilando)
+              for (final CapaAvatar capa in delante)
+                if (Arte.traeSuPuno(figura: clave, src: capa.assetKey))
+                  _Tinte(
+                    ruta: Arte.punoDeLaPieza(figura: clave, src: capa.assetKey),
+                    color: CatalogoAvatar.piel(r.tonoPiel),
+                    lado: tamano,
+                  ),
             // Y los guantes al final, que van sobre la mano. Un guante debajo de
             // ella es un guante que no se ve.
             if (apilando)
@@ -877,6 +881,23 @@ class _PintorAvatar extends CustomPainter {
     }
     return true;
   }
+}
+
+/// ¿Lo que hay en esa mano trae su propia mano dibujada?
+///
+/// Se mira por el nombre de la capa y no por la ranura porque es la capa la que
+/// dice dónde se dibuja: `weapon` va en la mano derecha del dibujo y `offhand`
+/// en la izquierda, sea cual sea la categoría comercial del objeto.
+///
+/// Los guantes no cuentan aunque estén en la mano: se dibujan **encima** de ella
+/// y la necesitan debajo. Un guante sin mano es un guante flotando.
+bool _piezaConPuno(List<CapaAvatar> capas, String figura, {required bool derecha}) {
+  final String enEsaMano = derecha ? 'weapon' : 'offhand';
+  for (final CapaAvatar c in capas) {
+    if (c.clave != enEsaMano || c.assetKey.isEmpty) continue;
+    if (Arte.traeSuPuno(figura: figura, src: c.assetKey)) return true;
+  }
+  return false;
 }
 
 /// Una pieza del propio cuerpo: una mano.

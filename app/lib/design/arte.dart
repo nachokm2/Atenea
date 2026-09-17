@@ -195,9 +195,73 @@ abstract final class Arte {
   ///
   /// Y ya trae la extensión: el contrato dice que `src` es «el archivo», así que
   /// ponerla aquí sería decidir en el cliente un formato que decide el servidor.
-  static String capaDeEquipo({required String figura, required String src}) {
-    final String familia = figura.contains('femenino') ? 'femenino' : 'masculino';
-    return '$_raiz/capas/$familia/$src';
+  static String capaDeEquipo({required String figura, required String src}) =>
+      '$_raiz/capas/${_familia(figura)}/$src';
+
+  static String _familia(String figura) =>
+      figura.contains('femenino') ? 'femenino' : 'masculino';
+
+  /// Piezas cuyo arte trae su propia mano, ya sacada a capa aparte y teñible.
+  ///
+  /// Cada pieza empuñada del catálogo venía con un puño dibujado dentro: el
+  /// modelo lo añadió porque el estilo le prohibía tocar las manos existentes y
+  /// a la vez se le pedía un arma empuñada. En pantalla salían **dos manos**.
+  ///
+  /// Se probaron dos salidas y las dos se descartaron con medidas, no de oído.
+  /// Borrar ese puño deja un hueco que la mano del cuerpo no llega a tapar —es
+  /// más pequeña que él, y asomaban entre 434 y 2.204 px—. Taparlo dibujando la
+  /// mano encima deja de 114 a 1.071 px de puño naranja alrededor de una mano
+  /// oscura. Las dos se vieron componiendo la pila fuera de la aplicación.
+  ///
+  /// Lo que funciona es lo tercero: ese puño **ya agarra el arma**, porque se
+  /// dibujó agarrándola. Lo único que le faltaba era ser del color del aprendiz.
+  /// `scripts/quitar_punos.py` lo saca a su propia capa, normalizado para teñir,
+  /// y corre la pieza hasta la mano de la figura. El cliente tiñe esa capa y
+  /// apaga la mano del cuerpo de ese lado.
+  ///
+  /// **Por familia y no en una lista sola**: a `arco_bosque_antiguo` masculino
+  /// no se le encuentra puño y a `espada_entrenamiento` masculina le quedaría
+  /// demasiada muñeca al aire, así que en esas dos la mano del cuerpo tiene que
+  /// seguir pintándose. Con una lista común se quedarían mancas.
+  ///
+  /// La emite el propio guion al terminar; no se escribe a mano.
+  static const Map<String, Set<String>> conPunoPropio = <String, Set<String>>{
+    'masculino': <String>{
+      'arco_fresno_weapon',
+      'baculo_maestria_ia_weapon',
+      'baston_aprendiz_weapon',
+      'cetro_bigquery_weapon',
+      'espada_corta_acero_weapon',
+      'espada_del_sql_weapon',
+      'espada_obsidiana_weapon',
+    },
+    'femenino': <String>{
+      'arco_bosque_antiguo_weapon',
+      'baculo_maestria_ia_weapon',
+      'baston_aprendiz_weapon',
+      'cetro_bigquery_weapon',
+      'espada_corta_acero_weapon',
+      'espada_del_sql_weapon',
+      'espada_entrenamiento_weapon',
+      'espada_obsidiana_weapon',
+    },
+  };
+
+  /// ¿Trae esta pieza su propia mano para esta figura?
+  ///
+  /// `src` es el nombre de archivo tal como lo manda el Reino, con extensión.
+  static bool traeSuPuno({required String figura, required String src}) {
+    final int punto = src.lastIndexOf('.');
+    final String tronco = punto < 0 ? src : src.substring(0, punto);
+    return conPunoPropio[_familia(figura)]?.contains(tronco) ?? false;
+  }
+
+  /// La mano que trae la pieza, sola y lista para teñir. Ver [conPunoPropio].
+  static String punoDeLaPieza({required String figura, required String src}) {
+    final int punto = src.lastIndexOf('.');
+    final String tronco = punto < 0 ? src : src.substring(0, punto);
+    final String extension = punto < 0 ? '.webp' : src.substring(punto);
+    return '$_raiz/capas/${_familia(figura)}/${tronco}_puno$extension';
   }
 
   /// Cómo hay que colocar una pieza de equipo sobre esta figura.

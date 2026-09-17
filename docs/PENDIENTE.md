@@ -141,49 +141,65 @@ unas 60 líneas de cliente, cero backend, cero contrato.
 > `assessment`, así que el desafío no se pinta en el mapa. Es más grande que el
 > anterior: el dato no existe en el agregado, hay que construirlo.
 
-### 4.3 Las dos manos al equipar un arma — arreglado sin gastar arte
+### 4.3 Las dos manos al equipar un arma — arreglado, sin gastar arte
 
 Rodrigo lo encontró en el móvil: al equipar una espada se ven **dos manos**, la
-del arma y la suya. Cada pieza empuñada traía su propio puño dibujado porque al
+del arma y la suya. Cada pieza empuñada traía un puño dibujado dentro porque al
 generarla se le prohibía al modelo tocar las manos existentes y a la vez se le
-pedía un arma empuñada; obedecer a las dos cosas solo se puede dibujando un puño
-nuevo.
+pedía un arma empuñada.
 
-El arreglo son tres piezas, y **ninguna gastó una llamada a la API**:
+**La idea que lo resuelve**, y que tardó tres intentos en aparecer: ese puño ya
+agarra el arma, con los dedos cerrados sobre la empuñadura, que es algo que la
+mano en reposo del cuerpo no sabe hacer. Lo único que le faltaba era ser del
+color del aprendiz. Así que no hay que quitarlo: hay que **sacarlo a su propia
+capa y teñirlo**, y apagar la mano del cuerpo de ese lado.
+
+Tres piezas, ninguna con coste de API:
 
 1. `scripts/separar_manos.py` saca las manos del cuerpo —y de la capa de piel,
-   que se dibuja encima y las repintaba enteras— midiendo dónde se estrecha la
-   muñeca. Se niega a escribir si recomponer las piezas no devuelve el original
-   píxel a píxel, que es lo que protege al aprendiz sin arma, que es la mayoría.
-2. `scripts/quitar_punos.py` le quita a cada arma el puño que traía dibujado y la
-   corre para que la empuñadura caiga donde está la mano de la figura.
-3. El cliente dibuja las manos **sobre** el equipo de mano. Así agarra la del
-   aprendiz, que sí se tiñe con el tono que eligió.
+   que se dibuja encima y las repintaba enteras—. Se niega a escribir si
+   recomponer no devuelve el original píxel a píxel.
+2. `scripts/quitar_punos.py` saca el puño de cada arma a `<pieza>_puno.webp`,
+   normalizado para teñir, y corre la pieza hasta la mano de la figura.
+3. El cliente tiñe esa capa y apaga la mano del cuerpo. La lista de qué piezas
+   la tienen va en `Arte.conPunoPropio`, **por familia**, y la emite el guion.
 
-**Cómo distingue un puño de un palo:** por la forma. El color no sirve, y se
-midió: el predicado de piel da 78 % en `baston_aprendiz` y 66 % en `arco_fresno`,
-porque la madera clara es del mismo color que la piel. Pero un puño es compacto
-(alargamiento 1,16 a 1,45) y una vara alargada (1,63 a 12,25), y ahí no hay
-solape.
+**Estado: 13 de 18 armas limpias**, 2 con un resto pálido pequeño y 3 que siguen
+con dos manos. Las piezas de mano secundaria no se tocan.
 
-**Lo que quedó sin tocar, a propósito.** Ocho de las treinta piezas conservan su
-puño porque no se pudo separar con seguridad, y valía más una pieza intacta que
-una pieza rota: `arco_bosque_antiguo` masculino y `arco_fresno` femenino no tienen
-puño reconocible, y en las piezas de madera o cuero —`baculo`, `cetro`, `bastón`,
-`tomo_erudito`— se salta el borrado fino de restos, porque ahí el color ya no
-informa y se comía la vara. Se vio en las hojas de contactos: con el borrado
-subido, el arco, el bastón y `escudo_primer_desafío` salían partidos por la mitad.
+#### Lo que se probó y no vale, con sus medidas
 
-Los escudos **no se mueven**, solo se les quita la mano: van atados al antebrazo,
-no agarrados en el centro de la mano, y llevarlos allí sacaba a
-`escudo_blason_reino` medio fuera del cuadro.
+Está escrito porque los cuatro parecen razonables hasta que se miden, y porque
+tres de ellos se dieron por buenos mirando una hoja de contactos pequeña y
+resultaron falsos al ampliar.
 
-**Si algún día se quiere cerrar del todo**, lo que falta es regenerar esas ocho
-piezas pidiendo el arma **sin mano**, con la empuñadura a la altura de la mano de
-la figura canónica. Serían ocho generaciones, no treinta.
+| intento | qué pasa | medido |
+|---|---|---|
+| Borrar el puño y agarrar con la mano del cuerpo | hueco que la mano no tapa: es más pequeña que el puño | asoman 434–2.204 px |
+| Taparlo con la mano del cuerpo encima | filo naranja alrededor de una mano oscura | 114–1.071 px |
+| Tocar también los escudos | agujero de lado a lado: ahí la mano va pintada **sobre** la cara del escudo y debajo no hay nada | `escudo_blason_reino` inservible |
+| Borrar el brazo sobrante también en piezas de madera | se come la vara: el color no distingue madera de piel | `baston_aprendiz` pierde el 11,9 % |
 
-Las hojas de contactos de las dos familias y los guiones de medición están en
-`arte/diagnostico/` (ignorado por git; se regeneran con los guiones).
+#### Dos trampas del proceso que costaron caro
+
+- **Una hoja de contactos pequeña no sirve para dar algo por bueno.** Tres
+  piezas se declararon arregladas y al ampliarlas tenían agujeros. Hay que mirar
+  a tamaño real, y sobre el tono de piel por defecto: revisar solo sobre «Ébano»
+  hace que todo parezca negro y esconde los restos claros.
+- **Un guion que cambia de criterio tiene que restaurar antes de decidir.** Al
+  endurecer una regla, `arco_bosque_antiguo` pasó a la lista de las que no se
+  tocan y se quedó con el recorte de la versión anterior, porque saltarla
+  significaba no volver a escribirla. Ahora restaura desde `_con_puno/` siempre.
+
+#### Lo que falta
+
+Tres piezas necesitan arte nuevo —el arma sin mano, con la empuñadura a la
+altura de la mano de la figura—: `arco_bosque_antiguo` masculino y `arco_fresno`
+femenino (no se les encuentra puño) y `espada_entrenamiento` masculina (dejaría
+615 px de muñeca al aire). Son **tres** generaciones, no treinta.
+
+Las hojas de revisión están en `arte/diagnostico/` (ignorado por git; se
+regeneran con los guiones).
 
 ---
 
