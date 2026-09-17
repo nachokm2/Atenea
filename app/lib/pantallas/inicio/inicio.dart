@@ -399,36 +399,50 @@ class _ResumenSemana extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        Expanded(
-          child: FichaMedallon(
-            tipo: Medallon.tiempo,
-            valor: tiempoLegible(semana.segundosActivos),
-            etiqueta: 'De estudio',
-            alTocar: alVerPerfil,
+    // `IntrinsicHeight` no es adorno: sin él, esta fila rompía la pantalla.
+    //
+    // Los tres medallones deben medir lo mismo aunque uno lleve dos líneas de
+    // etiqueta, y eso lo da `CrossAxisAlignment.stretch`. Pero un `ListView` da
+    // a sus hijos altura **sin límite**, y `stretch` se la pasa entera a los
+    // suyos: `h=Infinity`. En depuración salta una aserción; en release no hay
+    // aserciones, así que la fila se estiraba de verdad y el `ListView` creía
+    // que su contenido medía una barbaridad. Inicio se desplazaba sin acabar
+    // nunca, con media pantalla en blanco al final.
+    //
+    // `IntrinsicHeight` mide antes a los tres y acota la fila al más alto, que
+    // es justo lo que `stretch` necesita para significar algo aquí.
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          Expanded(
+            child: FichaMedallon(
+              tipo: Medallon.tiempo,
+              valor: tiempoLegible(semana.segundosActivos),
+              etiqueta: 'De estudio',
+              alTocar: alVerPerfil,
+            ),
           ),
-        ),
-        const SizedBox(width: Espacio.sm),
-        Expanded(
-          child: FichaMedallon(
-            tipo: Medallon.dominio,
-            valor: '${semana.lecciones}',
-            etiqueta: semana.lecciones == 1 ? 'Lección' : 'Lecciones',
-            alTocar: alVerPerfil,
+          const SizedBox(width: Espacio.sm),
+          Expanded(
+            child: FichaMedallon(
+              tipo: Medallon.dominio,
+              valor: '${semana.lecciones}',
+              etiqueta: semana.lecciones == 1 ? 'Lección' : 'Lecciones',
+              alTocar: alVerPerfil,
+            ),
           ),
-        ),
-        const SizedBox(width: Espacio.sm),
-        Expanded(
-          child: FichaMedallon(
-            tipo: Medallon.nivel,
-            valor: '${semana.logros}',
-            etiqueta: semana.logros == 1 ? 'Logro' : 'Logros',
-            alTocar: alVerLogros,
+          const SizedBox(width: Espacio.sm),
+          Expanded(
+            child: FichaMedallon(
+              tipo: Medallon.nivel,
+              valor: '${semana.logros}',
+              etiqueta: semana.logros == 1 ? 'Logro' : 'Logros',
+              alTocar: alVerLogros,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
