@@ -249,10 +249,12 @@ Apunta al dominio que genera Railway, `api-production-66b3.up.railway.app`, y
 eso tiene fecha de caducidad: **va atado al servicio**, así que si algún día se
 recrea, cambia. Una URL metida en un APK ya instalado no se cambia a distancia.
 
-> **Pendiente y es de Rodrigo:** comprar un dominio propio —`atenea.cl` no está
-> disponible— y añadirlo en Railway como dominio personalizado antes de dar la
-> aplicación a nadie más. A partir de ese momento la URL queda congelada en cada
-> móvil que la instale.
+> **Decidido (17-09-2026): se usa el de Railway y ya está.** Mientras la
+> aplicación la instale solo Rodrigo, si el dominio cambiara basta con volver a
+> compilar. Lo que convierte esto en un problema no es el tiempo, es **el primer
+> aprendiz que no seas tú**: desde ese momento la URL queda congelada en su
+> móvil y no se puede cambiar a distancia. Ese es el disparador para comprar un
+> dominio propio y añadirlo en Railway, no una fecha.
 
 
 ---
