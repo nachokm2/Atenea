@@ -1,7 +1,9 @@
 /// Tarjeta de una misión (P19) y su hoja de detalle.
 ///
-/// Las recompensas se otorgan solas al cumplir; el botón "Reclamar" solo
-/// aparece cuando el servidor marca la misión como pendiente de reclamo.
+/// El botón «Reclamar» aparece **siempre que la misión está cumplida**
+/// —`EstadoMision.sePuedeReclamar` es `estado == completada`, sin mirar
+/// plantilla alguna—, y tocarlo es lo que dispara el cobro: cumplir no paga
+/// por sí solo. El comentario anterior afirmaba justo lo contrario.
 library;
 
 import 'package:flutter/material.dart';

@@ -151,6 +151,12 @@ class Settings(BaseSettings):
     page_limit_max: int = 100
     rate_limit_default: str = "60/minute"
     rate_limit_login: str = "10/minute"
+    #: Registrar también hashea con bcrypt de coste 12, así que el argumento del
+    #: acceso vale igual aquí. Y además crea filas: con el freno general de 60
+    #: por minuto, abrir cuentas en masa salía barato. Dos ventanas porque una
+    #: sola no defiende de lo que hay que defender —diez por minuto son catorce
+    #: mil cuentas al día—: la corta corta la ráfaga, la larga el goteo.
+    rate_limit_register: str = "10/minute;60/hour"
     rate_limit_ai: str = "6/minute"
     rate_limit_upload: str = "12/minute"
 

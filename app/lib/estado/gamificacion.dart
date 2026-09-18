@@ -1,9 +1,16 @@
 /// Estado de la gamificación: Misiones (P19), Logros (P20), Racha y
 /// calendario (P18), objetivo diario y notificaciones.
 ///
-/// Las recompensas de misión se otorgan solas en el servidor; [reclamarMision]
-/// existe solo para las plantillas que exigen reclamo explícito, y devuelve un
-/// [ReciboRecompensas] que se encola en la cola de celebraciones.
+/// **Una misión cumplida no paga sola.** El motor marca `COMPLETED` al avanzar
+/// y ahí se detiene: el cobro vive entero en el evento `MISSION_CLAIMED`, que
+/// solo se emite al reclamar. [reclamarMision] no es un caso especial de unas
+/// pocas plantillas —es el único camino por el que el aprendiz cobra— y
+/// devuelve el [ReciboRecompensas] que se encola en las celebraciones.
+///
+/// Lo anterior decía lo contrario, y no es inocuo: quien planifique algo nuevo
+/// sobre misiones leyendo aquel comentario diseñará un autopago que no existe.
+/// La única excepción es la misión que vence cumplida y sin reclamar, y ese
+/// autorreclamo tampoco pagaba hasta `c75da6e`.
 library;
 
 import 'package:flutter/foundation.dart';

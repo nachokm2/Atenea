@@ -15,7 +15,7 @@ import pytest
 import sqlalchemy as sa
 
 from app.core.time import user_local_date, utcnow
-from app.models.content import Assessment, LearningPath
+from app.models.content import Assessment, KnowledgeArea, LearningPath
 from app.models.enums import AttemptStatus, ContentStatus, ModuleStatus
 from app.models.progress import (
     AssessmentAttempt,
@@ -281,6 +281,127 @@ def test_crear_ruta_es_idempotente_por_cabecera(cliente):
     assert primera.status_code == 201
     assert segunda.status_code == 200
     assert segunda.json()["path"]["path_id"] == primera.json()["path"]["path_id"]
+
+
+def _area_de(db, respuesta) -> KnowledgeArea:
+    """El conocimiento al que quedó atada la ruta recién creada."""
+    ruta = db.get(LearningPath, uuid.UUID(respuesta.json()["path"]["path_id"]))
+    return db.get(KnowledgeArea, ruta.knowledge_area_id)
+
+
+def test_crear_ruta_solo_con_el_objetivo_funciona(cliente):
+    """Es lo único que manda la aplicación, y era imposible.
+
+    P05 pide **un** texto libre —el objetivo— y no tiene ni ha tenido nunca un
+    campo de conocimiento: `ControladorAventura` expone `fijarPistaConocimiento`
+    y no la llama nadie en todo el cliente. Así que `knowledge_area_hint`
+    llegaba siempre vacía, `_area_para_ruta` lanzaba, y **crear una ruta desde
+    la aplicación no funcionó jamás**: el aprendiz veía «Indica sobre qué
+    conocimiento quieres aprender» sobre un formulario relleno y con los tres
+    pasos en verde.
+
+    Ninguna de las pruebas de creación lo vio porque **todas mandaban la
+    pista**, que es precisamente lo que la aplicación no manda. Esta manda el
+    cuerpo real.
+    """
+    respuesta = cliente.post(
+        "/api/v1/paths",
+        json={"goal_text": "Quiero aprender a cocinar al vapor"},
+        headers=_cabeceras(),
+    )
+
+    assert respuesta.status_code == 201, respuesta.text
+
+
+def test_el_objetivo_que_nombra_un_conocimiento_cae_en_su_territorio(
+    cliente, db, contenido
+):
+    """«Aprender SQL…» va al Castillo de las Consultas, no a un área paralela.
+
+    Sin esto, cada aprendiz abriría su propia taxonomía privada —«aprender-sql-
+    para-analizar-datos»— y el mapa del Reino no se encendería nunca, porque
+    los territorios salen solo de las siete áreas canónicas.
+    """
+    respuesta = cliente.post(
+        "/api/v1/paths",
+        json={"goal_text": "Aprender SQL para analizar datos en mi trabajo"},
+        headers=_cabeceras(),
+    )
+
+    assert respuesta.status_code == 201
+    area = _area_de(db, respuesta)
+    assert area.id == contenido.area.id, "abrió un conocimiento paralelo en vez de reusar el canónico"
+    assert area.is_canonical is True
+
+
+def test_un_objetivo_sin_conocimiento_conocido_abre_uno_del_usuario(cliente, db, usuario):
+    """No nombrar ninguno no es un fallo: el diseño quiere áreas propias (§4.2)."""
+    respuesta = cliente.post(
+        "/api/v1/paths",
+        json={"goal_text": "Entender estadística para mi tesis"},
+        headers=_cabeceras(),
+    )
+
+    assert respuesta.status_code == 201
+    area = _area_de(db, respuesta)
+    assert area.is_canonical is False
+    assert area.created_by_user_id == usuario.id
+
+
+def test_postgresql_no_se_confunde_con_sql(cliente, db, contenido):
+    """El nombre se busca como palabra entera, no como trozo.
+
+    Sin el límite de palabra, «PostgreSQL» arrastraría la ruta al conocimiento
+    «SQL» —que es parecido pero no es—, y lo mismo haría cualquier palabra que
+    contuviera el nombre de un área por casualidad.
+    """
+    respuesta = cliente.post(
+        "/api/v1/paths",
+        json={"goal_text": "Quiero dominar PostgreSQL a fondo"},
+        headers=_cabeceras(),
+    )
+
+    assert respuesta.status_code == 201
+    # La fixture trae «SQL» canónico: sin ella esta prueba pasaría en el vacío.
+    assert _area_de(db, respuesta).id != contenido.area.id
+
+
+def test_la_pista_sigue_mandando_sobre_el_objetivo(cliente, db, contenido):
+    """El objetivo es el respaldo, no el sustituto.
+
+    Cuando la pantalla sí sabe el área —crear una ruta desde un territorio—, la
+    pista tiene que ganar aunque el objetivo nombre otra cosa distinta.
+    """
+    respuesta = cliente.post(
+        "/api/v1/paths",
+        json={"goal_text": "Aprender SQL para analizar datos", "knowledge_area_hint": "Python"},
+        headers=_cabeceras(),
+    )
+
+    assert respuesta.status_code == 201
+    area = _area_de(db, respuesta)
+    assert area.name == "Python"
+    assert area.id != contenido.area.id, "ganó el objetivo, no la pista"
+
+
+def test_sin_objetivo_sigue_siendo_un_error_con_su_campo(cliente):
+    """Lo que falta ahora es el objetivo, y el sobre tiene que decirlo.
+
+    El cliente pinta el error por campo (`field_errors`), así que señalar
+    `knowledge_area_hint` —un campo que la pantalla no tiene— dejaba el aviso
+    sin poder apuntar a nada.
+    """
+    respuesta = cliente.post(
+        "/api/v1/paths", json={"goal_text": "   "}, headers=_cabeceras()
+    )
+
+    assert respuesta.status_code == 422
+    cuerpo = respuesta.json()
+    campos = [
+        f.get("field")
+        for f in (cuerpo["error"].get("field_errors") or cuerpo["error"]["details"].get("field_errors", []))
+    ]
+    assert "goal_text" in str(campos) or "goal_text" in respuesta.text
 
 
 def test_adoptar_una_ruta_del_reino_crea_el_progreso_sin_duplicar_contenido(

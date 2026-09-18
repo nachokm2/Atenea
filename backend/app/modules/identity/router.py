@@ -99,6 +99,10 @@ def _tokens(par: servicio_auth.ParTokens) -> AuthTokens:
     status_code=status.HTTP_201_CREATED,
     tags=["auth"],
     summary="Crear cuenta con correo y contraseña",
+    # El mismo argumento del acceso: cada registro es un bcrypt de coste 12
+    # sobre un backend síncrono, y además deja una fila de usuario. Sin esto
+    # solo aplicaba el freno general de 60/minuto.
+    dependencies=[Depends(freno(settings.rate_limit_register))],
 )
 def registrar(
     cuerpo: RegisterIn,

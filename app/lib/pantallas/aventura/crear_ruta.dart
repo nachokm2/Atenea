@@ -318,6 +318,16 @@ class _PantallaCrearRutaState extends State<PantallaCrearRuta> {
         subtitulo: 'Opcional, pero cambia todo: con tus documentos cada '
             'lección cita de dónde viene lo que estudias.',
       ),
+      // Los dos en `Expanded`, y el segundo no es opcional: el tema da a los
+      // botones `minimumSize: Size.fromHeight(...)`, que en Flutter **no** es
+      // «alto mínimo» sino `Size(double.infinity, alto)` —ancho mínimo
+      // infinito—. Es el truco con el que los botones salen a ancho completo,
+      // y funciona mientras alguien acote el ancho. En una fila, el hueco que
+      // no va en un `Expanded` llega sin acotar, y entonces la maquetación
+      // lanza «BoxConstraints forces an infinite width». En depuración eso es
+      // una franja roja; en release la fila entera no se pinta y queda un
+      // hueco vacío, que es como se vio: sin estos dos botones no había manera
+      // de aportar material a una ruta.
       Row(
         children: <Widget>[
           Expanded(
@@ -331,12 +341,14 @@ class _PantallaCrearRutaState extends State<PantallaCrearRuta> {
             ),
           ),
           const SizedBox(width: Espacio.xs),
-          SizedBox(
-            height: Medida.areaTactilMin,
-            child: OutlinedButton.icon(
-              onPressed: _pegarTexto,
-              icon: const Icon(Icons.content_paste_rounded),
-              label: const Text('Pegar texto'),
+          Expanded(
+            child: SizedBox(
+              height: Medida.areaTactilMin,
+              child: OutlinedButton.icon(
+                onPressed: _pegarTexto,
+                icon: const Icon(Icons.content_paste_rounded),
+                label: const Text('Pegar texto'),
+              ),
             ),
           ),
         ],

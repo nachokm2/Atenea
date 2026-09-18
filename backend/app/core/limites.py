@@ -26,7 +26,7 @@ from collections.abc import Callable
 from typing import Any
 
 from fastapi import FastAPI, Request, Response
-from limits import parse
+from limits import parse_many
 from limits.storage import MemoryStorage
 from limits.strategies import MovingWindowRateLimiter
 from slowapi import Limiter
@@ -80,6 +80,11 @@ def _respuesta_de_freno(request: Request, exc: RateLimitExceeded) -> Response:
 def freno(expresion: str) -> Callable[[Request], None]:
     """Freno aplicable como **dependencia**, no como decorador.
 
+    Acepta **varios límites separados por `;`** —`"10/minute;60/hour"`— y los
+    exige todos. Uno solo no basta donde lo que se defiende es la creación de
+    algo: diez por minuto siguen siendo catorce mil cuentas al día. El de la
+    ventana corta para la ráfaga, el de la larga para el goteo.
+
     El decorador `@limitador.limit(...)` envuelve la función, y el envoltorio
     pierde el espacio de nombres del módulo original. En una ruta con anotaciones
     diferidas y tipos de FastAPI (`UploadFile`, `File`, `Form`), eso deja a
@@ -89,7 +94,7 @@ def freno(expresion: str) -> Callable[[Request], None]:
 
     Como dependencia no hay envoltorio y la firma de la ruta se queda intacta.
     """
-    limite = parse(expresion)
+    limites = parse_many(expresion)
 
     def comprobar(request: Request) -> None:
         # Mismo interruptor que el limitador general: en pruebas el freno estorba,
@@ -98,14 +103,20 @@ def freno(expresion: str) -> Callable[[Request], None]:
         if not limitador.enabled:
             return
         clave = clave_de_cubo(request)
-        if not _ventana.hit(limite, clave, request.url.path):
-            # Se lanza el error del propio proyecto y no el de `slowapi`: así el
-            # cuerpo sale con el sobre del contrato (§8.6) sin depender de la
-            # forma interna de una clase de terceros, que ya cambió una vez.
-            raise AteneaError(
-                code="RATE_LIMITED",
-                details={"limit": expresion, "retry_after_seconds": limite.GRANULARITY.seconds},
-            )
+        for limite in limites:
+            # Se cuenta también la petición que se rechaza, a propósito: quien
+            # está abusando no recupera hueco por chocar contra el freno.
+            if not _ventana.hit(limite, clave, request.url.path):
+                # Se lanza el error del propio proyecto y no el de `slowapi`: así
+                # el cuerpo sale con el sobre del contrato (§8.6) sin depender de
+                # la forma interna de una clase de terceros, que ya cambió una vez.
+                raise AteneaError(
+                    code="RATE_LIMITED",
+                    details={
+                        "limit": str(limite),
+                        "retry_after_seconds": limite.GRANULARITY.seconds,
+                    },
+                )
 
     return comprobar
 

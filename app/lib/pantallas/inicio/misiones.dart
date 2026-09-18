@@ -18,6 +18,7 @@ import '../../design/components.dart';
 import '../../design/theme.dart';
 import '../../design/tokens.dart';
 import '../../estado/celebraciones.dart';
+import '../../estado/config_juego.dart';
 import '../../estado/gamificacion.dart';
 import '../../estado/panel.dart';
 import '../../navegacion/armazon.dart';
@@ -70,6 +71,9 @@ class _PantallaMisionesState extends State<PantallaMisiones> {
     final ControladorGamificacion gami = context.watch<ControladorGamificacion>();
     final Misiones? misiones = gami.misiones;
     final List<Mision> visibles = gami.misionesVisibles;
+    final List<AmbitoMision> ambitos = ambitosVisibles(
+      context.watch<ControladorConfigJuego>().config,
+    );
 
     return PantallaAtenea(
       titulo: 'Misiones',
@@ -81,6 +85,7 @@ class _PantallaMisionesState extends State<PantallaMisiones> {
           padding: const EdgeInsets.only(top: Espacio.xs, bottom: Espacio.xxl),
           children: <Widget>[
             _Pestanas(
+              ambitos: ambitos,
               activa: gami.pestanaMisiones,
               alCambiar: gami.fijarPestanaMisiones,
             ),
@@ -128,11 +133,15 @@ class _PantallaMisionesState extends State<PantallaMisiones> {
               ),
             ],
             const SizedBox(height: Espacio.md),
-            if (misiones != null)
-              _Reinicio(
-                segundos: gami.segundosParaReinicio,
-                ambito: gami.pestanaMisiones,
-              ),
+            // El pie solo en las diarias. `segundosParaReinicio` es
+            // `resets_in_seconds`, que el servidor calcula como la medianoche
+            // local: no sabe nada de semanas, y las de ruta ni siquiera tienen
+            // `expires_at`. Pintarlo en las otras dos pestañas era una cuenta
+            // atrás real debajo de una frase falsa —«La semana cierra», «Se
+            // revisan»—. Vuelve el día que `MissionsOut` traiga su propio
+            // contador semanal (§7.9).
+            if (misiones != null && gami.pestanaMisiones == AmbitoMision.diaria)
+              _Reinicio(segundos: gami.segundosParaReinicio),
           ],
         ),
       ),
@@ -140,10 +149,35 @@ class _PantallaMisionesState extends State<PantallaMisiones> {
   }
 }
 
+/// Los horizontes que se pueden ofrecer hoy.
+///
+/// Las semanales existen enteras salvo por una cosa: **nadie crea la fila**. No
+/// hay ninguna función en todo el servidor que escriba un `UserMission` con
+/// `scope=WEEKLY`, así que la consulta del endpoint devuelve cero filas en
+/// todas las peticiones de todos los usuarios desde que existe el proyecto. La
+/// pestaña llevaba ahí desde el principio ofreciendo un vacío.
+///
+/// `missions.weekly.enabled` ya viaja en `/config/public` y vale `false`. Se
+/// lee de ahí y no de una constante para que el día que se reparta una semanal
+/// de verdad la pestaña vuelva sola, sin tocar el cliente. Si la configuración
+/// todavía no ha llegado se oculta: es lo cierto hoy, y equivocarse hacia
+/// ocultar una pestaña vacía cuesta menos que ofrecerla.
+List<AmbitoMision> ambitosVisibles(ConfigPublica? config) => <AmbitoMision>[
+      for (final AmbitoMision ambito in AmbitoMision.values)
+        if (ambito != AmbitoMision.semanal ||
+            (config?.booleano('missions.weekly.enabled') ?? false))
+          ambito,
+    ];
+
 /// Selector de horizonte.
 class _Pestanas extends StatelessWidget {
-  const _Pestanas({required this.activa, required this.alCambiar});
+  const _Pestanas({
+    required this.ambitos,
+    required this.activa,
+    required this.alCambiar,
+  });
 
+  final List<AmbitoMision> ambitos;
   final AmbitoMision activa;
   final ValueChanged<AmbitoMision> alCambiar;
 
@@ -151,7 +185,7 @@ class _Pestanas extends StatelessWidget {
   Widget build(BuildContext context) {
     return SegmentedButton<AmbitoMision>(
       segments: <ButtonSegment<AmbitoMision>>[
-        for (final AmbitoMision ambito in AmbitoMision.values)
+        for (final AmbitoMision ambito in ambitos)
           ButtonSegment<AmbitoMision>(
             value: ambito,
             label: Text(ambito.etiqueta),
@@ -252,10 +286,9 @@ class _VacioDePestana extends StatelessWidget {
 /// en `resets_in_seconds` y vuelve a anclarse cada vez que el servidor la
 /// actualiza. Solo se repinta este pie, no la lista entera.
 class _Reinicio extends StatefulWidget {
-  const _Reinicio({required this.segundos, required this.ambito});
+  const _Reinicio({required this.segundos});
 
   final int segundos;
-  final AmbitoMision ambito;
 
   @override
   State<_Reinicio> createState() => _ReinicioState();
@@ -294,11 +327,11 @@ class _ReinicioState extends State<_Reinicio> {
   @override
   Widget build(BuildContext context) {
     final AteneaPalette p = context.paleta;
-    final String que = switch (widget.ambito) {
-      AmbitoMision.diaria => 'Se reinician',
-      AmbitoMision.semanal => 'La semana cierra',
-      AmbitoMision.especial => 'Se revisan',
-    };
+    // Solo se monta en la pestaña diaria, así que la frase es una y es cierta.
+    // Antes era un `switch` de tres, y las otras dos mentían: la semana no
+    // cierra —no hay semanales— y las de ruta no se revisan nunca, porque ni
+    // siquiera tienen `expires_at`.
+    const String que = 'Se reinician';
     final String falta = cuentaAtras(_restante);
 
     return Semantics(

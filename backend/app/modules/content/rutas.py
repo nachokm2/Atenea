@@ -18,6 +18,8 @@ Reglas duras:
 
 from __future__ import annotations
 
+import re
+import unicodedata
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -173,14 +175,70 @@ def detalle_ruta(db: Session, usuario_id: uuid.UUID, path_id: uuid.UUID) -> Deta
 # ---------------------------------------------------------------------------
 
 
+def _sin_tildes(texto: str) -> str:
+    """Minúsculas y sin diacríticos, para comparar «Ingeniería» con «ingenieria»."""
+    descompuesto = unicodedata.normalize("NFD", texto.casefold())
+    return "".join(c for c in descompuesto if unicodedata.category(c) != "Mn")
+
+
+def _canonica_nombrada(db: Session, texto: str) -> KnowledgeArea | None:
+    """El conocimiento canónico que el texto **nombra**, si nombra alguno.
+
+    «Aprender SQL para analizar datos» tiene que caer en el Castillo de las
+    Consultas, no abrir un conocimiento propio paralelo con otro nombre. Sin
+    esto, cada aprendiz acabaría con su taxonomía privada y el mapa del Reino
+    no se encendería nunca, porque los territorios solo salen de las siete áreas
+    canónicas.
+
+    Se compara **solo contra `name`**, y como palabra entera. Los nombres cortos
+    quedan fuera a propósito: «Datos» es el corto de Ingeniería de Datos y
+    aparece en «analizar datos», que va de SQL; «IA» y «BI» son dos letras que
+    se cuelan en cualquier parte. Un nombre largo antes que uno corto, para que
+    «Business Intelligence» gane a un nombre suyo contenido en él.
+
+    Si el texto no nombra ninguno, se devuelve `None` y el llamante abre un
+    conocimiento del usuario: eso es lo que el diseño quiere (§4.2), no un
+    fallo.
+    """
+    normal = _sin_tildes(texto)
+    canonicas = list(
+        db.execute(
+            sa.select(KnowledgeArea).where(
+                KnowledgeArea.is_canonical.is_(True),
+                KnowledgeArea.is_active.is_(True),
+            )
+        ).scalars()
+    )
+    for area in sorted(canonicas, key=lambda a: -len(a.name)):
+        patron = rf"(?<!\w){re.escape(_sin_tildes(area.name))}(?!\w)"
+        if re.search(patron, normal):
+            return area
+    return None
+
+
 def _area_para_ruta(
-    db: Session, usuario_id: uuid.UUID, *, knowledge_area_id: uuid.UUID | None, pista: str | None
+    db: Session,
+    usuario_id: uuid.UUID,
+    *,
+    knowledge_area_id: uuid.UUID | None,
+    pista: str | None,
+    objetivo: str | None = None,
 ) -> KnowledgeArea:
-    """Resuelve el conocimiento de la ruta: por id, por `slug` de la pista o creándolo.
+    """Resuelve el conocimiento de la ruta: por id, por lo que nombre el texto, o creándolo.
 
     Cuando el usuario propone un conocimiento que no existe en la taxonomía canónica
     se crea uno suyo (`is_canonical = false`) y se emite `KNOWLEDGE_AREA_CREATED`,
     que es lo que materializa sus ítems derivados (§4.2).
+
+    **`knowledge_area_hint` es una pista, no un requisito**, y el contrato lo
+    declara opcional (§7.5). Exigirla dejaba `POST /paths` inservible desde la
+    aplicación: la pantalla de creación (P05) pide un objetivo escrito a mano y
+    **no tiene ni ha tenido nunca un campo de conocimiento** —`ControladorAventura`
+    expone `fijarPistaConocimiento` y no la llama nadie—, así que la pista
+    llegaba siempre vacía y toda creación moría con «Indica sobre qué
+    conocimiento quieres aprender» sobre un formulario relleno. La pista sirve
+    para cuando la pantalla sí sabe el área; si no, manda el objetivo, que es lo
+    único que el aprendiz escribe.
     """
     if knowledge_area_id is not None:
         area = db.get(KnowledgeArea, knowledge_area_id)
@@ -188,16 +246,21 @@ def _area_para_ruta(
             raise NotFound()
         return area
 
-    etiqueta = (pista or "").strip()
+    etiqueta = (pista or "").strip() or (objetivo or "").strip()
     if not etiqueta:
         raise AteneaError(
             "Indica sobre qué conocimiento quieres aprender.",
             code="VALIDATION_ERROR",
             field_errors=[
-                {"field": "knowledge_area_hint", "message": "El conocimiento no puede estar vacío."}
+                {"field": "goal_text", "message": "El objetivo no puede estar vacío."}
             ],
         )
-    slug = "-".join(etiqueta.casefold().split())[:64]
+
+    canonica = _canonica_nombrada(db, etiqueta)
+    if canonica is not None:
+        return canonica
+
+    slug = "-".join(_sin_tildes(etiqueta).split())[:64]
     area = db.execute(
         sa.select(KnowledgeArea).where(KnowledgeArea.slug == slug)
     ).scalar_one_or_none()
@@ -259,7 +322,11 @@ def crear_ruta(
             return ResultadoCreacion(path=ruta_previa, creada=False)
 
     area = _area_para_ruta(
-        db, usuario_id, knowledge_area_id=knowledge_area_id, pista=knowledge_area_hint
+        db,
+        usuario_id,
+        knowledge_area_id=knowledge_area_id,
+        pista=knowledge_area_hint,
+        objetivo=goal_text,
     )
     ruta = LearningPath(
         user_id=usuario_id,
