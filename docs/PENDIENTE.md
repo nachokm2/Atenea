@@ -14,7 +14,7 @@ sobrevive a su sesión es otra cosa que promete y no cumple.
 | | |
 |---|---|
 | Rama | `main`, todo subido a `origin` |
-| Pruebas del cliente | **175 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
+| Pruebas del cliente | **192 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
 | Pruebas del servidor | **649 verdes**, `ruff check` limpio |
 | `flutter analyze` | limpio |
 | APK de release | compilado y enviado a Rodrigo a las 02:38 del 18, **con todo lo de la sesión** |
@@ -352,12 +352,13 @@ Comprobado rompiendo el arreglo: el «Entendido» terminaba en 891 dp con la
 línea de seguridad en 867, o sea veinticuatro dentro de la barra —la mitad del
 botón, que es justo lo que se ve en la captura.
 
-### 4.8 La revisión adversarial del 18-09 — nueve arreglados, dos pendientes
+### 4.8 La revisión adversarial del 18-09 — los dieciséis, cerrados
 
 Sobre el nodo de desafío y el arreglo del área segura se lanzó una revisión de
 cuatro lentes independientes —agregado, contrato, área segura y calidad de las
 pruebas— con un escéptico por hallazgo que intentaba refutarlo ejecutando
-código. Diecinueve propuestos, dieciséis sobrevivieron a la refutación.
+código. Diecinueve propuestos, dieciséis sobrevivieron a la refutación, y los
+dieciséis están cerrados.
 
 **Arreglados en el momento:**
 
@@ -412,26 +413,34 @@ código. Diecinueve propuestos, dieciséis sobrevivieron a la refutación.
   vacío bajo cada teclado sin que ninguna prueba lo viera. Ahora sí lo ve:
   comprobado rompiéndolo.
 
-**Lo que queda para mañana. Los dos hallazgos altos sin cerrar tienen la misma
-raíz: nada monta el mapa de la Ruta en una prueba.**
+**Los dos hallazgos altos — cerrados también.** Tenían la misma raíz: nada
+montaba el mapa de la Ruta en una prueba, porque el camino vivía dentro de
+`_PantallaMapaRutaState` y montar esa pantalla exige proveedor, enrutador y una
+llamada de red. El coste estaba medido: `if (evaluacion != null && false)` —el
+nodo de la prueba no se añade nunca, literalmente el fallo que se acababa de
+arreglar— dejaba la suite entera verde, y `_estiloDesafio` devolviendo siempre
+`EstiloNodo.disponible` también.
 
-* `if (evaluacion != null)` en `app/lib/pantallas/aventura/mapa_ruta.dart:459`
-  es el único punto donde el dato se convierte en nodo visible. Cambiándolo por
-  `if (evaluacion != null && false)` —o sea, el desafío no se añade nunca al
-  mapa, que es literalmente el fallo que este trabajo vino a arreglar— la suite
-  entera del cliente sigue verde. Comprobado ejecutándolo.
-* `_estiloDesafio` (`mapa_ruta.dart:80`) es la única consumidora real de
-  `can_start`, `content_status` y `aprobada` en el cliente: traduce el sobre
-  entero a lo que se ve. Haciéndola devolver siempre `EstiloNodo.disponible`,
-  la suite sigue verde. Un desafío en enfriamiento se pintaría con el color, el
-  icono y el botón vivo de «Disponible».
+Ahora el camino y las tres reglas de estilo viven en
+`app/lib/pantallas/aventura/widgets/camino_ruta.dart`. Las reglas salieron como
+**funciones puras** —`estiloDeModulo`, `estiloDeLeccion`, `estiloDeDesafio`—: no
+tocan `context` ni estado, así que se comprueban sin montar nada, y son la única
+consumidora real de la mitad de `ModuleAssessmentOut`. `CaminoDeLaRuta` decide
+qué nodos existen y en qué orden, y se monta de verdad desde el sobre del
+servidor. La pantalla se queda con lo suyo: pedir los datos, la cabecera, los
+avisos y qué pasa al tocar.
 
-El obstáculo conocido es que montar `PantallaAventura` cuelga la prueba: arrastra
-`_control.repeat(reverse: true)` de `comunes_aventura.dart:298` y `PulsoSuave` de
-`nodos_mapa.dart:146`, que son animaciones sin fin. La salida probable es extraer
-el cuerpo del mapa a un widget montable, como ya se hizo con `MapaDelReino`.
+El obstáculo de las animaciones resultó ser menor de lo temido: `PulsoSuave`
+(`comunes_aventura.dart:298`) es la única sin fin y solo aparece en el nodo
+`actual`. **Basta con `pump()` en vez de `pumpAndSettle()`** —lo que cuelga es
+esperar a que se asiente, no montar—. Está dicho en el encabezado de
+`test/camino_ruta_test.dart` para que no vuelva a costar siete minutos
+averiguarlo.
 
-**Menor, del mismo hallazgo:** el nodo de módulo tampoco manda `summary`,
+Diecisiete pruebas nuevas. Verificadas contra las dos mutaciones exactas: la
+primera rompe tres, la segunda seis. Antes ninguna de las dos rompía nada.
+
+**Menor, del mismo hallazgo y esto sí sigue abierto:** el nodo de módulo tampoco manda `summary`,
 `difficulty`, `estimated_minutes`, `stars` ni `locked_reason`, que el cliente lee
 y que existen en `path_modules`. Ninguno bloquea nada —solo esconden adornos—
 pero son de la misma familia.

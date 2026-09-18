@@ -19,6 +19,7 @@ import '../../design/components.dart';
 import '../../design/tokens.dart';
 import '../../estado/aventura.dart';
 import '../../navegacion/rutas.dart';
+import 'widgets/camino_ruta.dart';
 import 'widgets/comunes_aventura.dart';
 import 'widgets/hojas_aventura.dart';
 import 'widgets/nodos_mapa.dart';
@@ -54,40 +55,6 @@ class _PantallaMapaRutaState extends State<PantallaMapaRuta> {
 
   bool _expandido(DetalleRuta detalle, ModuloRuta modulo) =>
       _plegados[modulo.id] ?? (detalle.moduloActual?.id == modulo.id);
-
-  EstiloNodo _estiloModulo(DetalleRuta detalle, ModuloRuta modulo) {
-    if (modulo.estado == EstadoModulo.completado ||
-        modulo.estado == EstadoModulo.dominado) {
-      return EstiloNodo.completado;
-    }
-    if (modulo.estaBloqueado) return EstiloNodo.bloqueado;
-    if (modulo.enConstruccion) return EstiloNodo.enConstruccion;
-    if (detalle.moduloActual?.id == modulo.id) return EstiloNodo.actual;
-    return EstiloNodo.disponible;
-  }
-
-  EstiloNodo _estiloLeccion(
-    ModuloRuta modulo,
-    ResumenLeccion leccion, {
-    required bool esSiguiente,
-  }) {
-    if (leccion.estaCompletada) return EstiloNodo.completado;
-    if (modulo.estaBloqueado) return EstiloNodo.bloqueado;
-    if (!leccion.estaLista) return EstiloNodo.enConstruccion;
-    return esSiguiente ? EstiloNodo.actual : EstiloNodo.disponible;
-  }
-
-  EstiloNodo _estiloDesafio(ModuloRuta modulo, ResumenEvaluacion evaluacion) {
-    if (evaluacion.aprobada) return EstiloNodo.completado;
-    if (modulo.estaBloqueado) return EstiloNodo.bloqueado;
-    if (!evaluacion.estadoContenido.estaDisponible) {
-      return EstiloNodo.enConstruccion;
-    }
-    if (!evaluacion.puedeEmpezar) return EstiloNodo.bloqueado;
-    final bool listasTodas = modulo.leccionesTotales > 0 &&
-        modulo.leccionesCompletadas >= modulo.leccionesTotales;
-    return listasTodas ? EstiloNodo.actual : EstiloNodo.disponible;
-  }
 
   // ---------------------------------------------------------------------
   // Acciones
@@ -330,7 +297,14 @@ class _PantallaMapaRutaState extends State<PantallaMapaRuta> {
             ],
             ..._avisosDelMapa(detalle),
             const SizedBox(height: Espacio.md),
-            ..._camino(detalle),
+            ...CaminoDeLaRuta(
+              detalle: detalle,
+              expandido: (ModuloRuta m) => _expandido(detalle, m),
+              alTocarModulo: (ModuloRuta m) => _tocarModulo(detalle, m),
+              alTocarLeccion: _tocarLeccion,
+              alTocarDesafio: _tocarDesafio,
+              alVerLaForja: () => context.push(Rutas.generacion(widget.rutaId)),
+            ).nodos(context),
           ],
         ),
       ),
@@ -378,137 +352,6 @@ class _PantallaMapaRutaState extends State<PantallaMapaRuta> {
         ),
       ],
     ];
-  }
-
-  List<Widget> _camino(DetalleRuta detalle) {
-    final List<Widget> nodos = <Widget>[];
-    final List<ModuloRuta> modulos = detalle.modulos;
-
-    if (modulos.isEmpty) {
-      return <Widget>[
-        EstadoVacio(
-          icono: Icons.map_outlined,
-          titulo: 'El camino aún no está trazado',
-          mensaje: 'El Reino todavía no ha dibujado los módulos de esta ruta.',
-          textoAccion: 'Ver el avance de la forja',
-          alTocarAccion: () => context.push(Rutas.generacion(widget.rutaId)),
-        ),
-      ];
-    }
-
-    int indice = 0;
-    for (int i = 0; i < modulos.length; i++) {
-      final ModuloRuta modulo = modulos[i];
-      final EstiloNodo estilo = _estiloModulo(detalle, modulo);
-      final bool hecho = estilo == EstiloNodo.completado;
-      final bool anteriorHecho = i == 0
-          ? false
-          : _estiloModulo(detalle, modulos[i - 1]) == EstiloNodo.completado;
-      final bool abierto = _expandido(detalle, modulo);
-      final List<ResumenLeccion> lecciones = modulo.todasLasLecciones;
-      final ResumenLeccion? siguiente = _primeraPendiente(lecciones);
-
-      nodos.add(
-        AparecerEnCascada(
-          indice: indice++,
-          hijo: NodoCamino(
-            estilo: estilo,
-            grande: true,
-            lineaArriba: i > 0,
-            tramoSuperiorHecho: anteriorHecho,
-            tramoInferiorHecho: hecho,
-            icono: estilo == EstiloNodo.completado
-                ? Icons.check_rounded
-                : (estilo == EstiloNodo.bloqueado
-                    ? Icons.lock_rounded
-                    : Icons.castle_rounded),
-            hijo: ContenidoModulo(
-              modulo: modulo,
-              estilo: estilo,
-              expandido: abierto,
-              alTocar: () => _tocarModulo(detalle, modulo),
-            ),
-          ),
-        ),
-      );
-
-      if (!abierto) continue;
-
-      for (final ResumenLeccion leccion in lecciones) {
-        final EstiloNodo estiloLeccion = _estiloLeccion(
-          modulo,
-          leccion,
-          esSiguiente: siguiente?.id == leccion.id,
-        );
-        nodos.add(
-          AparecerEnCascada(
-            indice: indice++,
-            hijo: NodoCamino(
-              estilo: estiloLeccion,
-              sangria: Espacio.md,
-              tramoSuperiorHecho: hecho,
-              tramoInferiorHecho: hecho,
-              hijo: ContenidoLeccion(
-                leccion: leccion,
-                estilo: estiloLeccion,
-                alTocar: () => _tocarLeccion(modulo, leccion, estiloLeccion),
-              ),
-            ),
-          ),
-        );
-      }
-
-      final ResumenEvaluacion? evaluacion = modulo.evaluacion;
-      if (evaluacion != null) {
-        final EstiloNodo estiloDesafio = _estiloDesafio(modulo, evaluacion);
-        nodos.add(
-          AparecerEnCascada(
-            indice: indice++,
-            hijo: NodoCamino(
-              estilo: estiloDesafio,
-              sangria: Espacio.xs,
-              icono: Icons.shield_rounded,
-              tramoSuperiorHecho: hecho,
-              tramoInferiorHecho: hecho,
-              hijo: ContenidoDesafio(
-                evaluacion: evaluacion,
-                estilo: estiloDesafio,
-                alTocar: () => _tocarDesafio(modulo, evaluacion, estiloDesafio),
-              ),
-            ),
-          ),
-        );
-      }
-    }
-
-    final bool completada = detalle.ruta.estado == EstadoRuta.completada;
-    nodos.add(
-      AparecerEnCascada(
-        indice: indice,
-        hijo: NodoCamino(
-          estilo: completada ? EstiloNodo.completado : EstiloNodo.bloqueado,
-          grande: true,
-          lineaAbajo: false,
-          tramoSuperiorHecho: completada,
-          icono: completada
-              ? Icons.emoji_events_rounded
-              : Icons.workspace_premium_outlined,
-          hijo: ContenidoTesoro(
-            completada: completada,
-            item: detalle.itemDeConocimiento,
-          ),
-        ),
-      ),
-    );
-
-    return nodos;
-  }
-
-  ResumenLeccion? _primeraPendiente(List<ResumenLeccion> lecciones) {
-    for (final ResumenLeccion leccion in lecciones) {
-      if (!leccion.estaCompletada && leccion.estaLista) return leccion;
-    }
-    return null;
   }
 }
 
