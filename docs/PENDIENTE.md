@@ -287,6 +287,41 @@ anotarlo y hacerlo con calma.
 
 ---
 
+### 4.7 La barra de navegación del móvil tapaba los botones — arreglado
+
+Rodrigo lo vio en su teléfono: en la hoja de módulo bloqueado, el botón
+«Entendido» quedaba detrás de los tres botones de Android. Se veía, pero al
+tocarlo respondía el sistema.
+
+No era un olvido en esa hoja, era una trampa del SDK. `showModalBottomSheet`
+acepta `useSafeArea: true` y lo que hace por dentro es
+`SafeArea(bottom: false)` —Flutter, `material/bottom_sheet.dart:1119`—: protege
+el borde de arriba y los lados y **deja el de abajo descubierto a propósito**.
+El nombre del parámetro dice lo contrario de lo que hace.
+
+De las veinticinco hojas de la aplicación, diecisiete se salvaban por casualidad
+—traían su propio `SafeArea` dentro—; las ocho de `hojas_aventura.dart` y
+`acceso.dart` no. Arreglarlas una a una habría dejado el mismo agujero abierto
+para la hoja veintiséis, así que el arreglo va en `mostrarHoja`
+(`app/lib/navegacion/armazon.dart`), por donde pasan todas. Va **dentro** del
+`Material` de la hoja, de modo que el fondo sigue llegando al borde de la
+pantalla y solo se aparta el contenido; y como consume el hueco, las diecisiete
+que ya se protegían no ganan aire de más.
+
+El resto de la aplicación estaba cubierto y se comprobó una por una:
+`PantallaAtenea` protege el `body` y el `piePersistente` —los ocho pies
+persistentes de lección y evaluación pasan por ahí—, `NavigationBar` y
+`showDialog` se protegen solos dentro del SDK, y los `Positioned` anclados abajo
+que aparecían en la búsqueda resultaron ser ornamentos dentro de tarjetas.
+
+**Por qué ninguna de las ciento sesenta y tres pruebas lo vio:** el dispositivo
+de pruebas no tiene barras del sistema, así que `SafeArea` no aparta nada y
+todo mide exactamente igual roto que arreglado. `test/area_segura_test.dart`
+finge la barra con `tester.view.padding` y mide la posición real en pantalla.
+Comprobado rompiendo el arreglo: el «Entendido» terminaba en 891 dp con la
+línea de seguridad en 867, o sea veinticuatro dentro de la barra —la mitad del
+botón, que es justo lo que se ve en la captura.
+
 ## 5. Lo que depende de Rodrigo, no del código
 
 - **Una cuenta de prueba creada por error con el correo de Rodrigo.** Probando

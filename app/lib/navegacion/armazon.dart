@@ -88,7 +88,25 @@ Future<T?> mostrarHoja<T>(
     useSafeArea: true,
     backgroundColor: paleta.superficieElevada,
     shape: const RoundedRectangleBorder(borderRadius: Redondeo.rHoja),
-    builder: constructor,
+    // `useSafeArea` NO cubre el borde inferior. El SDK envuelve la hoja en
+    // `SafeArea(bottom: false)` —Flutter, `material/bottom_sheet.dart:1119`—,
+    // así que protege el notch de arriba y los lados y deja el de abajo al
+    // descubierto. En un móvil con barra de navegación por gestos o por
+    // botones, el último control de la hoja queda literalmente debajo de esa
+    // barra: se ve, pero al tocarlo responde el sistema, no la app.
+    //
+    // Este `SafeArea` va **dentro** del `Material` de la hoja, de modo que el
+    // fondo sigue llegando al borde de la pantalla —que es como debe verse una
+    // hoja inferior— y lo único que se aparta es el contenido.
+    //
+    // Con el teclado abierto no estorba: `MediaQuery.padding` ya descuenta
+    // `viewInsets`, así que aquí no suma nada y manda el ajuste de cada hoja.
+    // Y las hojas que ya traían su propio `SafeArea` no pagan doble: este
+    // consume el hueco y el de dentro se queda a cero.
+    builder: (BuildContext hoja) => SafeArea(
+      top: false,
+      child: constructor(hoja),
+    ),
   );
 }
 
