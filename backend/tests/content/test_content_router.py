@@ -16,7 +16,8 @@ import sqlalchemy as sa
 
 from app.core.time import utcnow
 from app.models.content import LearningPath
-from app.models.progress import StudyActivity
+from app.models.enums import AttemptStatus
+from app.models.progress import AssessmentAttempt, StudyActivity
 from app.modules.progress.progreso import ServicioProgreso
 
 pytestmark = pytest.mark.db
@@ -330,6 +331,114 @@ def test_cada_leccion_del_mapa_dice_si_esta_lista(cliente, contenido):
     lecciones = respuesta.json()["modules"][0]["topics"][0]["lessons"]
     assert lecciones
     assert all(leccion["content_status"] == "ready" for leccion in lecciones)
+
+
+def _intento(db, usuario, contenido, *, numero, momento, enfriamiento=None):
+    """Un intento ya entregado de la evaluación del módulo 1."""
+    fila = AssessmentAttempt(
+        user_id=usuario.id,
+        assessment_id=contenido.evaluacion.id,
+        module_id=contenido.modulo1.id,
+        learning_path_id=contenido.ruta.id,
+        attempt_no=numero,
+        status=AttemptStatus.SUBMITTED,
+        question_count=4,
+        question_ids=[],
+        correct_count=2,
+        score=50,
+        started_at=momento,
+        submitted_at=momento,
+        local_date=momento.date(),
+        cooldown_until=enfriamiento,
+        idempotency_key=str(uuid.uuid4()),
+    )
+    db.add(fila)
+    db.flush()
+    return fila
+
+
+def test_el_mapa_de_la_ruta_trae_el_desafio_de_cada_modulo(cliente, contenido):
+    """Sin `assessment` en el nodo, P07 no pinta el desafío: no existe.
+
+    El mapa ya traía `assessment_best_score` y `assessment_passed` sueltos,
+    y por eso parecía que el dato estaba. Pero el cliente dibuja el nodo del
+    desafío desde el objeto `assessment` —`ModuloRuta.desdeJson` lo lee, y si
+    no viene deja `evaluacion` en `null`—, así que el remate del módulo
+    simplemente no aparecía en el mapa de ninguna ruta.
+
+    Comprueba los dos casos porque son caminos distintos de dibujo: el módulo
+    1 tiene evaluación y el 2 no, y «sin prueba» tiene que llegar como `null`,
+    no como un objeto vacío que el cliente pintaría como desafío existente.
+    """
+    respuesta = cliente.get(f"/api/v1/paths/{contenido.ruta.id}")
+
+    assert respuesta.status_code == 200
+    modulos = respuesta.json()["modules"]
+
+    desafio = modulos[0]["assessment"]
+    assert desafio is not None
+    assert desafio["assessment_id"] == str(contenido.evaluacion.id)
+    assert desafio["module_id"] == str(contenido.modulo1.id)
+    assert desafio["title"] == "Prueba del módulo"
+    assert desafio["question_count"] == 4
+    assert desafio["content_status"] == "ready"
+    assert desafio["attempts_used"] == 0
+    assert desafio["passed"] is False
+    assert desafio["best_score"] is None
+    assert desafio["can_start"] is True
+    assert desafio["cooldown_until"] is None
+
+    assert modulos[1]["assessment"] is None
+
+
+def test_el_desafio_del_mapa_cuenta_los_intentos_de_hoy(cliente, db, usuario, contenido):
+    """El tope diario sale de `game_configs`, no de un número en el cliente.
+
+    `mastery.assessment.max_attempts_per_day` vale 2 en las semillas, así que
+    con dos intentos de hoy el mapa tiene que decir que no se puede empezar.
+    Y el intento de ayer no cuenta: la regla es por fecha **local** del
+    usuario (§8.6), no por las últimas 24 horas.
+    """
+    ahora = utcnow()
+    _intento(db, usuario, contenido, numero=1, momento=ahora - timedelta(days=1))
+
+    primero = cliente.get(f"/api/v1/paths/{contenido.ruta.id}").json()
+    desafio = primero["modules"][0]["assessment"]
+    assert desafio["attempts_used"] == 0, "el intento de ayer no gasta el cupo de hoy"
+    assert desafio["can_start"] is True
+
+    _intento(db, usuario, contenido, numero=2, momento=ahora)
+    _intento(db, usuario, contenido, numero=3, momento=ahora)
+
+    segundo = cliente.get(f"/api/v1/paths/{contenido.ruta.id}").json()
+    desafio = segundo["modules"][0]["assessment"]
+    assert desafio["attempts_used"] == 2
+    assert desafio["max_attempts_per_day"] == 2
+    assert desafio["can_start"] is False
+
+
+def test_el_desafio_del_mapa_respeta_el_enfriamiento(cliente, db, usuario, contenido):
+    """Un enfriamiento vigente cierra el desafío aunque queden intentos.
+
+    Son dos frenos distintos y el mapa tiene que distinguirlos: aquí
+    `attempts_used` sigue por debajo del tope y aun así `can_start` es falso.
+    Si se hubieran mezclado, el aprendiz vería «te queda un intento» sobre un
+    botón que no responde.
+    """
+    ahora = utcnow()
+    _intento(
+        db, usuario, contenido, numero=1, momento=ahora,
+        enfriamiento=ahora + timedelta(hours=4),
+    )
+
+    desafio = cliente.get(f"/api/v1/paths/{contenido.ruta.id}").json()["modules"][0][
+        "assessment"
+    ]
+
+    assert desafio["attempts_used"] == 1
+    assert desafio["attempts_used"] < desafio["max_attempts_per_day"]
+    assert desafio["can_start"] is False
+    assert desafio["cooldown_until"] is not None
 
 
 def test_listar_rutas_filtra_por_ambito(cliente, contenido):

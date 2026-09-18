@@ -276,6 +276,35 @@ class TopicNodeOut(EsquemaBase):
     lessons: list[LessonNodeOut] = Field(default_factory=list)
 
 
+class ModuleAssessmentOut(EsquemaBase):
+    """El desafío del módulo, tal y como lo pinta el mapa de la ruta (§7.5).
+
+    Repite la ficha de `AssessmentBriefOut` —y no la hereda a propósito: esa
+    vive en §7.7 y se sirve por módulo; esta viaja dentro de cada nodo de un
+    mapa entero y tiene que poder cambiar sin arrastrar la pantalla de
+    entrada— y le suma lo que depende del usuario: intentos gastados hoy,
+    mejor puntaje, si ya aprobó y si puede empezar ahora.
+
+    `can_start` responde solo a las reglas del desafío —enfriamiento y tope
+    diario (§5.5, §8.6)—, **no** a si el módulo está desbloqueado: eso ya lo
+    dice `status` del nodo, y mezclarlo dejaría el mapa sin poder distinguir
+    «bloqueado» de «hoy ya no te quedan intentos».
+    """
+
+    assessment_id: uuid.UUID
+    module_id: uuid.UUID
+    title: str
+    question_count: int
+    pass_score: float
+    max_attempts_per_day: int
+    content_status: ContentStatus
+    attempts_used: int = 0
+    best_score: float | None = None
+    passed: bool = False
+    can_start: bool = False
+    cooldown_until: datetime | None = None
+
+
 class ModuleNodeOut(EsquemaBase):
     """Zona del territorio: un módulo con su bloqueo y su dominio."""
 
@@ -289,6 +318,9 @@ class ModuleNodeOut(EsquemaBase):
     mastery: float = 0.0
     assessment_best_score: float | None = None
     assessment_passed: bool = False
+    # El nodo del desafío. `None` cuando el módulo todavía no tiene evaluación
+    # creada, que es lo que el mapa dibuja como «sin prueba».
+    assessment: ModuleAssessmentOut | None = None
     topics: list[TopicNodeOut] = Field(default_factory=list)
 
 
@@ -632,6 +664,7 @@ __all__ = [
     "LessonNodeOut",
     "LessonOut",
     "MasteryExplanationOut",
+    "ModuleAssessmentOut",
     "ModuleNodeOut",
     "Page",
     "PageMeta",

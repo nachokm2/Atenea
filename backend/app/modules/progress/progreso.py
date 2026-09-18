@@ -100,6 +100,36 @@ class NodoTema:
 
 
 @dataclass(slots=True)
+class NodoEvaluacion:
+    """El desafío de un módulo, con lo que el mapa necesita para pintarlo.
+
+    Sin esto el cliente no dibuja el nodo del desafío: lee `assessment` del
+    nodo de módulo y, si no viene, no lo pinta. Viajaban `assessment_best_score`
+    y `assessment_passed` sueltos, que sirven para la cifra pero no para saber
+    **si hay prueba, si está escrita y si se puede empezar**.
+
+    `attempts_used`, `cooldown_until` y `can_start` salen de las mismas
+    funciones que usa la pantalla de entrada (§7.7): `_usados_hoy`,
+    `_tope_diario` y `_enfriamiento_vigente` son puras y se reutilizan tal
+    cual. Duplicar la regla aquí sería tener dos verdades que se desincronizan
+    en cuanto cambie el tope.
+    """
+
+    assessment_id: uuid.UUID
+    module_id: uuid.UUID
+    title: str
+    question_count: int
+    pass_score: float
+    max_attempts_per_day: int
+    content_status: ContentStatus
+    attempts_used: int
+    best_score: float | None
+    passed: bool
+    can_start: bool
+    cooldown_until: datetime | None
+
+
+@dataclass(slots=True)
 class NodoModulo:
     """Una zona del territorio: un módulo con su estado de bloqueo y su dominio."""
 
@@ -113,6 +143,7 @@ class NodoModulo:
     mastery: float
     assessment_best_score: float | None
     assessment_passed: bool
+    evaluacion: NodoEvaluacion | None = None
     temas: list[NodoTema] = field(default_factory=list)
 
 
@@ -573,6 +604,96 @@ class ServicioProgreso:
 
     # -- mapa -------------------------------------------------------------
 
+    def _evaluaciones_del_mapa(
+        self, user_id: uuid.UUID, learning_path_id: uuid.UUID
+    ) -> dict[uuid.UUID, NodoEvaluacion]:
+        """El desafío de cada módulo de la ruta, listo para pintar.
+
+        **Dos consultas para toda la ruta, no una por módulo.** La pantalla de
+        entrada del desafío (§7.7) calcula esto mismo con `info_evaluacion`,
+        pero esa llama a `asegurar_desbloqueado` y consulta por módulo: usarla
+        aquí serían N consultas y además lanzaría en los módulos bloqueados,
+        que son justo los que el mapa tiene que poder dibujar apagados.
+
+        Lo que sí se reutiliza son las tres funciones puras que deciden las
+        reglas, para no tener dos verdades sobre el mismo tope.
+        """
+        from app.core.time import user_local_date  # noqa: PLC0415
+        from app.models.content import Assessment  # noqa: PLC0415 - perezosa (§1.3)
+        from app.models.identity import User  # noqa: PLC0415
+        from app.models.progress import AssessmentAttempt  # noqa: PLC0415
+        from app.modules.content.evaluaciones import (  # noqa: PLC0415
+            _enfriamiento_vigente,
+            _tope_diario,
+            _usados_hoy,
+        )
+        from app.modules.gamification.servicio_config import (  # noqa: PLC0415
+            ServicioConfig,
+        )
+
+        evaluaciones = list(
+            self.db.execute(
+                sa.select(Assessment)
+                .join(PathModule, PathModule.id == Assessment.module_id)
+                .where(PathModule.learning_path_id == learning_path_id)
+            ).scalars()
+        )
+        if not evaluaciones:
+            return {}
+
+        intentos_por_evaluacion: dict[uuid.UUID, list[AssessmentAttempt]] = {}
+        for intento in self.db.execute(
+            sa.select(AssessmentAttempt)
+            .where(
+                AssessmentAttempt.user_id == user_id,
+                AssessmentAttempt.assessment_id.in_([e.id for e in evaluaciones]),
+            )
+            .order_by(AssessmentAttempt.attempt_no)
+        ).scalars():
+            intentos_por_evaluacion.setdefault(intento.assessment_id, []).append(intento)
+
+        avances = {
+            fila.module_id: fila
+            for fila in self.db.execute(
+                sa.select(UserModuleProgress).where(
+                    UserModuleProgress.user_id == user_id,
+                    UserModuleProgress.module_id.in_([e.module_id for e in evaluaciones]),
+                )
+            ).scalars()
+        }
+
+        cfg = ServicioConfig(self.db)
+        usuario = self.db.get(User, user_id)
+        instante = utcnow()
+        hoy = user_local_date(instante, usuario.timezone if usuario else None)
+
+        nodos: dict[uuid.UUID, NodoEvaluacion] = {}
+        for evaluacion in evaluaciones:
+            intentos = intentos_por_evaluacion.get(evaluacion.id, [])
+            usados = _usados_hoy(intentos, hoy)
+            tope = _tope_diario(cfg, evaluacion)
+            enfriamiento = _enfriamiento_vigente(intentos, momento=instante)
+            avance = avances.get(evaluacion.module_id)
+            nodos[evaluacion.module_id] = NodoEvaluacion(
+                assessment_id=evaluacion.id,
+                module_id=evaluacion.module_id,
+                title=evaluacion.title,
+                question_count=int(evaluacion.question_count),
+                pass_score=a_float(evaluacion.pass_score),
+                max_attempts_per_day=tope,
+                content_status=evaluacion.content_status,
+                attempts_used=usados,
+                best_score=(
+                    a_float(avance.assessment_best_score)
+                    if avance and avance.assessment_best_score is not None
+                    else None
+                ),
+                passed=bool(avance and avance.assessment_passed_at is not None),
+                can_start=enfriamiento is None and usados < tope,
+                cooldown_until=enfriamiento,
+            )
+        return nodos
+
     def estado_mapa_ruta(self, user_id: uuid.UUID, learning_path_id: uuid.UUID) -> MapaRuta:
         """Mapa de la ruta con el estado de bloqueo y de dominio de cada nodo (P07).
 
@@ -660,6 +781,8 @@ class ServicioProgreso:
         for topic, _ in temas:
             temas_por_modulo.setdefault(topic.module_id, []).append(nodos_tema[topic.id])
 
+        evaluaciones = self._evaluaciones_del_mapa(user_id, learning_path_id)
+
         nodos_modulo: list[NodoModulo] = []
         for modulo, progreso_modulo in modulos:
             nodos_modulo.append(
@@ -680,6 +803,7 @@ class ServicioProgreso:
                     assessment_passed=bool(
                         progreso_modulo and progreso_modulo.assessment_passed_at is not None
                     ),
+                    evaluacion=evaluaciones.get(modulo.id),
                     temas=sorted(temas_por_modulo.get(modulo.id, []), key=lambda t: t.position),
                 )
             )

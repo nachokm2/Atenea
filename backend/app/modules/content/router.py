@@ -73,6 +73,7 @@ from app.modules.content.schemas import (
     LessonNodeOut,
     LessonOut,
     MasteryExplanationOut,
+    ModuleAssessmentOut,
     ModuleNodeOut,
     Page,
     PageMeta,
@@ -308,6 +309,22 @@ def _detalle_out(detalle: servicio_rutas.DetalleRuta) -> PathDetailOut:
                 mastery=modulo.mastery,
                 assessment_best_score=modulo.assessment_best_score,
                 assessment_passed=modulo.assessment_passed,
+                assessment=None
+                if modulo.evaluacion is None
+                else ModuleAssessmentOut(
+                    assessment_id=modulo.evaluacion.assessment_id,
+                    module_id=modulo.evaluacion.module_id,
+                    title=modulo.evaluacion.title,
+                    question_count=modulo.evaluacion.question_count,
+                    pass_score=modulo.evaluacion.pass_score,
+                    max_attempts_per_day=modulo.evaluacion.max_attempts_per_day,
+                    content_status=modulo.evaluacion.content_status,
+                    attempts_used=modulo.evaluacion.attempts_used,
+                    best_score=modulo.evaluacion.best_score,
+                    passed=modulo.evaluacion.passed,
+                    can_start=modulo.evaluacion.can_start,
+                    cooldown_until=modulo.evaluacion.cooldown_until,
+                ),
                 topics=[
                     TopicNodeOut(
                         topic_id=tema.topic_id,

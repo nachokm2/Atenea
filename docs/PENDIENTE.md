@@ -121,25 +121,49 @@ autorreclamo ya se comió. El arreglo cubre de ahí en adelante; las misiones qu
 figuran `CLAIMED` sin evento no las toca, porque `expirar_vencidas` solo mira
 `ACTIVE` y `COMPLETED`. Haría falta un rastreo aparte.
 
-### 4.2 El mapa del Reino → `docs/planes/mapa-del-reino.md`
+### 4.2 El mapa del Reino → `docs/planes/mapa-del-reino.md` — arreglado
 
-**Conectar, y es barato.** Aquí no hay que construir nada: el servidor ya sirve
-`GET /api/v1/territories` con siete territorios, su estado y su dominio
-calculados por usuario, y el cliente tiene el repositorio, el DTO, el enum con
-etiquetas en español y hasta el widget del emblema. **Falta la llamada**: nadie
-invoca `repos.conocimiento` en toda la aplicación.
+Eran dos huecos hermanos, los dos de la misma familia: **algo que el servidor
+ya calculaba y que nadie pedía o nadie mandaba**. Los dos están cerrados.
 
-Lo que se ve en pantalla hoy es un `for (int i = 0; i < 4; i++)` de cuatro
-siluetas constantes bajo la frase «Cada ruta que abres ilumina uno» —una frase
-verificablemente falsa sobre datos que el servidor ya calcula. Conectarlo son
-unas 60 líneas de cliente, cero backend, cero contrato.
+**El mapa de territorios** (`3515927`). El servidor llevaba desde siempre
+sirviendo `GET /territories` con los siete territorios, su estado y su dominio
+por usuario, y el cliente tenía repositorio, DTO, enum con etiquetas y widget
+del emblema. Nadie llamaba a `repos.conocimiento`: era código muerto entero. Lo
+que se veía era un `for (int i = 0; i < 4; i++)` de cuatro siluetas constantes
+bajo la frase «Cada ruta que abres ilumina uno», que era verificablemente
+falsa. Ahora `ControladorAventura.cargarTerritorios` los pide —con su propio
+guard, para que un fallo del mapa no tumbe la pantalla de rutas— y
+`MapaDelReino` pinta tantos emblemas como territorios haya. Verificado contra
+producción: siete territorios, los siete sellos distintos.
 
-> Lo del `content_status` que este plan señalaba —que ninguna lección se podía
-> abrir desde el mapa de la Ruta— era cierto y **ya está arreglado** (`255065e`).
->
-> **Queda un hueco hermano, sin verificar:** el nodo de módulo no manda
-> `assessment`, así que el desafío no se pinta en el mapa. Es más grande que el
-> anterior: el dato no existe en el agregado, hay que construirlo.
+**El desafío del módulo.** Este sí había que construirlo. El nodo mandaba
+`assessment_best_score` y `assessment_passed` sueltos —por eso parecía que el
+dato estaba— pero no el objeto `assessment`, que es de donde cuelga todo el
+dibujo del nodo en el cliente (`ModuloRuta.desdeJson`, y de ahí
+`_estiloDesafio`, `ContenidoDesafio` y `_tocarDesafio`). Con `evaluacion` en
+`null`, el remate de cada módulo no se pintaba en ninguna ruta, para nadie, sin
+dar un solo síntoma: el mapa cargaba bien y con los módulos correctos.
+
+Ahora `ServicioProgreso._evaluaciones_del_mapa` lo construye. Tres decisiones
+que vale la pena dejar escritas:
+
+* **Dos consultas para toda la ruta, no una por módulo.** La pantalla de
+  entrada del desafío (§7.7) calcula lo mismo con `info_evaluacion`, pero esa
+  llama a `asegurar_desbloqueado` y consulta por módulo: reutilizarla habría
+  sido N consultas y, peor, habría lanzado en los módulos bloqueados, que son
+  justo los que el mapa tiene que poder dibujar apagados.
+* **Las reglas no se duplican.** `_usados_hoy`, `_tope_diario` y
+  `_enfriamiento_vigente` son funciones puras sobre la lista de intentos y se
+  reutilizan tal cual, para que no haya dos verdades sobre el mismo tope.
+* **`can_start` mira solo el desafío**, no el bloqueo del módulo: eso ya lo
+  dice `status` del nodo. Mezclarlos habría dejado al mapa sin poder
+  distinguir «bloqueado» de «hoy ya no te quedan intentos», y el aprendiz
+  vería «te queda un intento» sobre un botón mudo.
+
+Contrato en §7.5, `ModuleAssessmentOut` en `content/schemas.py`. Tres pruebas
+de servidor —el sobre completo, el tope diario por fecha local y el
+enfriamiento— y siete de cliente.
 
 ### 4.3 Las dos manos al equipar un arma — arreglado, sin gastar arte
 
