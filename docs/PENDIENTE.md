@@ -17,14 +17,14 @@ sobrevive a su sesión es otra cosa que promete y no cumple.
 | Pruebas del cliente | **175 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
 | Pruebas del servidor | **649 verdes**, `ruff check` limpio |
 | `flutter analyze` | limpio |
-| APK de release | compilado y enviado a Rodrigo a las 00:50 del 18 |
+| APK de release | compilado y enviado a Rodrigo a las 02:38 del 18, **con todo lo de la sesión** |
 | Producción | desplegada, `/health` en 200 con base y worker `ok`, migración aplicada, arranque sin trazas |
 
-**Ojo con el APK que tiene Rodrigo en el móvil:** es el de las 00:50 y lleva el
-arreglo de la barra de navegación, pero **no** lleva nada de lo que se corrigió
-después de la revisión —el `content_status` del módulo, el rótulo de la prueba
-ni los tres mensajes de bloqueo—. Lo primero de mañana es recompilarlo y
-volver a mirarlo en el teléfono.
+El APK del móvil está al día: incluye el arreglo de la barra de navegación, el
+`content_status` del módulo, el rótulo de la prueba y los tres mensajes de
+bloqueo. Lo que falta no es compilar, es **mirarlo**: que un módulo escrito ya
+no diga «En construcción», que el nodo de la prueba aparezca al final de cada
+módulo y que ninguna hoja deje su botón bajo los de Android.
 
 Las dos pruebas de contrato vivo se saltan solas si la API local no responde, y
 son justo las que comprueban que cliente y servidor hablan el mismo idioma. Para
@@ -460,11 +460,11 @@ editarlo).
   registro, no se pierde en silencio— pero no sale de la máquina. Railway →
   servicio `api` → Variables → `ALERT_EMAIL` = un correo. No hay código que
   tocar.
-- **Instalar el APK** para probar el apartado 3.2. El del 18 a las 00:50 ya se
-  envió y lleva el arreglo de la barra de navegación, pero no lo que se corrigió
-  después de la revisión. Recompilar con `flutter build apk --release`: desde
-  `c49ec5a` ya no hace falta `--dart-define=ATENEA_API`, porque la URL de
-  producción por defecto es la correcta.
+- **Instalar el APK** para probar el apartado 3.2. El del 18 a las 02:38 está
+  enviado y lleva todo. Para recompilar en el futuro basta
+  `flutter build apk --release`: desde `c49ec5a` ya no hace falta
+  `--dart-define=ATENEA_API`, porque la URL de producción por defecto es la
+  correcta.
 
 ---
 
