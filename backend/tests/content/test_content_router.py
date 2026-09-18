@@ -14,10 +14,14 @@ from datetime import timedelta
 import pytest
 import sqlalchemy as sa
 
-from app.core.time import utcnow
-from app.models.content import LearningPath
-from app.models.enums import AttemptStatus
-from app.models.progress import AssessmentAttempt, StudyActivity
+from app.core.time import user_local_date, utcnow
+from app.models.content import Assessment, LearningPath
+from app.models.enums import AttemptStatus, ContentStatus, ModuleStatus
+from app.models.progress import (
+    AssessmentAttempt,
+    StudyActivity,
+    UserModuleProgress,
+)
 from app.modules.progress.progreso import ServicioProgreso
 
 pytestmark = pytest.mark.db
@@ -333,12 +337,26 @@ def test_cada_leccion_del_mapa_dice_si_esta_lista(cliente, contenido):
     assert all(leccion["content_status"] == "ready" for leccion in lecciones)
 
 
-def _intento(db, usuario, contenido, *, numero, momento, enfriamiento=None):
-    """Un intento ya entregado de la evaluación del módulo 1."""
+def _intento(
+    db, usuario, contenido, *, numero, momento, enfriamiento=None,
+    evaluacion=None, modulo=None, fecha=None,
+):
+    """Un intento ya entregado, fechado como lo fecha producción.
+
+    `local_date` va en la **fecha local del usuario**, no en la UTC, porque es
+    así como la escribe `iniciar_intento` (§8.6) y así como la lee el mapa. La
+    diferencia no es teórica: el usuario de estas pruebas vive en
+    `America/Santiago`, o sea que entre las 00:00 y las 03:00 UTC las dos
+    fechas no coinciden. Con la fecha UTC, estas pruebas pasaban veintiuna
+    horas al día y se ponían rojas las otras tres, sin que nadie tocara el
+    código —y mientras tanto no distinguían la regla local de «las últimas 24
+    horas», que es justo lo que dicen comprobar.
+    """
+    evaluacion = evaluacion or contenido.evaluacion
     fila = AssessmentAttempt(
         user_id=usuario.id,
-        assessment_id=contenido.evaluacion.id,
-        module_id=contenido.modulo1.id,
+        assessment_id=evaluacion.id,
+        module_id=modulo.id if modulo else contenido.modulo1.id,
         learning_path_id=contenido.ruta.id,
         attempt_no=numero,
         status=AttemptStatus.SUBMITTED,
@@ -348,7 +366,7 @@ def _intento(db, usuario, contenido, *, numero, momento, enfriamiento=None):
         score=50,
         started_at=momento,
         submitted_at=momento,
-        local_date=momento.date(),
+        local_date=fecha or user_local_date(momento, usuario.timezone),
         cooldown_until=enfriamiento,
         idempotency_key=str(uuid.uuid4()),
     )
@@ -439,6 +457,157 @@ def test_el_desafio_del_mapa_respeta_el_enfriamiento(cliente, db, usuario, conte
     assert desafio["attempts_used"] < desafio["max_attempts_per_day"]
     assert desafio["can_start"] is False
     assert desafio["cooldown_until"] is not None
+
+
+def test_el_nodo_del_modulo_dice_si_esta_escrito(cliente, db, contenido):
+    """Sin `content_status`, el mapa pinta TODOS los módulos «En construcción».
+
+    Es el hermano exacto del fallo que §4.2 arregló para las lecciones
+    (`255065e`), un nivel más arriba y con la misma forma: el cliente lee
+    `content_status` del nodo (`ModuloRuta.desdeJson`), no lo encontraba, caía
+    a `pending`, y `enConstruccion` —que `_estiloModulo` comprueba **antes**
+    que «actual» y «disponible»— quedaba en cierto para siempre. Resultado: el
+    módulo en el que está el aprendiz sale con icono de llama y la píldora «En
+    construcción», y al tocarlo la hoja le dice que el Reino todavía lo está
+    escribiendo. Aunque esté listo.
+
+    Los dos módulos tienen estados distintos a propósito: con los dos iguales,
+    un nodo que devolviera una constante pasaría igual.
+    """
+    contenido.modulo1.content_status = ContentStatus.READY
+    db.flush()
+
+    modulos = cliente.get(f"/api/v1/paths/{contenido.ruta.id}").json()["modules"]
+
+    assert modulos[0]["content_status"] == "ready"
+    assert modulos[1]["content_status"] == "pending"
+
+
+def test_el_cupo_del_desafio_se_cuenta_en_la_fecha_del_aprendiz(
+    cliente, db, usuario, contenido, monkeypatch
+):
+    """La regla es la fecha **local** del usuario (§8.6), no la UTC.
+
+    Esta prueba solo dice algo dentro de la franja en que las dos fechas no
+    coinciden, así que la fabrica: congela el reloj a las 01:30 UTC, que en
+    Santiago son las 22:30 del día anterior. Sin congelarlo, «hoy» sería el
+    mismo día en las dos zonas veintiuna horas de cada veinticuatro y la
+    prueba pasaría igual aunque el código usara la fecha UTC.
+    """
+    from app.modules.progress import progreso as modulo_progreso
+
+    instante = utcnow().replace(hour=1, minute=30, second=0, microsecond=0)
+    monkeypatch.setattr(modulo_progreso, "utcnow", lambda: instante)
+
+    hoy_utc = instante.date()
+    hoy_del_aprendiz = user_local_date(instante, usuario.timezone)
+    assert hoy_utc != hoy_del_aprendiz, "sin desfase la prueba no prueba nada"
+
+    # Dos intentos en el día del aprendiz: gastan su cupo aunque en UTC ya sea
+    # otra fecha.
+    _intento(db, usuario, contenido, numero=1, momento=instante, fecha=hoy_del_aprendiz)
+    _intento(db, usuario, contenido, numero=2, momento=instante, fecha=hoy_del_aprendiz)
+
+    desafio = cliente.get(f"/api/v1/paths/{contenido.ruta.id}").json()["modules"][0][
+        "assessment"
+    ]
+    assert desafio["attempts_used"] == 2
+    assert desafio["can_start"] is False
+
+    # Y un intento fechado en el día UTC —que para el aprendiz es mañana— no
+    # puede gastarle el cupo de hoy.
+    db.query(AssessmentAttempt).delete()
+    db.flush()
+    _intento(db, usuario, contenido, numero=1, momento=instante, fecha=hoy_utc)
+
+    desafio = cliente.get(f"/api/v1/paths/{contenido.ruta.id}").json()["modules"][0][
+        "assessment"
+    ]
+    assert desafio["attempts_used"] == 0
+    assert desafio["can_start"] is True
+
+
+def test_el_desafio_del_mapa_publica_la_marca_y_el_aprobado(
+    cliente, db, usuario, contenido
+):
+    """`best_score` y `passed` salen del avance del módulo, no de cero.
+
+    Las otras pruebas solo miran el caso virgen, donde los dos valores
+    coinciden con el valor por defecto del dataclass: cablearlos a `None` y
+    `False` las dejaba verdes. En pantalla, eso es un aprendiz que aprobó con
+    95 y ve el nodo sin corona, sin su marca y pintado como si no lo hubiera
+    intentado nunca.
+
+    Comprueba además que la cifra es **la misma** que el nodo publica suelta en
+    `assessment_best_score`: son el mismo número y la respuesta no puede dar
+    dos versiones de él.
+    """
+    db.add(
+        UserModuleProgress(
+            user_id=usuario.id,
+            module_id=contenido.modulo1.id,
+            learning_path_id=contenido.ruta.id,
+            status=ModuleStatus.COMPLETED,
+            assessment_best_score=95,
+            assessment_attempts=1,
+            assessment_passed_at=utcnow(),
+        )
+    )
+    db.flush()
+
+    nodo = cliente.get(f"/api/v1/paths/{contenido.ruta.id}").json()["modules"][0]
+
+    assert nodo["assessment"]["best_score"] == 95.0
+    assert nodo["assessment"]["passed"] is True
+    assert nodo["assessment"]["best_score"] == nodo["assessment_best_score"]
+    assert nodo["assessment"]["passed"] == nodo["assessment_passed"]
+
+
+def test_cada_modulo_lleva_su_propio_desafio_y_sus_propios_intentos(
+    cliente, db, usuario, contenido
+):
+    """Con una sola evaluación en la ruta, el reparto por módulo no se prueba.
+
+    La fixture crea una, en el módulo 1: con N=1 cualquier implementación que
+    devolviera siempre el mismo nodo pasaría, y el agrupado de intentos por
+    evaluación nunca vería dos claves. Aquí hay dos evaluaciones y los
+    intentos están todos en la primera: si el agrupado perdiera la clave
+    —acumular todos los intentos en una lista es la forma natural de
+    equivocarse en ese bucle—, el desafío del módulo 2 aparecería cerrado sin
+    que el aprendiz lo haya tocado.
+
+    De paso fija que el tope sale de `game_configs` y no de la columna: esta
+    segunda evaluación pide 5 por día y `mastery.assessment.max_attempts_per_day`
+    vale 2, así que el nodo tiene que decir 2. Con la columna cableada diría 5.
+    """
+    segunda = Assessment(
+        module_id=contenido.modulo2.id,
+        title="Prueba del segundo módulo",
+        question_count=6,
+        bank_size=12,
+        max_attempts_per_day=5,
+        content_status=ContentStatus.READY,
+    )
+    db.add(segunda)
+    db.flush()
+
+    ahora = utcnow()
+    _intento(db, usuario, contenido, numero=1, momento=ahora)
+    _intento(db, usuario, contenido, numero=2, momento=ahora)
+
+    modulos = cliente.get(f"/api/v1/paths/{contenido.ruta.id}").json()["modules"]
+
+    primero = modulos[0]["assessment"]
+    assert primero["assessment_id"] == str(contenido.evaluacion.id)
+    assert primero["attempts_used"] == 2
+    assert primero["can_start"] is False
+
+    segundo = modulos[1]["assessment"]
+    assert segundo["assessment_id"] == str(segunda.id)
+    assert segundo["question_count"] == 6
+    assert segundo["attempts_used"] == 0, "los intentos del módulo 1 no son suyos"
+    assert segundo["can_start"] is True
+    assert segundo["max_attempts_per_day"] == 2, "el tope lo manda game_configs, no la columna"
 
 
 def test_listar_rutas_filtra_por_ambito(cliente, contenido):

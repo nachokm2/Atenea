@@ -171,21 +171,24 @@ class _PantallaMapaRutaState extends State<PantallaMapaRuta> {
     if (estilo == EstiloNodo.enConstruccion) {
       await explicarBloqueo(
         context,
-        titulo: 'Desafío del módulo',
-        mensaje: 'El Reino prepara las preguntas de este desafío.',
+        titulo: evaluacion.titulo,
+        mensaje: 'El Reino todavía prepara las preguntas de esta prueba.',
       );
       return;
     }
     if (estilo == EstiloNodo.bloqueado) {
       await explicarBloqueo(
         context,
-        titulo: 'Desafío del módulo',
+        titulo: evaluacion.titulo,
         mensaje: evaluacion.enEnfriamiento
             ? 'Acabas de intentarlo. Dale un momento al Reino para preparar '
                 'preguntas distintas.'
-            : 'Completa las lecciones de ${modulo.nombreVisible} para '
-                'presentarte al desafío.',
-        consejo: 'Nada se pierde: el desafío se puede repetir.',
+            : evaluacion.sinIntentosHoy
+                ? 'Hoy ya usaste tus ${evaluacion.intentosMaximosPorDia} '
+                    'intentos. Mañana vuelves a tenerlos.'
+                : 'Completa las lecciones de ${modulo.nombreVisible} para '
+                    'presentarte a la prueba.',
+        consejo: 'Nada se pierde: la prueba se puede repetir.',
       );
       return;
     }

@@ -2205,6 +2205,15 @@ class ResumenEvaluacion {
     final DateTime? hasta = enfriamientoHasta;
     return hasta != null && hasta.isAfter(DateTime.now());
   }
+
+  /// Se le acabó el cupo del día, que no es lo mismo que estar bloqueado.
+  ///
+  /// El servidor separa las dos cosas a propósito (§7.5): `can_start` mira
+  /// solo la prueba —enfriamiento y tope diario— y el bloqueo del módulo lo
+  /// dice `status` del nodo. Sin esto la pantalla las vuelve a mezclar y le
+  /// dice «completa las lecciones» a quien ya las completó.
+  bool get sinIntentosHoy =>
+      !enEnfriamiento && intentosUsados >= intentosMaximosPorDia;
 }
 
 /// Módulo de una Ruta: zona del territorio con sus temas y su Desafío.

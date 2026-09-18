@@ -227,9 +227,19 @@ def info_evaluacion(
         blocked_reason=motivo,
         pass_score=a_float(evaluacion.pass_score),
         question_count=int(evaluacion.question_count),
-        best_score=a_float(avance.assessment_best_score) if avance.assessment_best_score else None,
+        # `is not None`, no la verdad del valor: un 0 % es un puntaje real y
+        # `Decimal('0.00')` es falso en Python. Con la comprobación de verdad,
+        # quien saca cero ve su marca en el mapa —que sí usa `is not None`— y
+        # la ve desaparecer al abrir esta pantalla.
+        best_score=(
+            a_float(avance.assessment_best_score)
+            if avance.assessment_best_score is not None
+            else None
+        ),
         best_effective=(
-            a_float(avance.assessment_best_effective) if avance.assessment_best_effective else None
+            a_float(avance.assessment_best_effective)
+            if avance.assessment_best_effective is not None
+            else None
         ),
         passed_at=avance.assessment_passed_at,
         reward_preview={

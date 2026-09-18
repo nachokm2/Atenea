@@ -1,4 +1,4 @@
-# Pendiente — al 17-09-2026
+# Pendiente — al 18-09-2026
 
 Este archivo existe para que mañana se retome sin releer una conversación. Dice
 qué quedó hecho, qué quedó a medias y **por qué**, que es lo que no se deduce
@@ -14,11 +14,17 @@ sobrevive a su sesión es otra cosa que promete y no cumple.
 | | |
 |---|---|
 | Rama | `main`, todo subido a `origin` |
-| Pruebas del cliente | **142 verdes**, cero saltadas (eran 83 al empezar el 16) |
-| Pruebas del servidor | **verde entera**, `ruff` limpio |
+| Pruebas del cliente | **175 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
+| Pruebas del servidor | **649 verdes**, `ruff check` limpio |
 | `flutter analyze` | limpio |
-| APK de release | compila y está firmado |
-| Producción | desplegada y al día con `main` |
+| APK de release | compilado y enviado a Rodrigo a las 00:50 del 18 |
+| Producción | desplegada, `/health` en 200 con base y worker `ok`, migración aplicada, arranque sin trazas |
+
+**Ojo con el APK que tiene Rodrigo en el móvil:** es el de las 00:50 y lleva el
+arreglo de la barra de navegación, pero **no** lleva nada de lo que se corrigió
+después de la revisión —el `content_status` del módulo, el rótulo de la prueba
+ni los tres mensajes de bloqueo—. Lo primero de mañana es recompilarlo y
+volver a mirarlo en el teléfono.
 
 Las dos pruebas de contrato vivo se saltan solas si la API local no responde, y
 son justo las que comprueban que cliente y servidor hablan el mismo idioma. Para
@@ -346,6 +352,100 @@ Comprobado rompiendo el arreglo: el «Entendido» terminaba en 891 dp con la
 línea de seguridad en 867, o sea veinticuatro dentro de la barra —la mitad del
 botón, que es justo lo que se ve en la captura.
 
+### 4.8 La revisión adversarial del 18-09 — nueve arreglados, dos pendientes
+
+Sobre el nodo de desafío y el arreglo del área segura se lanzó una revisión de
+cuatro lentes independientes —agregado, contrato, área segura y calidad de las
+pruebas— con un escéptico por hallazgo que intentaba refutarlo ejecutando
+código. Diecinueve propuestos, dieciséis sobrevivieron a la refutación.
+
+**Arreglados en el momento:**
+
+* **El nodo de módulo no mandaba `content_status`.** El hermano exacto del
+  fallo que `255065e` arregló para las lecciones, un nivel más arriba. El
+  cliente lo lee, no lo encontraba, caía a `pending`, y `enConstruccion` —que
+  `_estiloModulo` comprueba **antes** que «actual» y «disponible»— quedaba
+  cierto para siempre: **todos** los módulos se pintaban «En construcción» y al
+  tocarlos decían que el Reino todavía los estaba escribiendo. Es exactamente
+  la captura que mandó Rodrigo esa noche.
+* **Las dos pruebas nuevas de intentos eran una bomba de relojería.** El
+  ayudante escribía `local_date` en fecha **UTC** y producción compara contra la
+  fecha local del usuario, que en las pruebas es `America/Santiago`. Coincidían
+  veintiuna horas al día: la suite se habría puesto roja sola entre las 21:00 y
+  las 00:00 de Chile, sin que nadie tocara el código. Y mientras tanto la
+  prueba afirmaba en su docstring que demostraba la regla de fecha local (§8.6)
+  sin llegar a demostrarla nunca. Ahora el ayudante fecha como fecha producción,
+  y hay una prueba que congela el reloj a las 01:30 UTC —22:30 del día anterior
+  en Santiago— para que el desfase exista de verdad.
+* **El 0 % desaparecía al cambiar de pantalla.** El mapa comprobaba
+  `is not None` y la pantalla de entrada la verdad del valor; `Decimal('0.00')`
+  es falso en Python, así que quien sacaba cero veía su marca en el mapa y la
+  perdía al abrir la prueba. Arreglado en `evaluaciones.py`, que era el lado
+  equivocado: un cero es un puntaje real, no «sin marca».
+* **El rótulo infringía el contrato.** `CONTRACT.md` prohíbe la palabra
+  «Desafío» como nombre visible en dos sitios —línea 1383 y decisión D12—
+  porque ya nombra otra actividad, `challenge`, que paga recompensas distintas.
+  El nodo escribía «Desafío del módulo» a mano e ignoraba el `title` que llega
+  del servidor. Este trabajo es además el que hizo visible la infracción por
+  primera vez, porque hasta ahora el nodo no se pintaba.
+* **«Completa las lecciones» a quien ya las había completado.** El nodo y el
+  diálogo elegían el mensaje mirando solo el enfriamiento, así que el aprendiz
+  que había gastado sus intentos del día leía que le faltaban lecciones. §7.5
+  separa `can_start` de `status` precisamente para poder distinguirlo, y la
+  pantalla lo volvía a mezclar. Ahora son tres mensajes.
+* **Cuatro pruebas que no podían fallar.** La fixture del cliente había elegido
+  `pass_score: 70`, `max_attempts_per_day: 2` y `title: 'Prueba del módulo'`,
+  que son **los tres valores por defecto del constructor**: se podía cablear el
+  DTO para que ignorase el JSON entero y seis de las siete seguían verdes. Otra
+  fijaba un estado que el servidor no puede producir —`can_start: false` con
+  cero intentos y sin enfriamiento— y de paso bendecía el mensaje equivocado
+  del estado que sí ocurre. Y el tope diario valía 2 por la columna y por
+  `game_configs` a la vez, así que no demostraba cuál manda: ahora hay una
+  segunda evaluación que pide 5 y el nodo tiene que seguir diciendo 2.
+* **`best_score` y `passed` no los comprobaba nadie** —cablearlos a `None` y
+  `False` dejaba 94 pruebas verdes— y el reparto por módulo solo se ejercitaba
+  con una única evaluación en toda la ruta.
+* **El caso del teclado no tenía red.** Es lo más frágil del arreglo del área
+  segura y ocho de las hojas que toca llevan `TextField`. Añadir
+  `maintainBottomViewPadding: true` —que suena a mejora y el propio SDK
+  documenta como remedio para el salto al abrir el teclado— metía 48 dp de
+  vacío bajo cada teclado sin que ninguna prueba lo viera. Ahora sí lo ve:
+  comprobado rompiéndolo.
+
+**Lo que queda para mañana. Los dos hallazgos altos sin cerrar tienen la misma
+raíz: nada monta el mapa de la Ruta en una prueba.**
+
+* `if (evaluacion != null)` en `app/lib/pantallas/aventura/mapa_ruta.dart:459`
+  es el único punto donde el dato se convierte en nodo visible. Cambiándolo por
+  `if (evaluacion != null && false)` —o sea, el desafío no se añade nunca al
+  mapa, que es literalmente el fallo que este trabajo vino a arreglar— la suite
+  entera del cliente sigue verde. Comprobado ejecutándolo.
+* `_estiloDesafio` (`mapa_ruta.dart:80`) es la única consumidora real de
+  `can_start`, `content_status` y `aprobada` en el cliente: traduce el sobre
+  entero a lo que se ve. Haciéndola devolver siempre `EstiloNodo.disponible`,
+  la suite sigue verde. Un desafío en enfriamiento se pintaría con el color, el
+  icono y el botón vivo de «Disponible».
+
+El obstáculo conocido es que montar `PantallaAventura` cuelga la prueba: arrastra
+`_control.repeat(reverse: true)` de `comunes_aventura.dart:298` y `PulsoSuave` de
+`nodos_mapa.dart:146`, que son animaciones sin fin. La salida probable es extraer
+el cuerpo del mapa a un widget montable, como ya se hizo con `MapaDelReino`.
+
+**Menor, del mismo hallazgo:** el nodo de módulo tampoco manda `summary`,
+`difficulty`, `estimated_minutes`, `stars` ni `locked_reason`, que el cliente lee
+y que existen en `path_modules`. Ninguno bloquea nada —solo esconden adornos—
+pero son de la misma familia.
+
+**Descartados tras refutarlos,** anotados para que nadie los vuelva a levantar:
+que `can_start` diga que sí sobre una evaluación sin banco (el contrato lo
+define así a propósito, y el arranque devuelve 409); que la segunda prueba del
+área segura pase igual rota y arreglada (es correcto: comprueba la ausencia de
+hueco duplicado, no el arreglo); y que falte una prueba con dos usuarios sobre
+la misma evaluación (el código es correcto y el «fallo» solo aparece después de
+editarlo).
+
+---
+
 ## 5. Lo que depende de Rodrigo, no del código
 
 - **Una cuenta de prueba creada por error con el correo de Rodrigo.** Probando
@@ -360,10 +460,11 @@ botón, que es justo lo que se ve en la captura.
   registro, no se pierde en silencio— pero no sale de la máquina. Railway →
   servicio `api` → Variables → `ALERT_EMAIL` = un correo. No hay código que
   tocar.
-- **Instalar el APK** para probar el apartado 3.2. Hay que recompilarlo: el que
-  hay en `app/build/` es del 16 y no lleva nada de hoy.
-  `flutter build apk --release --dart-define=ATENEA_API=…` — la orden completa
-  está en el `README.md`.
+- **Instalar el APK** para probar el apartado 3.2. El del 18 a las 00:50 ya se
+  envió y lleva el arreglo de la barra de navegación, pero no lo que se corrigió
+  después de la revisión. Recompilar con `flutter build apk --release`: desde
+  `c49ec5a` ya no hace falta `--dart-define=ATENEA_API`, porque la URL de
+  producción por defecto es la correcta.
 
 ---
 

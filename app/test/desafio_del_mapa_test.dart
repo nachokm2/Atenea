@@ -29,8 +29,15 @@ import 'ayudas.dart';
 ///
 /// Los nombres son los del contrato, no los que le vendrían bien al cliente:
 /// si el servidor renombra un campo, esto deja de cuadrar y la prueba cae.
+/// Ningún valor coincide con el que ya trae el constructor de
+/// `ResumenEvaluacion`. Con `pass_score: 70`, `max_attempts_per_day: 2` y
+/// `title: 'Prueba del módulo'` —los tres, los valores por defecto— se podía
+/// cablear el DTO para que ignorase el JSON entero y seis de las siete
+/// pruebas seguían verdes.
 Map<String, dynamic> _desafio({
   int intentosUsados = 0,
+  int tope = 3,
+  String estadoContenido = 'ready',
   double? mejorPuntaje,
   bool aprobada = false,
   bool puedeEmpezar = true,
@@ -39,11 +46,11 @@ Map<String, dynamic> _desafio({
     <String, dynamic>{
       'assessment_id': 'eval-1',
       'module_id': 'mod-1',
-      'title': 'Prueba del módulo',
+      'title': 'Prueba del Castillo',
       'question_count': 4,
-      'pass_score': 70.0,
-      'max_attempts_per_day': 2,
-      'content_status': 'ready',
+      'pass_score': 80.0,
+      'max_attempts_per_day': tope,
+      'content_status': estadoContenido,
       'attempts_used': intentosUsados,
       'best_score': mejorPuntaje,
       'passed': aprobada,
@@ -114,9 +121,11 @@ void main() {
     expect(evaluacion!.id, 'eval-1');
     expect(evaluacion.moduloId, 'mod-1');
     expect(evaluacion.preguntas, 4);
-    expect(evaluacion.puntajeAprobacion, 70);
+    expect(evaluacion.titulo, 'Prueba del Castillo');
+    expect(evaluacion.puntajeAprobacion, 80);
     expect(evaluacion.intentosUsados, 1);
-    expect(evaluacion.intentosMaximosPorDia, 2);
+    expect(evaluacion.intentosMaximosPorDia, 3);
+    expect(evaluacion.estadoContenido, EstadoContenido.listo);
     expect(evaluacion.mejorPuntaje, 55);
     expect(evaluacion.aprobada, isFalse);
     expect(evaluacion.puedeEmpezar, isTrue);
@@ -136,9 +145,13 @@ void main() {
       EstiloNodo.disponible,
     );
 
-    expect(find.text('Desafío del módulo'), findsOneWidget);
+    // El rótulo sale del servidor: el contrato prohíbe la palabra «Desafío»
+    // como nombre visible (línea 1383 y decisión D12), porque ya nombra otra
+    // actividad con recompensas distintas.
+    expect(find.text('Prueba del Castillo'), findsOneWidget);
+    expect(find.text('Desafío del módulo'), findsNothing);
     expect(_pildora('4 preguntas'), findsOneWidget);
-    expect(_pildora('Se supera con 70 %'), findsOneWidget);
+    expect(_pildora('Se supera con 80 %'), findsOneWidget);
     expect(_pildora('Tu mejor marca: 55 %'), findsOneWidget);
   });
 
@@ -182,15 +195,39 @@ void main() {
     expect(find.textContaining('Completa las lecciones'), findsNothing);
   });
 
-  testWidgets('bloqueado sin enfriamiento manda a terminar las lecciones',
+  testWidgets('sin lecciones terminadas manda a terminarlas',
       (WidgetTester tester) async {
+    // Bloqueo que viene del módulo, no de la prueba: quedan intentos y no hay
+    // enfriamiento, así que lo que falta es estudiar.
     await _montar(
       tester,
-      ResumenEvaluacion.desdeJson(_desafio(puedeEmpezar: false)),
+      ResumenEvaluacion.desdeJson(_desafio()),
       EstiloNodo.bloqueado,
     );
 
     expect(find.textContaining('Completa las lecciones'), findsOneWidget);
+    expect(find.textContaining('Vuelve en un rato'), findsNothing);
+    expect(find.textContaining('ya usaste tus'), findsNothing);
+  });
+
+  testWidgets('gastado el cupo del día no dice «completa las lecciones»',
+      (WidgetTester tester) async {
+    // El estado que la prueba anterior fingía era imposible: el servidor no
+    // manda `can_start: false` con cero intentos y sin enfriamiento, porque
+    // `can_start = enfriamiento is None and usados < tope`. El estado que sí
+    // llega es este —cupo agotado, sin enfriamiento— y caía en la misma rama,
+    // así que a quien ya había terminado las lecciones se le decía que las
+    // completara. §7.5 separa los dos casos justo para poder distinguirlos.
+    await _montar(
+      tester,
+      ResumenEvaluacion.desdeJson(
+        _desafio(intentosUsados: 3, tope: 3, puedeEmpezar: false),
+      ),
+      EstiloNodo.bloqueado,
+    );
+
+    expect(find.textContaining('Hoy ya usaste tus 3 intentos'), findsOneWidget);
+    expect(find.textContaining('Completa las lecciones'), findsNothing);
     expect(find.textContaining('Vuelve en un rato'), findsNothing);
   });
 

@@ -316,6 +316,9 @@ class ModuleNodeOut(EsquemaBase):
     lessons_total: int = 0
     lessons_completed: int = 0
     mastery: float = 0.0
+    # Sin esto el cliente no puede abrir el módulo: lo lee, no lo encuentra,
+    # cae a `pending` y lo pinta «En construcción» aunque esté listo.
+    content_status: ContentStatus = ContentStatus.READY
     assessment_best_score: float | None = None
     assessment_passed: bool = False
     # El nodo del desafío. `None` cuando el módulo todavía no tiene evaluación

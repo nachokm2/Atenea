@@ -143,6 +143,11 @@ class NodoModulo:
     mastery: float
     assessment_best_score: float | None
     assessment_passed: bool
+    # En qué punto de su escritura está el módulo. Sin esto el cliente lo lee
+    # como nulo, cae a `pending` y pinta TODOS los módulos «En construcción»,
+    # que es el mismo fallo que §4.2 arregló para las lecciones (`255065e`),
+    # un nivel más arriba.
+    content_status: ContentStatus = ContentStatus.READY
     evaluacion: NodoEvaluacion | None = None
     temas: list[NodoTema] = field(default_factory=list)
 
@@ -605,7 +610,10 @@ class ServicioProgreso:
     # -- mapa -------------------------------------------------------------
 
     def _evaluaciones_del_mapa(
-        self, user_id: uuid.UUID, learning_path_id: uuid.UUID
+        self,
+        user_id: uuid.UUID,
+        learning_path_id: uuid.UUID,
+        avances: dict[uuid.UUID, UserModuleProgress | None],
     ) -> dict[uuid.UUID, NodoEvaluacion]:
         """El desafío de cada módulo de la ruta, listo para pintar.
 
@@ -614,6 +622,13 @@ class ServicioProgreso:
         pero esa llama a `asegurar_desbloqueado` y consulta por módulo: usarla
         aquí serían N consultas y además lanzaría en los módulos bloqueados,
         que son justo los que el mapa tiene que poder dibujar apagados.
+
+        Nada de lo que ya sabe quien llama se vuelve a pedir: `avances` son las
+        filas de `UserModuleProgress` que el mapa ya trajo en su `outerjoin`.
+        De ahí salen `best_score` y `passed`, que son **los mismos números**
+        que el nodo publica sueltos en `assessment_best_score` y
+        `assessment_passed`. Leerlos otra vez de la base sería una segunda
+        fuente para la misma cifra dentro de la misma respuesta.
 
         Lo que sí se reutiliza son las tres funciones puras que deciden las
         reglas, para no tener dos verdades sobre el mismo tope.
@@ -652,16 +667,6 @@ class ServicioProgreso:
         ).scalars():
             intentos_por_evaluacion.setdefault(intento.assessment_id, []).append(intento)
 
-        avances = {
-            fila.module_id: fila
-            for fila in self.db.execute(
-                sa.select(UserModuleProgress).where(
-                    UserModuleProgress.user_id == user_id,
-                    UserModuleProgress.module_id.in_([e.module_id for e in evaluaciones]),
-                )
-            ).scalars()
-        }
-
         cfg = ServicioConfig(self.db)
         usuario = self.db.get(User, user_id)
         instante = utcnow()
@@ -697,7 +702,10 @@ class ServicioProgreso:
     def estado_mapa_ruta(self, user_id: uuid.UUID, learning_path_id: uuid.UUID) -> MapaRuta:
         """Mapa de la ruta con el estado de bloqueo y de dominio de cada nodo (P07).
 
-        Se resuelve en cuatro consultas: ruta, módulos, temas y lecciones.
+        Se resuelve en cuatro consultas —ruta, módulos, temas y lecciones— más
+        dos para el desafío de todos los módulos: las evaluaciones de la ruta y
+        los intentos del usuario sobre ellas. Ninguna crece con el número de
+        módulos.
         Índices usados: `ix_user_module_progress_user_id_learning_path_id`,
         `ix_user_topic_progress_user_id_knowledge_area_id`,
         `ix_user_lesson_progress_user_id_module_id`.
@@ -781,7 +789,11 @@ class ServicioProgreso:
         for topic, _ in temas:
             temas_por_modulo.setdefault(topic.module_id, []).append(nodos_tema[topic.id])
 
-        evaluaciones = self._evaluaciones_del_mapa(user_id, learning_path_id)
+        evaluaciones = self._evaluaciones_del_mapa(
+            user_id,
+            learning_path_id,
+            {modulo.id: progreso for modulo, progreso in modulos},
+        )
 
         nodos_modulo: list[NodoModulo] = []
         for modulo, progreso_modulo in modulos:
@@ -795,6 +807,7 @@ class ServicioProgreso:
                     lessons_total=int(progreso_modulo.lessons_total) if progreso_modulo else 0,
                     lessons_completed=int(progreso_modulo.lessons_completed) if progreso_modulo else 0,
                     mastery=a_float(progreso_modulo.mastery) if progreso_modulo else 0.0,
+                    content_status=modulo.content_status,
                     assessment_best_score=(
                         a_float(progreso_modulo.assessment_best_score)
                         if progreso_modulo and progreso_modulo.assessment_best_score is not None

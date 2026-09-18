@@ -116,6 +116,40 @@ void main() {
     expect(tester.getBottomLeft(find.byKey(_llave)).dy, _lineaDeSeguridad);
   });
 
+  testWidgets('con el teclado abierto no se cuela un hueco muerto',
+      (WidgetTester tester) async {
+    // El único caso frágil del arreglo, y ocho de las hojas que toca llevan
+    // `TextField`. La afirmación que hay que sostener es que `SafeArea` usa
+    // `MediaQuery.padding` —que ya descuenta `viewInsets`— y no `viewPadding`.
+    // Si alguien le añadiera `maintainBottomViewPadding: true`, que suena a
+    // mejora y el SDK documenta como remedio para el salto al abrir el
+    // teclado, cada hoja con teclado ganaría 48 dp de vacío entre su último
+    // control y el teclado, y ninguna otra prueba lo vería.
+    _conBarraDelSistema(tester);
+    // Así es como lo entrega Android con el teclado abierto, y hay que
+    // ponerlo a mano: el banco de pruebas NO deriva `padding` de
+    // `viewPadding - viewInsets`, esa resta la hace el sistema en el
+    // dispositivo. El teclado tapa la barra de navegación, así que el hueco
+    // que hay que respetar pasa a ser cero y `viewPadding` conserva los 48 de
+    // la barra que sigue ahí debajo.
+    tester.view.viewInsets = const FakeViewPadding(bottom: 320);
+    tester.view.padding = FakeViewPadding.zero;
+
+    await _abrir(
+      tester,
+      (BuildContext context) => mostrarHoja<void>(
+        context,
+        constructor: (_) => const SizedBox(key: _llave, height: 120),
+      ),
+    );
+
+    expect(
+      tester.getBottomLeft(find.byKey(_llave)).dy,
+      _pantalla.height,
+      reason: 'con el teclado tapando la barra, este SafeArea no debe sumar nada',
+    );
+  });
+
   testWidgets('el «Entendido» de la hoja de módulo bloqueado es alcanzable',
       (WidgetTester tester) async {
     // La hoja exacta de la captura.

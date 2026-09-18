@@ -424,7 +424,14 @@ class ContenidoDesafio extends StatelessWidget {
       alTocar: alTocar,
       colorBorde: color.withValues(alpha: bloqueado ? 0.3 : 0.6),
       brillo: evaluacion.aprobada ? 10 : null,
-      semantica: 'Desafío del módulo. ${etiquetaDeNodo(estilo)}. '
+      // El rótulo sale del servidor, no de una constante. El contrato lo
+      // exige dos veces: `title` es «Nombre narrativo (no usar la palabra
+      // "Desafío")» —CONTRACT.md línea 1383— y la decisión D12 fija el nombre
+      // visible en «Prueba del módulo» / «Prueba del Castillo», porque
+      // «desafío» ya nombra otra actividad, `challenge`, que paga recompensas
+      // distintas. Este nodo no se pintaba nunca, así que la infracción no se
+      // veía hasta que empezó a llegar el dato.
+      semantica: '${evaluacion.titulo}. ${etiquetaDeNodo(estilo)}. '
           '${evaluacion.preguntas} preguntas.',
       hijo: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -435,7 +442,7 @@ class ContenidoDesafio extends StatelessWidget {
               const SizedBox(width: Espacio.xs),
               Expanded(
                 child: Text(
-                  'Desafío del módulo',
+                  evaluacion.titulo,
                   style: context.textos.titleMedium,
                 ),
               ),
@@ -469,11 +476,18 @@ class ContenidoDesafio extends StatelessWidget {
           if (bloqueado || evaluacion.enEnfriamiento) ...<Widget>[
             const SizedBox(height: Espacio.xs),
             Text(
+              // Tres razones distintas, tres mensajes. Antes eran dos, y quien
+              // había gastado sus intentos del día leía «completa las
+              // lecciones» sobre unas lecciones ya completadas.
               evaluacion.enEnfriamiento
                   ? 'Vuelve en un rato: el Reino prepara preguntas nuevas para '
                       'tu siguiente intento.'
-                  : 'Completa las lecciones del módulo para presentarte al '
-                      'desafío.',
+                  : evaluacion.sinIntentosHoy
+                      ? 'Hoy ya usaste tus '
+                          '${evaluacion.intentosMaximosPorDia} intentos. '
+                          'Mañana vuelves a tenerlos.'
+                      : 'Completa las lecciones del módulo para presentarte a '
+                          'la prueba.',
               style: context.textos.bodyMedium?.copyWith(color: p.textoSecundario),
             ),
           ],
