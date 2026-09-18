@@ -319,6 +319,8 @@ class ModuleNodeOut(EsquemaBase):
     # Sin esto el cliente no puede abrir el módulo: lo lee, no lo encuentra,
     # cae a `pending` y lo pinta «En construcción» aunque esté listo.
     content_status: ContentStatus = ContentStatus.READY
+    summary: str | None = None
+    estimated_minutes: int | None = None
     assessment_best_score: float | None = None
     assessment_passed: bool = False
     # El nodo del desafío. `None` cuando el módulo todavía no tiene evaluación

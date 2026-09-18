@@ -14,8 +14,8 @@ sobrevive a su sesión es otra cosa que promete y no cumple.
 | | |
 |---|---|
 | Rama | `main`, todo subido a `origin` |
-| Pruebas del cliente | **192 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
-| Pruebas del servidor | **649 verdes**, `ruff check` limpio |
+| Pruebas del cliente | **203 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
+| Pruebas del servidor | **660 verdes**, `ruff check` limpio |
 | `flutter analyze` | limpio |
 | APK de release | compilado y enviado a Rodrigo a las 02:38 del 18, **con todo lo de la sesión** |
 | Producción | desplegada, `/health` en 200 con base y worker `ok`, migración aplicada, arranque sin trazas |
@@ -73,16 +73,30 @@ Lo que se cerró, para que nadie lo vuelva a reportar:
 | Un reinicio resucita avisos ya vistos | **falso**, verificado en el Java del plugin |
 | `tomarDestino()` deja el toque sin destino | **falso**, el enrutador lleva a Inicio igual |
 
-### 3.1 Lo que sigue sin cubrir, y por qué
+### 3.1 La carrera `resumed`/`paused` — ya con prueba
 
-**La carrera entre `resumed` y `paused` está arreglada pero sin prueba.**
-Montarla exige falsear `AndroidFlutterLocalNotificationsPlugin`, que el plugin
-resuelve por tipo concreto; sin él el permiso sale `false`, la cadena sale vacía
-y la carrera no se puede provocar. La vía sería un *mock* del canal
-`dexterous.com/flutter/local_notifications` con
-`setMockMethodCallHandler`, devolviendo `areNotificationsEnabled` con retardo
-para abrir la ventana a mano. Está anotado aquí en vez de fingir cobertura con
-una prueba que pasaría siempre.
+Estaba anotada como arreglada y sin cubrir, porque montarla exige falsear
+`AndroidFlutterLocalNotificationsPlugin` —que el plugin resuelve por tipo
+concreto— y abrir a mano la ventana entre las dos ramas.
+`test/recordatorio_carrera_test.dart` lo hace: el permiso se controla con un
+`Completer`, así que la ventana es exacta en vez de depender de un `pump`
+afortunado, y el canal de `flutter_timezone` va falseado porque si no
+`iniciar()` no vuelve nunca y la prueba se cuelga sin decir por qué.
+
+**Lo que salió al romper el código, y que no se deduce leyéndolo:** las dos
+protecciones son redundantes. Quitar solo `if (_enPrimerPlano)` deja la prueba
+verde —la cola serializa y el cancelado corre antes de que `sincronizar`
+programe—; quitar solo la cola también —el guard ve `_enPrimerPlano` ya en
+falso—. Solo quitando **las dos** se pone roja, con el registro
+`[zonedSchedule ×4, cancelAll]`: la cadena cancelada justo después de ponerla.
+Cualquiera de las dos sostiene la invariante hoy; quien quite una tiene que
+dejar la otra, y esta prueba es lo único que lo impide.
+
+Un detalle del método que costó encontrar: hay que **esperar después de
+`paused`** para que la cadena esté ya puesta cuando el permiso contesta. Sin
+esa espera, programar y cancelar se resuelven en el mismo puñado de microtareas
+y la prueba pasaba incluso con las dos protecciones quitadas. Una prueba de
+concurrencia que no controla el entrelazado no prueba nada.
 
 ### 3.2 Lo que solo se puede comprobar en el móvil
 

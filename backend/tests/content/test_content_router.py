@@ -604,6 +604,39 @@ def test_el_nodo_del_modulo_dice_si_esta_escrito(cliente, db, contenido):
     assert modulos[1]["content_status"] == "pending"
 
 
+def test_el_nodo_del_modulo_trae_lo_que_el_mapa_pinta(cliente, db, contenido):
+    """El resumen y la duración: los pinta el nodo y no viajaban.
+
+    `ContenidoModulo` escribe el párrafo de `summary` y una píldora con
+    `estimated_minutes` (`nodos_mapa.dart`), y las dos columnas existen en
+    `path_modules` desde siempre. Como el nodo no las serializaba, el módulo se
+    veía sin decir de qué trata ni cuánto lleva.
+
+    Se comprueban con valores propios, no con los de la fixture por defecto: un
+    `None` a cada lado también «coincide».
+    """
+    contenido.modulo1.summary = "Cómo unir dos tablas sin perder filas"
+    contenido.modulo1.estimated_minutes = 35
+    db.flush()
+
+    nodo = cliente.get(f"/api/v1/paths/{contenido.ruta.id}").json()["modules"][0]
+
+    assert nodo["summary"] == "Cómo unir dos tablas sin perder filas"
+    assert nodo["estimated_minutes"] == 35
+
+
+def test_un_modulo_sin_resumen_manda_nulo_y_no_una_cadena_vacia(cliente, contenido):
+    """El cliente solo pinta el párrafo si hay algo que decir.
+
+    `if (modulo.resumen != null && modulo.resumen!.trim().isNotEmpty)`: una
+    cadena vacía pasaría el primer filtro y dejaría un hueco en la tarjeta.
+    """
+    nodo = cliente.get(f"/api/v1/paths/{contenido.ruta.id}").json()["modules"][1]
+
+    assert nodo["summary"] is None
+    assert nodo["estimated_minutes"] is None
+
+
 def test_el_cupo_del_desafio_se_cuenta_en_la_fecha_del_aprendiz(
     cliente, db, usuario, contenido, monkeypatch
 ):

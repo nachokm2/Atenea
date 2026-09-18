@@ -308,6 +308,8 @@ def _detalle_out(detalle: servicio_rutas.DetalleRuta) -> PathDetailOut:
                 lessons_completed=modulo.lessons_completed,
                 mastery=modulo.mastery,
                 content_status=modulo.content_status,
+                summary=modulo.summary,
+                estimated_minutes=modulo.estimated_minutes,
                 assessment_best_score=modulo.assessment_best_score,
                 assessment_passed=modulo.assessment_passed,
                 assessment=None

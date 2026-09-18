@@ -148,6 +148,12 @@ class NodoModulo:
     # que es el mismo fallo que §4.2 arregló para las lecciones (`255065e`),
     # un nivel más arriba.
     content_status: ContentStatus = ContentStatus.READY
+    # Los dos que el nodo del mapa pinta y nadie mandaba: el párrafo de qué
+    # trae el módulo y la píldora de cuánto lleva. `difficulty` y `stars` no
+    # viajan a propósito —el cliente los lee pero no los usa en ninguna
+    # pantalla, y `stars` ni siquiera es una columna.
+    summary: str | None = None
+    estimated_minutes: int | None = None
     evaluacion: NodoEvaluacion | None = None
     temas: list[NodoTema] = field(default_factory=list)
 
@@ -808,6 +814,12 @@ class ServicioProgreso:
                     lessons_completed=int(progreso_modulo.lessons_completed) if progreso_modulo else 0,
                     mastery=a_float(progreso_modulo.mastery) if progreso_modulo else 0.0,
                     content_status=modulo.content_status,
+                    summary=modulo.summary,
+                    estimated_minutes=(
+                        int(modulo.estimated_minutes)
+                        if modulo.estimated_minutes is not None
+                        else None
+                    ),
                     assessment_best_score=(
                         a_float(progreso_modulo.assessment_best_score)
                         if progreso_modulo and progreso_modulo.assessment_best_score is not None
