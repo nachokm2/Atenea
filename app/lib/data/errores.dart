@@ -75,9 +75,7 @@ class ErrorAtenea implements Exception {
         return ErrorAtenea(
           codigo: (err['code'] ?? err['codigo'] ?? 'error').toString(),
           mensaje: (err['message'] ?? err['mensaje'] ?? _porEstado(estado)).toString(),
-          detalles: err['details'] is Map
-              ? Map<String, dynamic>.from(err['details'] as Map)
-              : null,
+          detalles: _detallesDe(err),
           estadoHttp: estado,
         );
       }
@@ -87,9 +85,7 @@ class ErrorAtenea implements Exception {
         return ErrorAtenea(
           codigo: (mapa['code'] ?? 'error').toString(),
           mensaje: (mapa['message'] ?? _porEstado(estado)).toString(),
-          detalles: mapa['details'] is Map
-              ? Map<String, dynamic>.from(mapa['details'] as Map)
-              : null,
+          detalles: _detallesDe(mapa),
           estadoHttp: estado,
         );
       }
@@ -114,6 +110,26 @@ class ErrorAtenea implements Exception {
     }
 
     return ErrorAtenea(codigo: 'error', mensaje: _porEstado(estado), estadoHttp: estado);
+  }
+
+  /// Junta `details` y `field_errors`, que el Reino manda **hermanos**.
+  ///
+  /// El sobre es `{"error": {"message": …, "details": {…}, "field_errors": […]}}`
+  /// y aquí se guardaba solo `details`. Pero `details` viene casi siempre vacío
+  /// y lo útil está en `field_errors`: al registrarse con una contraseña floja,
+  /// `message` dice «Esa contraseña es demasiado débil» y `field_errors` dice
+  /// **qué le falta** —«Debe incluir una letra mayúscula», «Debe incluir un
+  /// número»—. Sin esto el aprendiz lee que algo está mal y no puede saber qué,
+  /// que es tanto como no poder registrarse.
+  ///
+  /// Las pantallas ya lo buscaban dentro de `detalles['field_errors']`: la
+  /// mitad que faltaba era esta, ponerlo ahí.
+  static Map<String, dynamic>? _detallesDe(Map<String, dynamic> err) {
+    final Map<String, dynamic> junto = <String, dynamic>{
+      if (err['details'] is Map) ...Map<String, dynamic>.from(err['details'] as Map),
+      if (err['field_errors'] is List) 'field_errors': err['field_errors'],
+    };
+    return junto.isEmpty ? null : junto;
   }
 
   static String _porEstado(int? estado) => switch (estado) {
