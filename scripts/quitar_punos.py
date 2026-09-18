@@ -214,6 +214,18 @@ MUNON_AL_AIRE = 260
 #: Qué parte de la mano cuenta como muñeca, desde su borde superior.
 ALTO_DE_LA_MUNECA = 45
 
+#: Cuánto agujero se tolera cuando la salida es borrar en vez de teñir.
+#:
+#: Y se mide **solo donde se ve**: un agujero en el arma que cae sobre el cuerpo
+#: deja ver el brazo, que es justo lo que se quiere; solo canta el que cae sobre
+#: el fondo. Tardé en darme cuenta y estuve descartando esta vía con el número
+#: equivocado.
+#:
+#: Mil cien porque `espada_entrenamiento` masculina deja 873 y, mirada a tamaño
+#: real, no se le nota nada. Las demás piezas ni llegan aquí: se arreglan por la
+#: vía buena, la de teñir.
+HUECO_QUE_SE_VE = 1100
+
 #: Y solo en las piezas donde el color signifique algo.
 #:
 #: Este paso borra por color lo pequeño que esté pegado al puño, y en una pieza
@@ -381,6 +393,16 @@ def _normalizar(rgb: np.ndarray, mascara: np.ndarray) -> np.ndarray:
     return salida.astype(np.uint8)
 
 
+def _silueta(figura: str, lado: str) -> np.ndarray:
+    """Lo que hay dibujado detrás del arma: el cuerpo y la mano de ese lado.
+
+    Un agujero en la pieza que caiga aquí no se ve —deja ver el brazo—, así que
+    esto es lo que separa un agujero real de uno inofensivo.
+    """
+    cuerpo = np.array(Image.open(CUERPOS / f"{figura}_sin_manos.webp").convert("RGBA"))
+    return (cuerpo[:, :, 3] > OPACO) | mascara_de_la_mano(figura, lado)
+
+
 def _banda_de_muneca(figura: str, lado: str) -> np.ndarray:
     """La parte alta de la mano del cuerpo: si queda al aire, se ve el corte."""
     mano = mascara_de_la_mano(figura, lado)
@@ -512,17 +534,45 @@ def procesar(origen: pathlib.Path, figura: str, simular: bool) -> dict[str, obje
     # contando solo lo que de verdad va a quedar dibujado.
     queda = _correr((a[:, :, 3] > OPACO) & ~de_sobra, dx, dy)
     munon = int((_banda_de_muneca(figura, lado) & ~_correr(mano, dx, dy) & ~queda).sum())
-    if munon > MUNON_AL_AIRE:
-        return {
-            "pieza": origen.stem,
-            "estado": f"dejaría {munon} px de muñeca al aire; se deja como está",
-        }
 
     movida = _mover(a, dx, dy)
     if movida is None:
         return {
             "pieza": origen.stem,
             "estado": f"no cabe movida ({dx:+d},{dy:+d}); se deja como está",
+        }
+
+    if munon > MUNON_AL_AIRE:
+        # Su puño es demasiado pequeño para hacer de mano: apagar la del cuerpo
+        # dejaría el brazo cortado. Pero **al revés sí funciona**: si el dibujo
+        # es pequeño se borra entero y lo tapa la mano del cuerpo, que en ese
+        # caso se sigue pintando —y va encima del arma, que es lo que hace falta
+        # para que parezca que la agarra—.
+        #
+        # El agujero que deja el borrado solo se ve donde cae sobre el fondo:
+        # donde hay cuerpo detrás, deja ver el brazo, que es lo que se quiere.
+        # Ese es el número que decide, y no el tamaño del agujero.
+        visible = int((_correr(mano | de_sobra, dx, dy) & ~_silueta(figura, lado)).sum())
+        if visible > HUECO_QUE_SE_VE:
+            return {
+                "pieza": origen.stem,
+                "estado": (
+                    f"su puño no puede hacer de mano ({munon} px de muñeca al aire) "
+                    f"y borrarlo deja {visible} px de agujero a la vista; se deja como está"
+                ),
+            }
+        if not simular:
+            borrada = movida.copy()
+            borrada[:, :, 3] = np.where(_correr(mano | de_sobra, dx, dy), 0, borrada[:, :, 3])
+            Image.fromarray(borrada).save(origen)
+        return {
+            "pieza": origen.stem,
+            "estado": (
+                f"puño {int(puno.sum())} px, demasiado pequeño para hacer de mano: "
+                f"se borra y la tapa la del cuerpo, agujero a la vista {visible} px, "
+                f"movida ({dx:+d},{dy:+d})"
+            ),
+            "hecha": True,
         }
 
     # El puño sale a su propia capa, normalizado para poder teñirlo, y se borra
