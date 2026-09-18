@@ -35,6 +35,23 @@ Color? colorDesdeHex(String? valor) {
 /// Emblemas por palabra clave: la pista del Reino (`icon_key`) o el nombre del
 /// conocimiento deciden qué símbolo lleva el territorio.
 const Map<String, IconData> _emblemasPorClave = <String, IconData>{
+  // Los siete sellos del mapa del Reino, y **van primero**.
+  //
+  // `iconoDeTerritorio` recorre este mapa en orden de inserción y busca la
+  // clave dentro de «pista + nombre», así que una clave genérica puede ganarle
+  // a la del territorio por el nombre: «Bóveda de los Datos» casaba con `data`
+  // y se llevaba el icono de gráficas en vez de la bóveda. De los siete sellos
+  // sembrados solo acertaban dos —`castle`, y `cloud_keep` por la subcadena
+  // `cloud`—; los otros cinco salían por el nombre o por el reparto de reserva,
+  // donde dos territorios distintos pueden acabar con el mismo sello.
+  'council_hall': Icons.account_balance_rounded,
+  'cloud_keep': Icons.cloud_rounded,
+  'aqueduct': Icons.water_rounded,
+  'castle': Icons.castle_rounded,
+  'vault': Icons.lock_rounded,
+  'tower': Icons.fort_rounded,
+  'forge': Icons.local_fire_department_rounded,
+
   'sql': Icons.storage_rounded,
   'data': Icons.insights_rounded,
   'dato': Icons.insights_rounded,
@@ -64,7 +81,6 @@ const Map<String, IconData> _emblemasPorClave = <String, IconData>{
   'salud': Icons.favorite_rounded,
   'law': Icons.gavel_rounded,
   'derech': Icons.gavel_rounded,
-  'castle': Icons.castle_rounded,
   'forest': Icons.forest_rounded,
   'book': Icons.menu_book_rounded,
   'map': Icons.map_rounded,
@@ -152,6 +168,7 @@ class EmblemaTerritorio extends StatelessWidget {
     this.tamano = 52,
     this.enSilueta = false,
     this.resplandor = false,
+    this.semantica,
   });
 
   /// Nombre del conocimiento o de la Ruta, para elegir el emblema.
@@ -172,6 +189,15 @@ class EmblemaTerritorio extends StatelessWidget {
   /// Resplandor de territorio completado.
   final bool resplandor;
 
+  /// Qué lee en voz alta el lector de pantalla.
+  ///
+  /// Con datos reales tiene que decir nombre y estado —«Castillo de las
+  /// Consultas, En la bruma»—, porque si no el estado de un territorio depende
+  /// solo del color y del relleno, y eso no lo ve todo el mundo. Sin ella cae
+  /// en la etiqueta genérica de la silueta, que es lo que había cuando los
+  /// cuatro sellos eran de adorno.
+  final String? semantica;
+
   @override
   Widget build(BuildContext context) {
     final AteneaPalette p = context.paleta;
@@ -182,7 +208,7 @@ class EmblemaTerritorio extends StatelessWidget {
         enSilueta ? Icons.terrain_rounded : iconoDeTerritorio(iconoKey, nombre);
 
     return Semantics(
-      label: enSilueta ? 'Territorio por descubrir' : null,
+      label: semantica ?? (enSilueta ? 'Territorio por descubrir' : null),
       child: Container(
         width: tamano,
         height: tamano,
@@ -466,6 +492,88 @@ class Estrellas extends StatelessWidget {
             ),
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// El mapa del Reino
+// ---------------------------------------------------------------------------
+
+/// Los territorios del Reino con el estado de cada uno.
+///
+/// Aquí había, dentro de la pantalla, un `for (int i = 0; i < 4; i++)` de
+/// cuatro siluetas idénticas bajo la frase «Territorios en la bruma. Cada ruta
+/// que abres ilumina uno». El servidor lleva desde siempre calculando el estado
+/// de los siete territorios por usuario —`GET /territories`— y **nadie se lo
+/// pedía**: `repos.conocimiento` era código muerto entero. La frase era
+/// verificablemente falsa, y el cuatro un parámetro de juego escrito a mano en
+/// la interfaz.
+///
+/// Está aquí y no dentro de la pantalla para poder montarlo solo: la pantalla
+/// de Aventura arrastra el pulso del nodo activo, que es una animación infinita
+/// y deja colgada cualquier prueba que la monte entera.
+class MapaDelReino extends StatelessWidget {
+  const MapaDelReino({required this.territorios, super.key});
+
+  /// Lo que envía el Reino. Si está vacío, este widget no debería montarse.
+  final List<Territorio> territorios;
+
+  @override
+  Widget build(BuildContext context) {
+    final AteneaPalette p = context.paleta;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        const EncabezadoSeccion(
+          titulo: 'El mapa del Reino',
+          subtitulo: 'Los territorios que dominas se despejan.',
+        ),
+        // Un `Wrap` y no un `Row`: siete emblemas de 56 dp no caben de una fila
+        // en un móvil.
+        Wrap(
+          spacing: Espacio.md,
+          runSpacing: Espacio.md,
+          children: <Widget>[
+            for (final Territorio t in territorios)
+              SizedBox(
+                width: 76,
+                child: Column(
+                  children: <Widget>[
+                    EmblemaTerritorio(
+                      tamano: 56,
+                      nombre: t.nombre,
+                      iconoKey: t.iconoKey,
+                      colorAcento: t.colorAcento,
+                      enSilueta: t.estado == EstadoTerritorio.bruma,
+                      resplandor: t.estado == EstadoTerritorio.completado,
+                      // El estado no puede depender solo del color.
+                      semantica: '${t.nombre}, ${t.estado.etiqueta}',
+                    ),
+                    const SizedBox(height: Espacio.xs),
+                    Text(
+                      t.nombre,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.textos.labelSmall?.copyWith(
+                        color: t.estado == EstadoTerritorio.bruma
+                            ? p.textoSecundario
+                            : p.textoPrimario,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: Espacio.sm),
+        Text(
+          'Cuanto más dominas un conocimiento, más se despeja su territorio.',
+          style: context.textos.bodyMedium?.copyWith(color: p.textoSecundario),
+        ),
+      ],
     );
   }
 }

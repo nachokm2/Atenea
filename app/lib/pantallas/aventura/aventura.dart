@@ -42,7 +42,10 @@ class _PantallaAventuraState extends State<PantallaAventura> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      context.read<ControladorAventura>().cargarRutas();
+      final ControladorAventura aventura = context.read<ControladorAventura>();
+      aventura.cargarRutas();
+      // Aparte y sin esperar: si el mapa no llega, la pantalla sigue entera.
+      aventura.cargarTerritorios();
     });
   }
 
@@ -163,7 +166,15 @@ class _PantallaAventuraState extends State<PantallaAventura> {
         ),
       ],
       cuerpo: RefreshIndicator(
-        onRefresh: () => aventura.cargarRutas(forzar: true),
+        onRefresh: () async {
+          // El mapa se refresca con la pantalla: el aprendiz que acaba de
+          // terminar una lección es justo el que tiene un territorio nuevo
+          // encendido, y sería el último en verlo.
+          await Future.wait(<Future<void>>[
+            aventura.cargarRutas(forzar: true),
+            aventura.cargarTerritorios(forzar: true),
+          ]);
+        },
         child: NotificationListener<ScrollNotification>(
           onNotification: (ScrollNotification aviso) {
             final ScrollMetrics m = aviso.metrics;
@@ -208,7 +219,7 @@ class _PantallaAventuraState extends State<PantallaAventura> {
                   ),
                 ..._misTerritorios(aventura),
                 ..._rutasDelReino(aventura),
-                ..._porDescubrir(),
+                ..._mapaDelReino(aventura),
               ],
             ],
           ),
@@ -218,7 +229,7 @@ class _PantallaAventuraState extends State<PantallaAventura> {
   }
 
   List<Widget> _esqueletos() => <Widget>[
-        const EncabezadoSeccion(titulo: 'Mis territorios'),
+        const EncabezadoSeccion(titulo: 'Mis rutas'),
         for (int i = 0; i < 2; i++) ...<Widget>[
           const EsqueletoRuta(),
           const SizedBox(height: Espacio.sm),
@@ -232,7 +243,7 @@ class _PantallaAventuraState extends State<PantallaAventura> {
 
     if (aventura.sinRutasPropias) {
       return <Widget>[
-        const EncabezadoSeccion(titulo: 'Mis territorios'),
+        const EncabezadoSeccion(titulo: 'Mis rutas'),
         _HeroeSinRutas(
           alCrear: () => context.push(Rutas.crearRuta),
           alVerElReino: aventura.delReino.isEmpty ? null : _irAlReino,
@@ -242,7 +253,7 @@ class _PantallaAventuraState extends State<PantallaAventura> {
 
     return <Widget>[
       EncabezadoSeccion(
-        titulo: 'Mis territorios',
+        titulo: 'Mis rutas',
         subtitulo: mias.length == 1
             ? 'Un camino abierto en el Reino'
             : '${mias.length} caminos abiertos en el Reino',
@@ -307,29 +318,11 @@ class _PantallaAventuraState extends State<PantallaAventura> {
     ];
   }
 
-  List<Widget> _porDescubrir() {
-    final AteneaPalette p = context.paleta;
-    return <Widget>[
-      const EncabezadoSeccion(
-        titulo: 'Por descubrir',
-        subtitulo: 'Territorios en la bruma. Cada ruta que abres ilumina uno.',
-      ),
-      Row(
-        children: <Widget>[
-          for (int i = 0; i < 4; i++) ...<Widget>[
-            const EmblemaTerritorio(enSilueta: true, tamano: 56),
-            if (i < 3) const SizedBox(width: Espacio.sm),
-          ],
-        ],
-      ),
-      const SizedBox(height: Espacio.sm),
-      Text(
-        'El mapa del Reino crece contigo: cuanto más dominas un conocimiento, '
-        'más se despeja su territorio.',
-        style: context.textos.bodyMedium?.copyWith(color: p.textoSecundario),
-      ),
-    ];
-  }
+  /// El mapa del Reino, si ha llegado. Ver [MapaDelReino].
+  List<Widget> _mapaDelReino(ControladorAventura aventura) =>
+      aventura.territorios.isEmpty
+          ? const <Widget>[]
+          : <Widget>[MapaDelReino(territorios: aventura.territorios)];
 }
 
 /// Héroe de bienvenida cuando el usuario todavía no tiene ninguna ruta.

@@ -1627,8 +1627,13 @@ class Territorio {
         descripcion: _txtN(json['description']),
         estado: EstadoTerritorio.desdeApi(json['status']),
         dominio: _dec(_alguna(json, <String>['mastery', 'mastery_pct'])),
+        // `knowledge_name` va primero porque es el que manda el contrato
+        // (§7.4). Los otros dos se escribieron copiando los alias de
+        // `ResumenRuta`, que sí usa `knowledge_area_name`, y por eso este campo
+        // valía `null` siempre. No se quitan: si un despliegue quedara atrás, la
+        // pantalla no se queda sin nombres.
         nombreConocimiento: _txtN(
-          _alguna(json, <String>['knowledge_area_name', 'area_name']),
+          _alguna(json, <String>['knowledge_name', 'knowledge_area_name', 'area_name']),
         ),
         colorAcento: _txtN(json['accent_color']),
         zonasTotales: _ent(_alguna(json, <String>['zones_total', 'modules_total'])),

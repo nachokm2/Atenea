@@ -114,6 +114,7 @@ class ControladorAventura extends ChangeNotifier {
   // --- Listas de P22 -------------------------------------------------------
   List<ResumenRuta> _mias = const <ResumenRuta>[];
   List<ResumenRuta> _delReino = const <ResumenRuta>[];
+  List<Territorio> _territorios = const <Territorio>[];
   String? _cursorMias;
   bool _hayMasMias = false;
   bool _cargandoRutas = false;
@@ -148,11 +149,21 @@ class ControladorAventura extends ChangeNotifier {
   // Lecturas
   // -------------------------------------------------------------------------
 
-  /// Mis territorios, en el orden que envía el Reino.
+  /// Mis rutas, en el orden que envía el Reino.
+  ///
+  /// Se llamaba «mis territorios» y no lo son: un conocimiento con dos rutas
+  /// sale dos veces, y uno con dominio pero sin ruta no sale nunca. Los
+  /// territorios son otra cosa y ahora están al lado, en [territorios].
   List<ResumenRuta> get mias => List<ResumenRuta>.unmodifiable(_mias);
 
   /// Rutas del Reino, curadas y pregeneradas.
   List<ResumenRuta> get delReino => List<ResumenRuta>.unmodifiable(_delReino);
+
+  /// El mapa del Reino: los siete territorios con el estado de cada uno.
+  ///
+  /// Vacío mientras no lleguen, y vacío también si fallan: la sección
+  /// simplemente no se pinta. Ver [cargarTerritorios].
+  List<Territorio> get territorios => List<Territorio>.unmodifiable(_territorios);
 
   /// ¿Quedan más rutas propias por traer?
   bool get hayMasMias => _hayMasMias;
@@ -249,6 +260,28 @@ class ControladorAventura extends ChangeNotifier {
   // -------------------------------------------------------------------------
 
   /// Carga las dos listas de P22.
+  /// Trae el mapa del Reino: los siete territorios con su estado por usuario.
+  ///
+  /// **Aparte de `cargarRutas`, y a propósito.** Dentro de su `Future.wait`, un
+  /// fallo aquí pondría `_errorRutas` y la pantalla entera diría «El Reino no
+  /// responde» aunque las dos listas de rutas hubieran llegado perfectas: se
+  /// degradaría una pantalla que funciona por adornar una sección. Aquí un
+  /// fallo deja la lista vacía y la sección no se pinta. Nada más.
+  ///
+  /// Y **su guard mira sus propios datos**, nunca `_mias`. Heredar el de las
+  /// rutas dejaría sin refrescar justo al aprendiz que tiene rutas, que es el
+  /// único cuyo estado de territorio cambia: haría una lección, volvería, y
+  /// vería su castillo igual de apagado que antes.
+  Future<void> cargarTerritorios({bool forzar = false}) async {
+    if (!forzar && _territorios.isNotEmpty) return;
+    try {
+      _territorios = (await _repos.conocimiento.territorios()).elementos;
+      notifyListeners();
+    } catch (_) {
+      // Sin territorios no hay sección, y ya está. No es un error de pantalla.
+    }
+  }
+
   Future<void> cargarRutas({bool forzar = false}) async {
     if (_cargandoRutas) return;
     if (!forzar && _mias.isNotEmpty) return;
@@ -616,6 +649,7 @@ class ControladorAventura extends ChangeNotifier {
     detenerSondeo();
     _mias = const <ResumenRuta>[];
     _delReino = const <ResumenRuta>[];
+    _territorios = const <Territorio>[];
     _cursorMias = null;
     _hayMasMias = false;
     _ruta = null;
