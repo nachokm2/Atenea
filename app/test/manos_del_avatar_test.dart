@@ -251,4 +251,71 @@ void main() {
       lessThan(rutas.indexOf(Arte.mano(figura, derecha: true))),
     );
   });
+
+  testWidgets('sobre una figura NO canónica, el puño se mueve con su arma',
+      (WidgetTester tester) async {
+    // Las piezas se dibujaron sobre la figura canónica de cada familia, así que
+    // sobre las otras cuatro el cliente las desplaza hasta la mano de esa
+    // figura. El puño que trae el arma tiene que viajar con ella.
+    //
+    // No lo hacía: el arma se movía y el puño se quedaba en el sitio de la
+    // canónica, así que salía una mano flotando y el brazo cortado. En cuatro de
+    // las seis figuras, es decir en la mayoría de los aprendices. No lo vio
+    // ninguna prueba porque todas montaban la canónica, que es justo donde el
+    // fallo no existe: su ajuste es la identidad.
+    const String otra = 'base_masculino_001';
+    expect(Arte.ajuste(otra).esNeutro, isFalse, reason: 'si fuera neutra no probaría nada');
+
+    await tester.binding.setSurfaceSize(const Size(412, 915));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AteneaTheme.oscuro(),
+        home: const Scaffold(
+          body: AvatarCapas(
+            capas: <CapaAvatar>[
+              CapaAvatar(
+                clave: 'weapon',
+                ranura: RanuraItem.arma,
+                assetKey: 'espada_corta_acero_weapon.webp',
+                z: 130,
+              ),
+            ],
+            rasgos: RasgosAvatar(formaTrato: FormaTrato.masculino, rostro: otra),
+            tamano: 300,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    Offset desplazamientoDe(String ruta) {
+      final Finder imagen = find.byWidgetPredicate(
+        (Widget w) =>
+            w is Image && w.image is AssetImage && (w.image as AssetImage).assetName == ruta,
+      );
+      expect(imagen, findsOneWidget, reason: 'falta $ruta');
+      final Iterable<Transform> envoltorios =
+          tester.widgetList<Transform>(find.ancestor(of: imagen, matching: find.byType(Transform)));
+      for (final Transform t in envoltorios) {
+        // La traslación de una Matrix4 vive en las posiciones 12 y 13.
+        final double dx = t.transform.storage[12];
+        final double dy = t.transform.storage[13];
+        if (dx != 0 || dy != 0) return Offset(dx, dy);
+      }
+      return Offset.zero;
+    }
+
+    final Offset arma = desplazamientoDe(Arte.capaDeEquipo(
+      figura: otra,
+      src: 'espada_corta_acero_weapon.webp',
+    ));
+    final Offset puno = desplazamientoDe(Arte.punoDeLaPieza(
+      figura: otra,
+      src: 'espada_corta_acero_weapon.webp',
+    ));
+
+    expect(arma, isNot(Offset.zero), reason: 'esta figura sí se ajusta');
+    expect(puno, arma, reason: 'el puño tiene que ir donde va su arma');
+  });
 }

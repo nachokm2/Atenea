@@ -244,10 +244,17 @@ class AvatarCapas extends StatelessWidget {
             if (apilando)
               for (final CapaAvatar capa in delante)
                 if (Arte.traeSuPuno(figura: clave, src: capa.assetKey))
-                  _Tinte(
-                    ruta: Arte.punoDeLaPieza(figura: clave, src: capa.assetKey),
-                    color: CatalogoAvatar.piel(r.tonoPiel),
+                  // Con el mismo desplazamiento que su arma, que es lo que las
+                  // mantiene juntas sobre las cuatro figuras no canónicas.
+                  colocadaSobreLaFigura(
+                    figura: clave,
+                    clave: capa.clave,
                     lado: tamano,
+                    hijo: _Tinte(
+                      ruta: Arte.punoDeLaPieza(figura: clave, src: capa.assetKey),
+                      color: CatalogoAvatar.piel(r.tonoPiel),
+                      lado: tamano,
+                    ),
                   ),
             // Y los guantes al final, que van sobre la mano. Un guante debajo de
             // ella es un guante que no se ve.
@@ -295,6 +302,50 @@ class _Tinte extends StatelessWidget {
       );
 }
 
+/// Coloca una pieza sobre esta figura si no es la canónica de su familia.
+///
+/// Las piezas se dibujaron sobre una figura por familia, así que sobre las otras
+/// dos van desplazadas y de otra talla. Aquí se corrige con las medidas de
+/// `Arte.ajuste`, y solo donde tiene sentido: la ropa se ciñe al torso y pide
+/// talla; el arma se sostiene y pide sitio. Ver [TrazoDeCapa].
+///
+/// Las dos figuras canónicas salen por el camino corto, sin envolver nada.
+///
+/// Está suelta y no dentro de [_Capa] porque **la mano que trae el arma tiene
+/// que moverse con ella**. Estuvo un rato sin hacerlo: el arma se desplazaba a
+/// la mano de la figura y su puño se quedaba en el sitio de la canónica, así que
+/// sobre cuatro de las seis figuras salía una mano flotando y el brazo cortado.
+/// Solo se ve en esas cuatro, y las pruebas montaban la canónica.
+Widget colocadaSobreLaFigura({
+  required String figura,
+  required String clave,
+  required double lado,
+  required Widget hijo,
+}) {
+  final AjusteDeFigura a = Arte.ajuste(figura);
+  if (a.esNeutro) return hijo;
+
+  // Las medidas están tomadas sobre el lienzo maestro de 1024, y aquí la capa se
+  // pinta a `lado`. Sin este factor, en una ficha pequeña el arma saltaría media
+  // pantalla.
+  final double k = lado / 1024;
+
+  return switch (TrazoDeCapa.de(clave)) {
+    TrazoDeCapa.talla => Transform(
+        alignment: Alignment.topLeft,
+        transform: Matrix4.identity()
+          ..translateByDouble(a.torsoDx * k, 0, 0, 1)
+          ..scaleByDouble(a.escalaTorso, 1, 1, 1),
+        child: hijo,
+      ),
+    TrazoDeCapa.mano => Transform.translate(
+        offset: Offset(a.manoDx * k, a.manoDy * k),
+        child: hijo,
+      ),
+    TrazoDeCapa.ninguno => hijo,
+  };
+}
+
 /// Una capa del manifiesto, pintada sobre el lienzo maestro.
 ///
 /// Sin `x`, `y`, `ancho` ni `alto`: cada capa ya viene dibujada dentro del
@@ -309,38 +360,8 @@ class _Capa extends StatelessWidget {
   final String figura;
   final double lado;
 
-  /// Coloca la pieza sobre esta figura si no es la canónica de su familia.
-  ///
-  /// Las piezas se dibujaron sobre una figura por familia, así que sobre las
-  /// otras dos van desplazadas y de otra talla. Aquí se corrige con las medidas
-  /// de `Arte.ajuste`, y solo donde tiene sentido: la ropa se ciñe al torso y
-  /// pide talla; el arma se sostiene y pide sitio. Ver [TrazoDeCapa].
-  ///
-  /// Las dos figuras canónicas salen por el camino corto, sin envolver nada.
-  Widget _colocada(Widget imagen) {
-    final AjusteDeFigura a = Arte.ajuste(figura);
-    if (a.esNeutro) return imagen;
-
-    // Las medidas están tomadas sobre el lienzo maestro de 1024, y aquí la capa
-    // se pinta a `lado`. Sin este factor, en una ficha pequeña el arma saltaría
-    // media pantalla.
-    final double k = lado / 1024;
-
-    return switch (TrazoDeCapa.de(capa.clave)) {
-      TrazoDeCapa.talla => Transform(
-          alignment: Alignment.topLeft,
-          transform: Matrix4.identity()
-            ..translateByDouble(a.torsoDx * k, 0, 0, 1)
-            ..scaleByDouble(a.escalaTorso, 1, 1, 1),
-          child: imagen,
-        ),
-      TrazoDeCapa.mano => Transform.translate(
-          offset: Offset(a.manoDx * k, a.manoDy * k),
-          child: imagen,
-        ),
-      TrazoDeCapa.ninguno => imagen,
-    };
-  }
+  Widget _colocada(Widget imagen) =>
+      colocadaSobreLaFigura(figura: figura, clave: capa.clave, lado: lado, hijo: imagen);
 
   @override
   Widget build(BuildContext context) {
