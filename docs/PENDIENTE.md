@@ -118,7 +118,7 @@ Con el APK instalado, en este orden:
 Estudiados hoy en paralelo. **Los planes completos están en `docs/planes/`** —
 son largos, concretos y citan fichero y línea. Aquí solo el veredicto.
 
-### 4.1 Misiones semanales → `docs/planes/misiones-semanales.md`
+### 4.1 Misiones semanales → `docs/planes/misiones-semanales.md` — recortadas
 
 **Recortar, no conectar.** La sospecha se confirma entera: existe el catálogo
 (W01–W06 sembradas con `is_active=False`), el motor de avance y pago ya es
@@ -135,6 +135,20 @@ XP por completar **un** módulo en siete días.
 
 Lo que sí salió de este frente —que el autorreclamo no pagaba— **ya está
 arreglado** (`c75da6e`). No tenía nada de semanal.
+
+**El recorte está hecho (18-09).** La pestaña «Semanales» deja de ofrecerse, y
+se lee de `missions.weekly.enabled` —que ya viaja en `/config/public`— en vez de
+una constante, para que vuelva sola el día que se reparta una de verdad. El pie
+del tablón deja de decir «La semana cierra» y «Se revisan» sobre horizontes que
+no cierran ni se revisan: ahora solo se pinta en la pestaña diaria, que es la
+única para la que `resets_in_seconds` significa algo. Y se corrigieron los dos
+comentarios que afirmaban que cumplir una misión paga sola —no paga: el cobro
+vive entero en el reclamo—, que es lo que haría a cualquiera diseñar mal lo
+siguiente.
+
+**Lo que no se toca**: las seis plantillas siguen sembradas con
+`is_active=False`. Encenderlas es un cambio de economía disfrazado de cambio de
+interfaz, y el plan lo argumenta con números.
 
 **Decisión pendiente, y es tuya:** si se paga retroactivamente lo que el
 autorreclamo ya se comió. El arreglo cubre de ahí en adelante; las misiones que
@@ -371,7 +385,7 @@ recrea, cambia. Una URL metida en un APK ya instalado no se cambia a distancia.
 
 
 
-### 4.6 `/auth/register` no tiene freno — sin arreglar
+### 4.6 `/auth/register` no tenía freno — arreglado
 
 Salió buscando por qué no se podía registrar una cuenta, y no era eso, pero está
 ahí. En `backend/app/modules/identity/router.py`:
@@ -392,10 +406,20 @@ síncrono, más sesenta filas de usuario. Crear cuentas en masa sale barato.
 que llame once veces seguidas y espere un 429 en la última. Hoy no hay ninguna
 prueba de frenos en el registro.
 
-**Por qué no se arregló al encontrarlo:** con un solo aprendiz usando la
-aplicación no hay urgencia, y tocar un freno a ciegas puede dejar fuera a un
-usuario legítimo que se equivoca tres veces de contraseña. Decidido el 17-09-2026
-anotarlo y hacerlo con calma.
+**Hecho el 18-09.** `rate_limit_register = "10/minute;60/hour"`, y las dos
+ventanas no son adorno: con una sola, diez por minuto siguen siendo catorce mil
+cuentas al día. `freno()` acepta ahora varios límites separados por `;` y los
+exige todos, y cuenta también la petición que rechaza —quien abusa no recupera
+hueco por chocar—.
+
+Lo que costó fue la prueba, y son **las primeras de freno del proyecto**: el
+limitador se apaga solo en el entorno de pruebas (`enabled=settings.environment
+!= "test"`), porque un caso normal llama veinte veces a la misma ruta en el
+mismo segundo. Así que una prueba de freno escrita sin pensarlo pasa con el
+freno quitado. Estas lo encienden a mano y le dan una ventana limpia. Además de
+que corta al once, fijan que el registro **no comparte cubo con el acceso**: si
+lo compartieran, abusar del registro dejaría fuera al aprendiz que solo quiere
+entrar, que es justo el daño que el freno viene a evitar.
 
 
 ---
