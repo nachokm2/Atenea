@@ -229,6 +229,32 @@ halos, los flecos de extracción y las manos descuadradas. Los bocetos están en
 `arte/diagnostico/boceto_pixel2.png` y `pixel_resoluciones.png`.
 
 
+
+### 4.5 La URL de producción no existía — arreglado
+
+`Entorno.apiProduccion` apuntaba a `https://api.atenea.cl/api/v1`. Ese dominio
+**no es nuestro**: `atenea.cl` está registrado por «Atenea Gestión Cultural» y
+`api.atenea.cl` no resuelve. Cualquier compilación de release sin
+`--dart-define=ATENEA_API` salía sin servidor: la aplicación abría, se veía
+entera y no cargaba un solo dato.
+
+Ninguna de las ciento cincuenta pruebas lo vio, y no por descuido: **ninguna sale
+a la red**, y una constante con una URL dentro no se puede verificar leyéndola.
+Ahora hay `test/produccion_existe_test.dart`, con la etiqueta `vivo`: llama al
+`/health` de verdad, distingue un fallo de DNS —que es el fallo que busca, y
+falla— de un corte de red —que se salta—. Verificada apuntándola al dominio
+muerto.
+
+Apunta al dominio que genera Railway, `api-production-66b3.up.railway.app`, y
+eso tiene fecha de caducidad: **va atado al servicio**, así que si algún día se
+recrea, cambia. Una URL metida en un APK ya instalado no se cambia a distancia.
+
+> **Pendiente y es de Rodrigo:** comprar un dominio propio —`atenea.cl` no está
+> disponible— y añadirlo en Railway como dominio personalizado antes de dar la
+> aplicación a nadie más. A partir de ese momento la URL queda congelada en cada
+> móvil que la instale.
+
+
 ---
 
 ## 5. Lo que depende de Rodrigo, no del código

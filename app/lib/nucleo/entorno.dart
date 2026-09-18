@@ -18,7 +18,20 @@ abstract final class Entorno {
   /// traiga `ATENEA_API`, y es **https** a propósito: desde Android 9 el
   /// tráfico en claro está bloqueado, así que un `http://` en release no
   /// fallaría con un error claro, simplemente no respondería nunca.
-  static const String apiProduccion = 'https://api.atenea.cl/api/v1';
+  ///
+  /// Apunta al dominio que **Railway genera** para el servicio, y eso tiene una
+  /// consecuencia que conviene saber antes de publicar: va atado al servicio, y
+  /// si algún día se recrea, cambia. Una URL metida en un APK ya instalado no se
+  /// puede cambiar a distancia, así que antes de dar la aplicación a alguien que
+  /// no seas tú hay que poner un dominio propio y añadirlo en Railway.
+  ///
+  /// Aquí estuvo `https://api.atenea.cl/api/v1`, que **no existe**: `atenea.cl`
+  /// está registrado por otra empresa y no hay tal subdominio. Cualquier
+  /// compilación de release sin `--dart-define` salía sin servidor, y la
+  /// aplicación abría y no cargaba nada. No lo cazó ninguna prueba porque
+  /// ninguna sale a la red.
+  static const String apiProduccion =
+      'https://api-production-66b3.up.railway.app/api/v1';
 
   /// URL base de la API, incluyendo el prefijo de versión.
   ///
