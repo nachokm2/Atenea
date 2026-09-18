@@ -89,6 +89,17 @@ class MissionOut(_Out):
     status: str
     expires_at: datetime | None = None
     reward: dict[str, Any] = Field(default_factory=dict)
+    # Los cuatro que P19 lee y no llegaban. Los tres primeros son columnas de
+    # `user_missions` desde siempre; el cuarto se deriva.
+    #
+    # Sin `deep_link`, la hoja de detalle **nunca** pintaba «Ir a cumplirla»
+    # —`if (destino != null && !mision.estaCumplida)`—, ni para las diarias: el
+    # aprendiz veía siempre el texto de consolación. Y sin `completed_at` la
+    # fila «Cumplida» tampoco aparecía nunca.
+    completed_at: datetime | None = None
+    claimed_at: datetime | None = None
+    learning_path_id: uuid.UUID | None = None
+    deep_link: str | None = None
 
 
 class MissionsOut(_Out):
@@ -218,6 +229,20 @@ def _contexto(db: DbSession, usuario: Any) -> tuple[ServicioConfig, str, date_ty
     return cfg, zona, rachas.fecha_local_de(zona)
 
 
+def _enlace_de(mision: UserMission) -> str | None:
+    """A dónde lleva «Ir a cumplirla», o `None` si no hay un sitio concreto.
+
+    Solo se ofrece destino cuando la misión apunta a uno: las de ruta llevan a
+    su mapa. Una diaria como «completa dos lecciones» no tiene un sitio único
+    —cualquier lección vale—, así que devuelve `None` y la hoja enseña el texto
+    que ya tiene para ese caso, en vez de un botón que lleve a cualquier parte.
+
+    Sin esquema, igual que los enlaces de las notificaciones (§4.4): quien sabe
+    de `atenea://` es el cliente, y el servidor no tiene por qué.
+    """
+    return f"route/{mision.learning_path_id}" if mision.learning_path_id else None
+
+
 def _mision_out(mision: UserMission) -> MissionOut:
     """Proyecta una instancia de misión al esquema de salida."""
     return MissionOut(
@@ -231,6 +256,10 @@ def _mision_out(mision: UserMission) -> MissionOut:
         status=mision.status.value,
         expires_at=mision.expires_at,
         reward={"xp": int(mision.reward_xp), "gold": int(mision.reward_gold)},
+        completed_at=mision.completed_at,
+        claimed_at=mision.claimed_at,
+        learning_path_id=mision.learning_path_id,
+        deep_link=_enlace_de(mision),
     )
 
 

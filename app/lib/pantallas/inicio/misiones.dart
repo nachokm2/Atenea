@@ -60,7 +60,7 @@ class _PantallaMisionesState extends State<PantallaMisiones> {
   Future<void> _abrirDetalle(Mision mision) async {
     final String? destino = await mostrarHoja<String>(
       context,
-      constructor: (BuildContext hoja) => _DetalleMision(mision: mision),
+      constructor: (BuildContext hoja) => DetalleMision(mision: mision),
     );
     if (!mounted || destino == null || destino.isEmpty) return;
     context.push(destino);
@@ -364,8 +364,8 @@ class _ReinicioState extends State<_Reinicio> {
 }
 
 /// Hoja de detalle: qué pide la misión y qué hacer ahora mismo.
-class _DetalleMision extends StatelessWidget {
-  const _DetalleMision({required this.mision});
+class DetalleMision extends StatelessWidget {
+  const DetalleMision({required this.mision, super.key});
 
   final Mision mision;
 

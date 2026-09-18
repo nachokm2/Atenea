@@ -3130,7 +3130,7 @@ Convenciones de la columna "Respuesta": los nombres en `PascalCase` son esquemas
 
 | Método | Ruta | Auth | Descripción | Respuesta |
 |---|---|---|---|---|
-| GET | `/api/v1/missions` | Sí | Misiones diarias y especiales (P19); genera las del día de forma perezosa y determinista. | `MissionsOut` `{daily[], special[], weekly[], resets_in_seconds}` |
+| GET | `/api/v1/missions` | Sí | Misiones diarias y especiales (P19); genera las del día de forma perezosa y determinista. | `MissionsOut` `{daily[], special[], weekly[], resets_in_seconds}`, cada misión `{user_mission_id, template_code, scope, tier, title, target, progress, status, expires_at, reward, completed_at, claimed_at, learning_path_id, deep_link}`. El `deep_link` usa el mismo vocabulario que el de las notificaciones (`route/{id}`) y es `null` cuando la misión no apunta a un sitio concreto: P19 solo ofrece «Ir a cumplirla» cuando lo hay. |
 | POST | `/api/v1/missions/{user_mission_id}/claim` | Sí (**Idempotency-Key**) | Reclama la recompensa de una misión completada. | **`RewardsReceipt`** |
 | GET | `/api/v1/achievements` | Sí | Sala de trofeos (P20) con progreso por nivel y filtros (`state=all|unlocked|in_progress`). | `Page<AchievementOut>` `{code, name, category, visibility, highest_tier, tiers[], progress_pct, unlocked_at}` |
 | GET | `/api/v1/notifications` | Sí | Bandeja in-app: solo lo ya entregado (`SENT`, `READ`), de lo más reciente a lo más antiguo. Pagina con `limit` y `cursor` sobre `sent_at`. | `Page<NotificationOut>` `{id, notification_type, channel, status, title, body, deep_link, payload, scheduled_for, sent_at, read_at, dismissed_at, created_at}` |

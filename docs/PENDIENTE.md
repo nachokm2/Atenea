@@ -14,8 +14,8 @@ sobrevive a su sesión es otra cosa que promete y no cumple.
 | | |
 |---|---|
 | Rama | `main`, todo subido a `origin` |
-| Pruebas del cliente | **207 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
-| Pruebas del servidor | **660 verdes**, `ruff check` limpio |
+| Pruebas del cliente | **212 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
+| Pruebas del servidor | **664 verdes**, `ruff check` limpio |
 | `flutter analyze` | limpio |
 | APK de release | compilado y enviado a Rodrigo a las 02:38 del 18, **con todo lo de la sesión** |
 | Producción | desplegada, `/health` en 200 con base y worker `ok`, migración aplicada, arranque sin trazas |
@@ -44,7 +44,10 @@ siempre idéntico:
 
 Cerrados hasta ahora: la vibración, «Sonido», «Idioma del contenido», el registro
 de push, los ocho peinados de la creación del héroe, el cobro de las misiones
-autorreclamadas y el `content_status` que impedía abrir lecciones.
+autorreclamadas, el `content_status` que impedía abrir lecciones y el del
+módulo, el objeto `assessment`, la pista de conocimiento que hacía imposible
+crear una ruta, y el `deep_link` de las misiones —por el que el botón «Ir a
+cumplirla» no se pintó nunca, para ninguna misión—.
 
 **Cómo buscar el siguiente**: coger un campo que la interfaz ofrezca, hacer
 `grep` de su nombre, y mirar si aparece en algún sitio que no sea el DTO, el
