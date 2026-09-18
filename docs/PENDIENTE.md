@@ -257,9 +257,44 @@ recrea, cambia. Una URL metida en un APK ya instalado no se cambia a distancia.
 > dominio propio y añadirlo en Railway, no una fecha.
 
 
+
+### 4.6 `/auth/register` no tiene freno — sin arreglar
+
+Salió buscando por qué no se podía registrar una cuenta, y no era eso, pero está
+ahí. En `backend/app/modules/identity/router.py`:
+
+- `/auth/login` lleva `Depends(freno(settings.rate_limit_login))`, 10/minuto, y
+  el comentario explica muy bien por qué: sin freno, probar contraseñas en masa
+  es gratis, y cada intento cuesta un bcrypt de coste 12 sobre un backend
+  **síncrono**, así que además de un robo es una denegación de servicio barata.
+- **`/auth/register` no lleva ninguna dependencia de freno.** Le aplica solo el
+  `rate_limit_default` global, 60/minuto.
+
+Y el argumento del bcrypt vale igual aquí: registrar también hashea. Sesenta
+registros por minuto y por IP son sesenta bcrypt de coste 12 en un backend
+síncrono, más sesenta filas de usuario. Crear cuentas en masa sale barato.
+
+**Lo que haría falta**, y es de una línea más una prueba: darle su propio freno
+—más estricto que el de 60, del orden del de login— y comprobarlo con una prueba
+que llame once veces seguidas y espere un 429 en la última. Hoy no hay ninguna
+prueba de frenos en el registro.
+
+**Por qué no se arregló al encontrarlo:** con un solo aprendiz usando la
+aplicación no hay urgencia, y tocar un freno a ciegas puede dejar fuera a un
+usuario legítimo que se equivoca tres veces de contraseña. Decidido el 17-09-2026
+anotarlo y hacerlo con calma.
+
+
 ---
 
 ## 5. Lo que depende de Rodrigo, no del código
+
+- **Una cuenta de prueba creada por error con el correo de Rodrigo.** Probando
+  qué devuelve `/auth/register` con distintos casos, uno usó
+  `rodrigo.palma@uautonoma.cl` y respondió 201: el correo no estaba registrado y
+  ahora sí, con la contraseña `Prueba12345!`. Está en producción. O se entra y
+  se le cambia la contraseña, o se borra para poder registrarse desde cero.
+  Debió usarse un correo de prueba.
 
 - **`ALERT_EMAIL` sin poner en Railway.** La alerta de presupuesto de IA está
   bien escrita —sin destinatario marca el evento `SKIPPED` y avisa en el
