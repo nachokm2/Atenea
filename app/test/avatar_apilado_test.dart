@@ -231,14 +231,15 @@ void main() {
         'assets/arte/capas/cuerpos/base_masculino_001_sin_manos.webp',
         'assets/arte/capas/cuerpos/base_masculino_001_piel_sin_manos.webp',
         'assets/arte/capas/cuerpos/base_masculino_001_pelo.webp',
-        'assets/arte/capas/masculino/b.webp',
-        'assets/arte/capas/masculino/c.webp',
-        // Las manos van las últimas, sobre el equipo: son ellas las que agarran
-        // el arma. Debajo se vería el puño que la pieza traía dibujado.
-        'assets/arte/capas/cuerpos/base_masculino_001_hand_right.webp',
-        'assets/arte/capas/cuerpos/base_masculino_001_piel_hand_right.webp',
+        // La izquierda va ANTES del equipo: un escudo la tapa, y con ella
+        // encima salía una mano flotando en mitad de la madera.
         'assets/arte/capas/cuerpos/base_masculino_001_hand_left.webp',
         'assets/arte/capas/cuerpos/base_masculino_001_piel_hand_left.webp',
+        'assets/arte/capas/masculino/b.webp',
+        'assets/arte/capas/masculino/c.webp',
+        // Y la derecha DESPUÉS: es la que agarra el arma.
+        'assets/arte/capas/cuerpos/base_masculino_001_hand_right.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001_piel_hand_right.webp',
       ]);
     });
   });
@@ -263,11 +264,11 @@ void main() {
         'assets/arte/capas/cuerpos/base_masculino_001_sin_manos.webp',
         'assets/arte/capas/cuerpos/base_masculino_001_piel_sin_manos.webp',
         'assets/arte/capas/cuerpos/base_masculino_001_pelo.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001_hand_left.webp',
+        'assets/arte/capas/cuerpos/base_masculino_001_piel_hand_left.webp',
         'assets/arte/capas/masculino/delante.webp',
         'assets/arte/capas/cuerpos/base_masculino_001_hand_right.webp',
         'assets/arte/capas/cuerpos/base_masculino_001_piel_hand_right.webp',
-        'assets/arte/capas/cuerpos/base_masculino_001_hand_left.webp',
-        'assets/arte/capas/cuerpos/base_masculino_001_piel_hand_left.webp',
       ]);
     });
   });

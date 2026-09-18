@@ -318,4 +318,34 @@ void main() {
     expect(arma, isNot(Offset.zero), reason: 'esta figura sí se ajusta');
     expect(puno, arma, reason: 'el puño tiene que ir donde va su arma');
   });
+
+  testWidgets('la izquierda va DEBAJO del escudo, y la derecha encima del arma',
+      (WidgetTester tester) async {
+    // Las dos manos no van al mismo sitio de la pila, y la diferencia no es un
+    // capricho: un arma se agarra —la mano encima— y un escudo se embraza —el
+    // escudo encima, que tapa el antebrazo entero—.
+    //
+    // Con las dos arriba, los doce escudos salían con una mano suelta flotando
+    // en mitad de la madera. Lo introduje al poner la derecha sobre el arma, y
+    // no lo vio ninguna prueba porque las de orden solo montaban capas de
+    // adorno. Apagarla tampoco valía: está medido, y bajo la mitad de los
+    // escudos dejaría entre 658 y 1.817 px de hueco a la vista.
+    await _pintar(tester, <CapaAvatar>[
+      _capa('offhand', RanuraItem.secundaria, 80),
+      _capa('weapon', RanuraItem.arma, 130),
+    ]);
+    final List<String> rutas = _pintadas(tester);
+
+    expect(rutas, containsAll(<String>[_pieza('offhand'), _pieza('weapon')]));
+    expect(
+      rutas.indexOf(Arte.mano(figura, derecha: false)),
+      lessThan(rutas.indexOf(_pieza('offhand'))),
+      reason: 'el escudo tiene que tapar la mano izquierda',
+    );
+    expect(
+      rutas.indexOf(Arte.mano(figura, derecha: true)),
+      greaterThan(rutas.indexOf(_pieza('weapon'))),
+      reason: 'la derecha tiene que agarrar el arma',
+    );
+  });
 }

@@ -201,6 +201,34 @@ femenino (no se les encuentra puño) y `espada_entrenamiento` masculina (dejarí
 Las hojas de revisión están en `arte/diagnostico/` (ignorado por git; se
 regeneran con los guiones).
 
+
+### 4.4 Píxel art — explorado y descartado
+
+Rodrigo lo propuso como forma de que los defectos del arte se notaran menos, y
+se probó en serio sin gastar una sola generación: conversor con paleta corta,
+sombreado plano, contorno de 1 px y alfa dura, y un boceto del Vestidor entero
+con la paleta real de la aplicación.
+
+**Decisión: no se cambia. Se mantiene el arte actual.**
+
+Lo que se aprendió, por si vuelve a plantearse:
+
+- **Las dos cosas que se querían se piden a resoluciones opuestas.** A 96-128 px
+  los defectos se disuelven pero la `espada_corta_acero` se queda en una hilacha
+  de dos píxeles: deja de verse lo que el aprendiz compra. A 256 px las armas se
+  leen y el estilo funciona, pero ya no esconde nada.
+- **El cuerpo y los iconos de ítem convierten solos y bien.** Las armas finas y
+  los escudos no: habría que **redibujarlos** a escala de píxel, y los escudos
+  pierden su blasón a cualquier resolución.
+- Como razón, además, ya no aplicaba: quedaba **una** pieza de dieciocho con dos
+  manos, y se arregló por otra vía.
+
+Si algún día se retoma, que sea como **dirección de arte** y no como parche: el
+premio de verdad es que a escala de píxel se controla cada píxel y se acaban los
+halos, los flecos de extracción y las manos descuadradas. Los bocetos están en
+`arte/diagnostico/boceto_pixel2.png` y `pixel_resoluciones.png`.
+
+
 ---
 
 ## 5. Lo que depende de Rodrigo, no del código

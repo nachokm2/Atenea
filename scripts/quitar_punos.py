@@ -131,7 +131,13 @@ ANCHO_MINIMO = 35
 #:
 #: Se admiten piezas menos compactas y más pequeñas, pero solo si juntas vuelven
 #: a formar algo con forma de puño y están pegadas entre sí.
-FRAGMENTO_MINIMO = 300
+#: Doscientos cuarenta, y el número tiene dueño: `arco_bosque_antiguo`
+#: masculino. Su mano quedó partida en cuatro dedos de 209 a 328 px por la
+#: cuerda y el vendaje del arco, así que con el umbral en 300 se descartaban dos
+#: y los otros dos no llegaban al mínimo conjunto. Era la última pieza de las
+#: dieciocho que seguía enseñando dos manos. Bajarlo a 240 no toca ninguna otra:
+#: se comprobó comparando el puño de las dieciocho antes y después.
+FRAGMENTO_MINIMO = 240
 FRAGMENTO_ALARGAMIENTO = 2.2
 FRAGMENTO_DISTANCIA = 60
 

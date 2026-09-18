@@ -227,6 +227,7 @@ abstract final class Arte {
   /// La emite el propio guion al terminar; no se escribe a mano.
   static const Map<String, Set<String>> conPunoPropio = <String, Set<String>>{
     'masculino': <String>{
+      'arco_bosque_antiguo_weapon',
       'arco_fresno_weapon',
       'baculo_maestria_ia_weapon',
       'baston_aprendiz_weapon',
@@ -278,16 +279,40 @@ abstract final class Arte {
   /// --dart` cada vez que cambie un cuerpo, y se pegan aquí. Un número tocado a
   /// ojo aquí es un número que ya no describe el arte.
   static const Map<String, AjusteDeFigura> _ajustes = <String, AjusteDeFigura>{
-    'base_femenino_001':
-        AjusteDeFigura(escalaTorso: 0.8596, torsoDx: 66.3, manoDx: -25, manoDy: 3),
+    'base_femenino_001': AjusteDeFigura(
+      escalaTorso: 0.8596,
+      torsoDx: 66.3,
+      diestraDx: -19,
+      diestraDy: -3,
+      zurdaDx: 14.3,
+      zurdaDy: 3.3,
+    ),
     'base_femenino_002': AjusteDeFigura(),
-    'base_femenino_003':
-        AjusteDeFigura(escalaTorso: 0.86, torsoDx: 70.5, manoDx: -24, manoDy: -15),
-    'base_masculino_001':
-        AjusteDeFigura(escalaTorso: 0.9032, torsoDx: 51.7, manoDx: 2, manoDy: 48),
+    'base_femenino_003': AjusteDeFigura(
+      escalaTorso: 0.86,
+      torsoDx: 70.5,
+      diestraDx: -19,
+      diestraDy: -27,
+      zurdaDx: 20.9,
+      zurdaDy: -20.6,
+    ),
+    'base_masculino_001': AjusteDeFigura(
+      escalaTorso: 0.9032,
+      torsoDx: 51.7,
+      diestraDx: 4,
+      diestraDy: -7,
+      zurdaDx: 4.8,
+      zurdaDy: 17.6,
+    ),
     'base_masculino_002': AjusteDeFigura(),
-    'base_masculino_003':
-        AjusteDeFigura(escalaTorso: 1.0991, torsoDx: -49.7, manoDx: 14, manoDy: -18),
+    'base_masculino_003': AjusteDeFigura(
+      escalaTorso: 1.0991,
+      torsoDx: -49.7,
+      diestraDx: 16,
+      diestraDy: -17,
+      zurdaDx: -12.1,
+      zurdaDy: -10.8,
+    ),
   };
 
   /// Número estable a partir del identificador de rostro (`face_02` -> 2).
@@ -538,8 +563,10 @@ class AjusteDeFigura {
   const AjusteDeFigura({
     this.escalaTorso = 1,
     this.torsoDx = 0,
-    this.manoDx = 0,
-    this.manoDy = 0,
+    this.diestraDx = 0,
+    this.diestraDy = 0,
+    this.zurdaDx = 0,
+    this.zurdaDy = 0,
   });
 
   /// Cuánto ensanchar una pieza que se ciñe al torso.
@@ -548,16 +575,42 @@ class AjusteDeFigura {
   /// Y cuánto recolocarla después, porque escalar mueve el centro.
   final double torsoDx;
 
-  /// Cuánto mover una pieza que se sostiene con la mano.
-  final double manoDx;
-  final double manoDy;
+  /// Cuánto mover una pieza según en qué mano vaya.
+  ///
+  /// **La diestra no apunta al centro de la mano, sino un poco por encima.** Es
+  /// la que sostiene el arma, y cuando la pieza trae su propio puño la mano del
+  /// cuerpo se apaga: entonces lo que se ve no es si el arma está centrada sino
+  /// si queda muñeca al aire. Apuntando al centroide quedaban 1.812 px
+  /// destapados en `base_masculino_001`; buscando el desplazamiento que menos
+  /// muñeca deja —a 3-9 px del centroide— bajan a 236. La zurda sí va al
+  /// centroide, porque su mano no se apaga nunca: la tapa el escudo.
+  ///
+  /// **Una por mano, y no una para las dos.** Las dos manos no se desplazan
+  /// juntas de una figura a otra: en `base_femenino_003` la derecha está 22 px
+  /// a la izquierda de la canónica y la izquierda 21 px a la **derecha**. Con un
+  /// solo par de números, a un escudo se le aplicaba el de la espada y se iba
+  /// 43 px en la dirección contraria: flotaba separado del cuerpo en vez de
+  /// apoyarse en el brazo. Se ve en `arte/diagnostico/ajustes.png`.
+  ///
+  /// «Diestra» y «zurda» son desde quien mira, igual que en el taller: la
+  /// diestra es la mano que aparece a la derecha de la imagen, la que lleva el
+  /// arma.
+  final double diestraDx;
+  final double diestraDy;
+  final double zurdaDx;
+  final double zurdaDy;
 
   /// ¿Esta figura necesita que se le ajuste algo?
   ///
   /// Las dos canónicas no, y saberlo evita envolver sus capas en una
   /// transformación que no hace nada.
   bool get esNeutro =>
-      escalaTorso == 1 && torsoDx == 0 && manoDx == 0 && manoDy == 0;
+      escalaTorso == 1 &&
+      torsoDx == 0 &&
+      diestraDx == 0 &&
+      diestraDy == 0 &&
+      zurdaDx == 0 &&
+      zurdaDy == 0;
 }
 
 /// Qué transformación le toca a cada capa de la pila de dibujado.

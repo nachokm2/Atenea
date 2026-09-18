@@ -50,10 +50,29 @@ void main() {
         final AjusteDeFigura a = Arte.ajuste(figura);
         expect(a.escalaTorso, inInclusiveRange(0.7, 1.4), reason: figura);
         expect(a.torsoDx.abs(), lessThan(200), reason: figura);
-        expect(a.manoDx.abs(), lessThan(120), reason: figura);
-        expect(a.manoDy.abs(), lessThan(120), reason: figura);
+        for (final double v in <double>[a.diestraDx, a.diestraDy, a.zurdaDx, a.zurdaDy]) {
+          expect(v.abs(), lessThan(120), reason: figura);
+        }
       }
     });
+  });
+
+  test('cada mano lleva su propio par, porque no se mueven juntas', () {
+    // En `base_femenino_003` la derecha está 22 px a la izquierda de la
+    // canónica y la izquierda 21 px a la **derecha**. Con un solo par de
+    // números —como estaba— a un escudo se le aplicaba el de la espada y se iba
+    // 43 px en la dirección contraria: flotaba separado del cuerpo.
+    final AjusteDeFigura a = Arte.ajuste('base_femenino_003');
+    expect(a.diestraDx, lessThan(0));
+    expect(a.zurdaDx, greaterThan(0));
+
+    // Y en alguna figura tienen que discrepar de verdad, o la separación no
+    // estaría arreglando nada.
+    final double mayorDiscrepancia = Arte.personajes
+        .map((String f) => Arte.ajuste(f))
+        .map((AjusteDeFigura x) => (x.diestraDx - x.zurdaDx).abs())
+        .reduce((double a, double b) => a > b ? a : b);
+    expect(mayorDiscrepancia, greaterThan(25));
   });
 
   group('qué transformación lleva cada capa', () {

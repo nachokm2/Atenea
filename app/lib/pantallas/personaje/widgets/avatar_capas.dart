@@ -216,28 +216,33 @@ class AvatarCapas extends StatelessWidget {
               ),
               _Tinte(ruta: Arte.pelo(clave), color: CatalogoAvatar.cabello(r.colorCabello), lado: tamano),
             ],
+            // La mano **izquierda**, antes del equipo: un escudo la tapa.
+            //
+            // Las dos manos no van al mismo sitio de la pila, y la diferencia
+            // no es un capricho: un arma se **agarra** —la mano tiene que ir
+            // encima— y un escudo se **embraza** —tapa el antebrazo entero, así
+            // que va él encima—. Con las dos arriba, el escudo salía con una
+            // mano suelta flotando en mitad de la madera. Lo introduje al poner
+            // la derecha sobre el arma y se vio componiendo las doce piezas de
+            // mano secundaria.
+            //
+            // Apagarla no vale como alternativa: está medido, y bajo la mitad de
+            // los escudos dejaría entre 658 y 1.817 px de hueco a la vista.
+            if (apilando && !_piezaConPuno(capas, clave, derecha: false))
+              ..._manoDelCuerpo(clave, derecha: false, tono: r.tonoPiel, lado: tamano),
             // Y lo que va por delante, en el orden que manda el Reino.
             if (apilando)
               for (final CapaAvatar capa in delante) _Capa(capa: capa, figura: clave, lado: tamano),
-            // Las manos, cada una con su piel teñida.
+            // La **derecha**, después: es la que agarra el arma.
             //
-            // Van **sobre** el equipo de mano, porque son ellas las que agarran,
-            // y se apagan cuando la pieza trae la suya. Ver [Arte.conPunoPropio]:
+            // Y se apaga cuando la pieza trae la suya. Ver [Arte.conPunoPropio]:
             // cada arma venía con un puño dibujado dentro y en pantalla salían
             // dos manos, que es como lo encontró el primer aprendiz que equipó
             // una espada. Ese puño ya agarra bien —se dibujó agarrando— así que
             // lo que se hace es sacarlo a su propia capa, teñirlo con el tono
             // elegido, y quitar de en medio la mano del cuerpo de ese lado.
-            if (apilando)
-              for (final bool derecha in <bool>[true, false])
-                if (!_piezaConPuno(capas, clave, derecha: derecha)) ...<Widget>[
-                  _CapaDelCuerpo(ruta: Arte.mano(clave, derecha: derecha), lado: tamano),
-                  _Tinte(
-                    ruta: Arte.manoPiel(clave, derecha: derecha),
-                    color: CatalogoAvatar.piel(r.tonoPiel),
-                    lado: tamano,
-                  ),
-                ],
+            if (apilando && !_piezaConPuno(capas, clave, derecha: true))
+              ..._manoDelCuerpo(clave, derecha: true, tono: r.tonoPiel, lado: tamano),
             // Y las manos que traen las propias piezas, teñidas igual que la del
             // cuerpo: son la misma mano del aprendiz, solo que dibujada ya
             // cerrada sobre el arma.
@@ -338,8 +343,21 @@ Widget colocadaSobreLaFigura({
           ..scaleByDouble(a.escalaTorso, 1, 1, 1),
         child: hijo,
       ),
+    // Cada mano lleva su propio par: no se desplazan juntas de una figura a
+    // otra, y en la femenina 003 van en sentidos opuestos. Ver [AjusteDeFigura].
+    //
+    // Los guantes cubren las dos, así que se les da el punto medio: es un
+    // compromiso, y se nota menos que acertar en una y fallar el doble en la
+    // otra. Lo bueno sería partirlos en dos capas el día que estorbe.
     TrazoDeCapa.mano => Transform.translate(
-        offset: Offset(a.manoDx * k, a.manoDy * k),
+        offset: switch (clave) {
+          'offhand' => Offset(a.zurdaDx * k, a.zurdaDy * k),
+          'gloves' => Offset(
+              (a.diestraDx + a.zurdaDx) / 2 * k,
+              (a.diestraDy + a.zurdaDy) / 2 * k,
+            ),
+          _ => Offset(a.diestraDx * k, a.diestraDy * k),
+        },
         child: hijo,
       ),
     TrazoDeCapa.ninguno => hijo,
@@ -903,6 +921,27 @@ class _PintorAvatar extends CustomPainter {
     return true;
   }
 }
+
+/// Una mano del cuerpo: el dibujo y su piel teñida con el tono elegido.
+///
+/// Las dos piezas van siempre juntas, y son dos y no una porque el tono lo
+/// elige el aprendiz: la piel es el mismo dibujo con los brillos llevados al
+/// blanco, y multiplicarla por el color devuelve ese color en la luz y su
+/// sombra en la sombra.
+List<Widget> _manoDelCuerpo(
+  String figura, {
+  required bool derecha,
+  required String tono,
+  required double lado,
+}) =>
+    <Widget>[
+      _CapaDelCuerpo(ruta: Arte.mano(figura, derecha: derecha), lado: lado),
+      _Tinte(
+        ruta: Arte.manoPiel(figura, derecha: derecha),
+        color: CatalogoAvatar.piel(tono),
+        lado: lado,
+      ),
+    ];
 
 /// ¿Lo que hay en esa mano trae su propia mano dibujada?
 ///
