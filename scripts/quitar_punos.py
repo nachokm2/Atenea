@@ -155,7 +155,38 @@ FRAGMENTO_JUNTOS_MINIMO = 900
 #: naranjas al lado de la empuñadura. Se borran las que estén pegadas al puño
 #: **y sean pequeñas**. El tamaño es lo que salva la madera: la rama del arco
 #: mide 3.873 px y la vara del bastón 6.144, así que ninguna entra aquí.
-ASTILLA_MAXIMA = 1200
+#: Alargamiento máximo del conjunto ya juntado, que es más permisivo que el de
+#: una pieza sola (`ALARGAMIENTO_MAXIMO`) por una razón medida: un puño partido
+#: en dorso y dedos se vuelve a juntar en una forma más alargada que el puño
+#: entero, porque los dedos salen hacia el arma. Medido sobre las cuatro piezas
+#: que pasan por aquí: 1,74 · 1,78 · 1,86 · 1,90. El tope está por encima de la
+#: última.
+#:
+#: **No se sube `ALARGAMIENTO_MAXIMO` en su lugar**, y está probado: con 1,85 el
+#: arco de fresno masculino pasa de un puño bueno de 1.936 px a un trozo de 789,
+#: y el `arco_bosque_antiguo` femenino —que hoy funciona— deja de tener mano y
+#: se queda como está. La madera del arco es del color de la piel, así que
+#: relajar el filtro de pieza suelta deja entrar el brazo del arco.
+JUNTOS_ALARGAMIENTO = 1.95
+
+#: Tamaño máximo de un trozo suelto que todavía se considera parte del puño.
+#:
+#: Subido de 1.200 a 2.200 con la medida delante. A 1.200 se quedaban fuera dos
+#: antebrazos: 2.038 px en `arco_bosque_antiguo` femenino y 1.628 px en
+#: `cetro_bigquery` femenino. Eran justo los dos «restos pálidos» que se veían
+#: en pantalla como una banda clara cruzando el muslo —clara y no del tono del
+#: aprendiz, porque lo que no entra en la capa no se tiñe—.
+#:
+#: **Lo que hace segura la subida no es el número, es que la otra guarda hace el
+#: trabajo.** Medido pieza a pieza: subir el tope solo absorbe esos dos trozos,
+#: y los dos están a distancia de color 25 y 2 del puño, o sea que son piel. En
+#: las otras dieciséis no entra nada nuevo: las cuatro de madera —`baston`, los
+#: dos `arco_fresno`, `arco_bosque_antiguo` masculino— ni siquiera llegan aquí,
+#: porque `PIEL_QUE_YA_NO_INFORMA` las corta antes; y en las demás, todo lo que
+#: el tamaño dejaba pasar ya lo paraba el color. El envoltorio de la empuñadura
+#: del arco —595 y 420 px, pegados al puño— sigue fuera por color, que es lo que
+#: lo salva.
+ASTILLA_MAXIMA = 2200
 
 #: Y a qué distancia del puño se deja de buscar.
 #:
@@ -232,6 +263,27 @@ ALTO_DE_LA_MUNECA = 45
 #: vía buena, la de teñir.
 HUECO_QUE_SE_VE = 1100
 
+#: Un puño que deja muñeca al aire todavía puede hacer de mano **si es al menos
+#: tan grande como la que sustituye**. Medido como fracción de la mano del
+#: cuerpo de esa figura.
+#:
+#: Sale de mirar las dos piezas que pasan de `MUNON_AL_AIRE` y comparar sus
+#: composiciones ampliadas, que es lo único que decide esto:
+#:
+#: * `arco_fresno` femenino — puño de 3.365 px, **1,77** veces la mano del
+#:   cuerpo, 397 px de muñeca. Sacado se ve bien: una sola mano agarrando el
+#:   arco. Dejado como estaba se ven **dos manos**, que es el fallo original.
+#: * `espada_entrenamiento` masculino — puño de 954 px, **0,41**, 380 px de
+#:   muñeca. Sacado se ve peor que antes: el puño sale roto en trozos y con un
+#:   hueco entre el brazo y la mano.
+#:
+#: Quince píxeles de muñeca separan a esas dos —397 contra 380—, así que el tope
+#: de muñeca no puede distinguirlas: eso sería afinar una constante a una
+#: ventana en la que cabe cualquier pieza futura. El tamaño sí las separa, con
+#: un factor cuatro de margen, y además significa algo: un puño pequeño con la
+#: muñeca al aire se lee como un muñón.
+PUNO_QUE_SUSTITUYE = 1.0
+
 #: Y solo en las piezas donde el color signifique algo.
 #:
 #: Este paso borra por color lo pequeño que esté pegado al puño, y en una pieza
@@ -294,6 +346,21 @@ def _distancia(a: dict[str, float], b: dict[str, float]) -> float:
     return float(max(dx, dy))
 
 
+def _sin_huecos(mascara: np.ndarray) -> np.ndarray:
+    """La máscara cerrada: lo que quede rodeado de mano, es mano.
+
+    Las rayas que separan los dedos no son color piel, así que el etiquetado no
+    las incluye y el borrado las dejaba en la pieza. En pantalla eso eran unos
+    trazos marrones curvos flotando junto a la empuñadura, que es como se veía
+    la espada de entrenamiento masculina.
+
+    Es una corrección pequeña y acotada por su propia forma: solo puede añadir
+    píxeles **encerrados** por el puño, nunca extenderlo hacia fuera. Medido en
+    las dieciocho piezas: entre 0 y 270 px, y ninguna cambia de camino.
+    """
+    return ndimage.binary_fill_holes(mascara)
+
+
 def puno_de(a: np.ndarray) -> tuple[np.ndarray, str] | None:
     """La máscara del puño dibujado, o `None` si la pieza no lleva ninguno."""
     etiquetas, cuantas = ndimage.label(_piel(a))
@@ -313,7 +380,7 @@ def puno_de(a: np.ndarray) -> tuple[np.ndarray, str] | None:
     ]
     if compactos:
         mejor = max(compactos, key=lambda par: par[1]["px"])
-        return mejor[0], "de una pieza"
+        return _sin_huecos(mejor[0]), "de una pieza"
 
     # El arco: la empuñadura envuelta parte el puño en dedos sueltos. Se juntan
     # los trozos medio compactos que están pegados y se mira si el conjunto
@@ -332,10 +399,10 @@ def puno_de(a: np.ndarray) -> tuple[np.ndarray, str] | None:
                 forma = _forma(junta)
         if (
             junta.sum() >= FRAGMENTO_JUNTOS_MINIMO
-            and forma["alargamiento"] <= 1.8
+            and forma["alargamiento"] <= JUNTOS_ALARGAMIENTO
             and forma["ancho"] >= ANCHO_MINIMO
         ):
-            return junta, "juntando dedos sueltos"
+            return _sin_huecos(junta), "juntando dedos sueltos"
 
     return None
 
@@ -548,7 +615,9 @@ def procesar(origen: pathlib.Path, figura: str, simular: bool) -> dict[str, obje
             "estado": f"no cabe movida ({dx:+d},{dy:+d}); se deja como está",
         }
 
-    if munon > MUNON_AL_AIRE:
+    mano_del_cuerpo = int(mascara_de_la_mano(figura, lado).sum())
+    bastante_grande = mano_del_cuerpo > 0 and puno.sum() >= PUNO_QUE_SUSTITUYE * mano_del_cuerpo
+    if munon > MUNON_AL_AIRE and not bastante_grande:
         # Su puño es demasiado pequeño para hacer de mano: apagar la del cuerpo
         # dejaría el brazo cortado. Pero **al revés sí funciona**: si el dibujo
         # es pequeño se borra entero y lo tapa la mano del cuerpo, que en ese

@@ -238,6 +238,7 @@ abstract final class Arte {
     },
     'femenino': <String>{
       'arco_bosque_antiguo_weapon',
+      'arco_fresno_weapon',
       'baculo_maestria_ia_weapon',
       'baston_aprendiz_weapon',
       'cetro_bigquery_weapon',

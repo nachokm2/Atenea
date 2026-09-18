@@ -14,7 +14,7 @@ sobrevive a su sesión es otra cosa que promete y no cumple.
 | | |
 |---|---|
 | Rama | `main`, todo subido a `origin` |
-| Pruebas del cliente | **203 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
+| Pruebas del cliente | **207 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
 | Pruebas del servidor | **660 verdes**, `ruff check` limpio |
 | `flutter analyze` | limpio |
 | APK de release | compilado y enviado a Rodrigo a las 02:38 del 18, **con todo lo de la sesión** |
@@ -208,8 +208,77 @@ Tres piezas, ninguna con coste de API:
 3. El cliente tiñe esa capa y apaga la mano del cuerpo. La lista de qué piezas
    la tienen va en `Arte.conPunoPropio`, **por familia**, y la emite el guion.
 
-**Estado: 13 de 18 armas limpias**, 2 con un resto pálido pequeño y 3 que siguen
-con dos manos. Las piezas de mano secundaria no se tocan.
+**Estado: 17 de 18 armas limpias.** Las piezas de mano secundaria no se tocan.
+
+#### Cómo se cerraron las cinco que faltaban (18-09)
+
+Lo que faltaba para poder decidir era **poder mirar**.
+`scripts/revisar_punos.py` compone cada arma como la compone el cliente —el
+mismo orden de capas, el mismo `modulate` al teñir—, recorta alrededor de la
+mano, amplía ×3 y la pone sobre un gris medio, para que un agujero y el fondo
+no se confundan. Sobre el tono **más claro**, que es donde un resto sin teñir
+se ve; sobre «Ébano» todo parece oscuro y desaparecen. Y lee los `.webp`
+exportados, no el taller: ya pasó una vez que los dos se separaran.
+
+Con eso delante, tres cambios en `quitar_punos.py`, cada uno con su medida:
+
+* **Rellenar los huecos de la máscara del puño** (`_sin_huecos`). Las rayas que
+  separan los dedos no son color piel, así que el etiquetado las dejaba fuera y
+  el borrado las dejaba en la pieza: en pantalla, trazos marrones curvos junto a
+  la empuñadura. Acotado por su propia forma —solo puede añadir lo que el puño
+  ya encierra—: entre 0 y 270 px en las dieciocho, y ninguna cambia de camino.
+* **`JUNTOS_ALARGAMIENTO = 1.95`**, el 1,8 que estaba suelto dentro de
+  `puno_de`. Desbloquea el `arco_fresno` femenino, cuyo puño partido en dorso y
+  dedos se junta en 1,897. **No se subió `ALARGAMIENTO_MAXIMO` en su lugar, y
+  está medido por qué no**: con 1,85 el arco de fresno masculino pasa de un puño
+  bueno de 1.936 px a un trozo de 789, y el `arco_bosque_antiguo` femenino
+  —que funcionaba— se queda sin mano. La madera del arco es del color de la piel.
+* **`ASTILLA_MAXIMA` de 1.200 a 2.200.** Saca los dos antebrazos que se veían
+  como una banda clara cruzando el muslo: 2.038 px en `arco_bosque_antiguo`
+  femenino y 1.628 en `cetro_bigquery` femenino. Parecía el cambio peligroso y
+  no lo es, y la razón importa: **la guarda que protege la madera no es el
+  tamaño, es el color**. Medido pieza a pieza, subir el tope solo absorbe esos
+  dos, y los dos están a distancia de color 25 y 2 del puño. Las cuatro piezas
+  de madera ni llegan ahí, porque `PIEL_QUE_YA_NO_INFORMA` las corta antes.
+
+Y una regla nueva, **`PUNO_QUE_SUSTITUYE = 1.0`**: un puño que deja muñeca al
+aire todavía puede hacer de mano si es al menos tan grande como la que
+sustituye. Sale de componer las dos piezas que pasan del tope de muñeca y
+mirarlas: el arco femenino (1,77 veces la mano) se ve bien sacado; la espada de
+entrenamiento masculina (0,41) se ve **peor** sacada que borrada —el puño sale
+roto y con un hueco entre brazo y mano—. Las separan quince píxeles de muñeca
+(397 contra 380), así que el tope de muñeca no podía distinguirlas; el tamaño sí,
+con un factor cuatro de margen.
+
+#### La que queda, y por qué no es cuestión de umbrales
+
+**`espada_entrenamiento` masculino.** Su puño dibujado mide 954 px, el 0,41 de
+la mano del cuerpo. Sacarlo se ve peor. Borrarlo entero tampoco vale: el puño
+sobresale de la silueta de la mano, así que borrar su huella completa deja
+2.685 px de agujero contra el fondo, y el tope son 1.100 —la guarda lo rechaza
+con razón—. Hoy queda con la mano del cuerpo abierta sobre la empuñadura y unos
+trazos de tinta pequeños. **Lo que necesita es redibujarse, no otro umbral.**
+
+#### Medido y dejado como está: el puño sale más oscuro que el brazo
+
+Los diecisiete puños salen con más color propio que la piel del cuerpo —croma
+25–46 contra 14–20— y más oscuros —media 173–196 contra 229—. Las dos
+normalizaciones son **idénticas** (percentil 95 por canal); lo que cambia es la
+región: un puño cerrado tiene sombras profundas y el percentil se calcula solo
+sobre él.
+
+Las dos correcciones obvias empeoran, y están probadas: igualar la media recorta
+entre el 54 % y el 73 % de los píxeles y aplana la mano; corregir solo el tono
+baja el croma a 11–20 pero **no mejora la distancia final** —70,6 contra 69,6—
+porque lo que se ve es la sombra, no el tinte. Se deja. No es un fallo de la
+tubería: es que una mano cerrada está más sombreada que un antebrazo.
+
+#### Un resto de 257 px en el arco de fresno femenino, y por qué se queda
+
+Es la sombra bajo la palma, aislada y a 24 px del puño. La regla que lo
+describiría —trozo pequeño, suelto y pegado al puño— se llevaría también los
+**brazos del arco**, de 514 y 569 px, que quedan sueltos justo porque el corte
+de la mano los separa del asta. Medido: seis candidatos, y tres son arma.
 
 #### Lo que se probó y no vale, con sus medidas
 
