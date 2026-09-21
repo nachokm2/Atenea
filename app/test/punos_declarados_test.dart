@@ -104,18 +104,24 @@ void main() {
     );
   });
 
-  test('las dos familias declaran piezas, y no las mismas por casualidad', () {
-    // Va por familia a propósito: hay piezas con puño en una y no en la otra
-    // —`espada_entrenamiento` es la que lo prueba—. Con una lista común, el
-    // cliente apagaría la mano de la figura equivocada.
+  test('la lista va por familia, aunque hoy las dos coincidan', () {
+    // Iba por familia porque tres piezas tenían puño en una y no en la otra.
+    // Hoy ninguna: el puño prestado de `espada_entrenamiento` masculina cerró
+    // el último hueco, así que las dos listas son iguales.
+    //
+    // **Que coincidan es un hecho de hoy, no una regla**, y por eso aquí no se
+    // afirma ni que coincidan ni que difieran: una prueba que fije cualquiera
+    // de las dos cosas se pone roja el día que se añada una pieza, sin que nada
+    // esté mal. Lo que sí es invariante es que cada familia declare lo que hay
+    // exportado **para ella**, y eso lo cubren las dos pruebas de arriba, que
+    // miran los recursos de cada carpeta por separado.
+    //
+    // Quitar el reparto por familia sí sería un error: el cliente apagaría la
+    // mano del cuerpo de la figura equivocada en cuanto las listas volvieran a
+    // separarse, y no hay nada que avise.
     expect(Arte.conPunoPropio.keys.toSet(), <String>{'masculino', 'femenino'});
     for (final Set<String> piezas in Arte.conPunoPropio.values) {
       expect(piezas, isNotEmpty);
     }
-    expect(
-      Arte.conPunoPropio['femenino'],
-      isNot(equals(Arte.conPunoPropio['masculino'])),
-      reason: 'si fueran iguales, la lista por familia no haría falta',
-    );
   });
 }

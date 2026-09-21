@@ -234,6 +234,7 @@ abstract final class Arte {
       'cetro_bigquery_weapon',
       'espada_corta_acero_weapon',
       'espada_del_sql_weapon',
+      'espada_entrenamiento_weapon',
       'espada_obsidiana_weapon',
     },
     'femenino': <String>{

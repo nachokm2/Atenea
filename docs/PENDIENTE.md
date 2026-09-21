@@ -225,7 +225,7 @@ Tres piezas, ninguna con coste de API:
 3. El cliente tiñe esa capa y apaga la mano del cuerpo. La lista de qué piezas
    la tienen va en `Arte.conPunoPropio`, **por familia**, y la emite el guion.
 
-**Estado: 17 de 18 armas limpias.** Las piezas de mano secundaria no se tocan.
+**Estado: las 18 armas limpias.** Las piezas de mano secundaria no se tocan.
 
 #### Cómo se cerraron las cinco que faltaban (18-09)
 
@@ -267,14 +267,36 @@ roto y con un hueco entre brazo y mano—. Las separan quince píxeles de muñec
 (397 contra 380), así que el tope de muñeca no podía distinguirlas; el tamaño sí,
 con un factor cuatro de margen.
 
-#### La que queda, y por qué no es cuestión de umbrales
+#### La última: un puño prestado, sin gastar arte
 
-**`espada_entrenamiento` masculino.** Su puño dibujado mide 954 px, el 0,41 de
-la mano del cuerpo. Sacarlo se ve peor. Borrarlo entero tampoco vale: el puño
-sobresale de la silueta de la mano, así que borrar su huella completa deja
-2.685 px de agujero contra el fondo, y el tope son 1.100 —la guarda lo rechaza
-con razón—. Hoy queda con la mano del cuerpo abierta sobre la empuñadura y unos
-trazos de tinta pequeños. **Lo que necesita es redibujarse, no otro umbral.**
+**`espada_entrenamiento` masculino** agotó las dos salidas del guion. Su puño
+mide 954 px, el 0,41 de la mano del cuerpo: sacarlo deja un muñón —compuesto y
+mirado: sale roto y con un hueco entre brazo y mano—, y borrarlo entero deja
+2.685 px de agujero contra el fondo, con el tope en 1.100.
+
+La salida no era redibujarla: era **prestarle el puño de otra pieza**. Funciona
+por una propiedad que no salta a la vista —**todos los puños acaban en el mismo
+sitio**, porque cada capa se mueve para que su centro caiga en
+`centro_de_la_mano`—, así que el puño de una espada cae exactamente donde está
+la empuñadura de la otra. Se compusieron los tres candidatos masculinos y se
+miraron: `espada_corta_acero` es el que se asienta bajo el gavilán dejando ver
+el pomo. Mide 2.177 px, el 0,93 de la mano del cuerpo.
+
+Va en `PUNO_PRESTADO`, explícito y con su razón. Prestado y no copiado a mano:
+el día que se redibuje la pieza se quita esa línea y su propio puño vuelve a
+mandar.
+
+**Lo que no se puede limpiar:** quedan 352 px de agujero junto a la empuñadura.
+Crecer el borrado los quitaría, pero lo sube a 1.635 —por encima del tope—
+porque el puño original sobresale de la silueta de la mano y el prestado no
+llega a tapar esa parte. Está medido.
+
+**Y un aviso sobre las pruebas:** con esto, las dos familias declaran por
+primera vez la **misma** lista de nueve piezas. Había una prueba que fijaba que
+fueran distintas —para justificar el reparto por familia— y se puso roja sin que
+nada estuviera mal: fijaba un hecho de ese día, no una regla. Ahora no afirma ni
+una cosa ni la otra; lo invariante —que cada familia declare lo exportado para
+ella— lo cubren las otras dos.
 
 #### Medido y dejado como está: el puño sale más oscuro que el brazo
 

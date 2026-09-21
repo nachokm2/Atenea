@@ -312,6 +312,29 @@ PIEL_QUE_YA_NO_INFORMA = 0.40
 #: es de las armas.
 NO_SE_TOCAN = ("offhand",)
 
+#: Piezas cuyo puño dibujado no puede hacer de mano y **toman prestado el de
+#: otra pieza de la misma figura**.
+#:
+#: `espada_entrenamiento` masculina es el único caso, y llegó aquí después de
+#: agotar las dos salidas del guion: su puño mide 954 px, el 0,41 de la mano del
+#: cuerpo, así que sacarlo deja un muñón —compuesto y mirado: el puño sale roto
+#: y con un hueco entre brazo y mano—; y borrarlo entero deja 2.685 px de
+#: agujero contra el fondo, porque sobresale de la silueta de la mano.
+#:
+#: Prestar funciona porque **todos los puños acaban en el mismo sitio**: cada
+#: capa se mueve para que su centro caiga en `centro_de_la_mano`, así que el
+#: puño de una espada cae exactamente donde está la empuñadura de la otra. Se
+#: compusieron los tres candidatos masculinos y se miraron: `espada_corta_acero`
+#: es el que se asienta bajo el gavilán dejando ver el pomo. Mide 2.177 px, el
+#: 0,93 de la mano del cuerpo, y tapa 127 de los 181 px de tinta que el borrado
+#: deja dentro de la huella; quedan 54 px, que a tamaño de móvil son dos.
+#:
+#: Es prestado y no copiado a mano: el día que se redibuje la pieza, se quita
+#: esta línea y su propio puño vuelve a mandar.
+PUNO_PRESTADO: dict[tuple[str, str], str] = {
+    ("base_masculino_002", "espada_entrenamiento_weapon"): "espada_corta_acero_weapon",
+}
+
 
 def _piel(a: np.ndarray) -> np.ndarray:
     """Los píxeles de color de piel. También los de madera clara, y por eso no basta."""
@@ -617,6 +640,32 @@ def procesar(origen: pathlib.Path, figura: str, simular: bool) -> dict[str, obje
 
     mano_del_cuerpo = int(mascara_de_la_mano(figura, lado).sum())
     bastante_grande = mano_del_cuerpo > 0 and puno.sum() >= PUNO_QUE_SUSTITUYE * mano_del_cuerpo
+    prestado = PUNO_PRESTADO.get((figura, origen.stem))
+    if prestado and munon > MUNON_AL_AIRE and not bastante_grande:
+        # El puño de otra pieza hace de mano. Se borra el propio igual que en el
+        # camino de abajo —es el que no sirve— y la capa prestada lo sustituye.
+        # No se comprueba el agujero: quien lo tapa ya no es la mano del cuerpo
+        # sino la capa prestada, que se pinta encima y en el mismo sitio.
+        fuente_puno = origen.parent / f"{prestado}_puno.png"
+        if not fuente_puno.is_file():
+            return {
+                "pieza": origen.stem,
+                "estado": f"quería el puño de {prestado} y no está; se deja como está",
+            }
+        if not simular:
+            borrada = movida.copy()
+            borrada[:, :, 3] = np.where(_correr(mano | de_sobra, dx, dy), 0, borrada[:, :, 3])
+            Image.fromarray(borrada).save(origen)
+            shutil.copyfile(fuente_puno, origen.parent / f"{origen.stem}_puno.png")
+        return {
+            "pieza": origen.stem,
+            "estado": (
+                f"su puño de {int(puno.sum())} px no sirve ({munon} px de muñeca al "
+                f"aire); toma prestado el de {prestado}, movida ({dx:+d},{dy:+d})"
+            ),
+            "hecha": True,
+        }
+
     if munon > MUNON_AL_AIRE and not bastante_grande:
         # Su puño es demasiado pequeño para hacer de mano: apagar la del cuerpo
         # dejaría el brazo cortado. Pero **al revés sí funciona**: si el dibujo
