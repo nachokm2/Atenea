@@ -31,6 +31,7 @@ from app.core.time import ensure_utc, utcnow
 from app.models.content import LearningPath, Lesson, PathModule, Topic
 from app.models.enums import (
     ContentStatus,
+    CoverageLevel,
     EventType,
     JobType,
     ModuleStatus,
@@ -96,6 +97,12 @@ class NodoTema:
     position: int
     mastery: float
     is_weak: bool
+    # Cuánto de este tema respalda el material del aprendiz. Es el **único**
+    # criterio con el que el cliente distingue «esto sale de tu PDF» de «esto
+    # lo escribió el Reino»: `esConocimientoGeneral` es `cobertura ==
+    # insuficiente`. Sin él, `NivelCobertura.desdeApi(null)` cae a `completa` y
+    # el mapa afirma en silencio que todo está respaldado.
+    coverage: CoverageLevel = CoverageLevel.FULL
     lecciones: list[NodoLeccion] = field(default_factory=list)
 
 
@@ -771,6 +778,7 @@ class ServicioProgreso:
                 position=int(topic.position),
                 mastery=a_float(progreso_tema.mastery) if progreso_tema else 0.0,
                 is_weak=bool(progreso_tema.is_weak) if progreso_tema else False,
+                coverage=topic.coverage,
             )
         for leccion, progreso_leccion in lecciones:
             nodo = nodos_tema.get(leccion.topic_id)

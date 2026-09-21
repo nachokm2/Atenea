@@ -273,6 +273,11 @@ class TopicNodeOut(EsquemaBase):
     position: int
     mastery: float = 0.0
     is_weak: bool = False
+    # Con qué respalda este tema el material del aprendiz. Sin esto el cliente
+    # lo lee nulo, cae a `full` y la etiqueta «Saber del Reino» no se pinta
+    # nunca: el mapa afirma en silencio que los documentos cubren cada tema,
+    # incluidos los que la Fase A marcó como sin respaldo suficiente.
+    coverage: CoverageLevel = CoverageLevel.FULL
     lessons: list[LessonNodeOut] = Field(default_factory=list)
 
 
@@ -341,6 +346,11 @@ class PathDetailOut(EsquemaBase):
     completion_pct: float = 0.0
     current_module_id: uuid.UUID | None = None
     current_lesson_id: uuid.UUID | None = None
+    # Los temas del objetivo que el material no cubre, tal y como los dejó la
+    # Fase A. La pantalla de generación los lista debajo de la tarjeta que pide
+    # decidir la política de cobertura: sin ellos, al aprendiz se le pide que
+    # decida sobre unos temas que nadie le nombra.
+    coverage_notes: list[str] = Field(default_factory=list)
     modules: list[ModuleNodeOut] = Field(default_factory=list)
     weak_topic_ids: list[uuid.UUID] = Field(default_factory=list)
 

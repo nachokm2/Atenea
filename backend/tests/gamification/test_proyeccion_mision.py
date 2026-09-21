@@ -143,7 +143,7 @@ def test_las_marcas_de_tiempo_viajan(db, usuario, ruta, plantillas):
     Se comprueban con valores propios y no con los de fábrica: dos `None` a cada
     lado también «coinciden», y eso es lo que dejaba pasar el fallo.
     """
-    from app.core.time import utcnow  # noqa: PLC0415 - solo para fechar aquí
+    from app.core.time import utcnow
 
     mision = _misiones_de_ruta(db, usuario, ruta)[0]
     momento = utcnow()

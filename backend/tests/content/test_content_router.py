@@ -15,8 +15,8 @@ import pytest
 import sqlalchemy as sa
 
 from app.core.time import user_local_date, utcnow
-from app.models.content import Assessment, KnowledgeArea, LearningPath
-from app.models.enums import AttemptStatus, ContentStatus, ModuleStatus
+from app.models.content import Assessment, KnowledgeArea, LearningPath, Topic
+from app.models.enums import AttemptStatus, ContentStatus, CoverageLevel, ModuleStatus
 from app.models.progress import (
     AssessmentAttempt,
     StudyActivity,
@@ -635,6 +635,65 @@ def test_un_modulo_sin_resumen_manda_nulo_y_no_una_cadena_vacia(cliente, conteni
 
     assert nodo["summary"] is None
     assert nodo["estimated_minutes"] is None
+
+
+def test_el_mapa_dice_que_temas_respalda_el_material(cliente, db, contenido):
+    """`coverage` es lo único que distingue tu PDF del saber del Reino.
+
+    El cliente lo lee (`Tema.desdeJson`) y de ahí sale `esConocimientoGeneral`,
+    que gobierna dos cosas: la píldora «Saber del Reino» del nodo de módulo y
+    la franja del mapa que la anuncia. Sin el campo, `NivelCobertura.desdeApi`
+    cae a `completa` —etiqueta «Cubierto por tu material»— y las dos quedan
+    apagadas para siempre: el mapa afirma en silencio que los documentos del
+    aprendiz respaldan **todos** los temas, incluidos los que la Fase A marcó
+    como sin respaldo suficiente y que el autor escribió de memoria.
+
+    Es la promesa que el producto repite más veces —«nunca inventamos, citamos
+    tu material»— y era exactamente la que no se podía comprobar en pantalla.
+
+    Dos temas con cobertura distinta a propósito: con los dos iguales, un nodo
+    que devolviera una constante pasaría igual.
+    """
+    otro = Topic(
+        module_id=contenido.modulo1.id,
+        position=2,
+        title="Window functions",
+        lesson_count=0,
+        coverage=CoverageLevel.INSUFFICIENT,
+    )
+    db.add(otro)
+    contenido.tema.coverage = CoverageLevel.FULL
+    db.flush()
+
+    temas = cliente.get(f"/api/v1/paths/{contenido.ruta.id}").json()["modules"][0]["topics"]
+    por_titulo = {t["title"]: t["coverage"] for t in temas}
+
+    assert por_titulo["JOINs"] == "full"
+    assert por_titulo["Window functions"] == "insufficient"
+
+
+def test_el_mapa_nombra_los_temas_que_el_material_no_cubre(cliente, db, contenido):
+    """`coverage_notes`: sin ellas se pide decidir sobre temas que nadie nombra.
+
+    La pantalla de generación pinta la tarjeta «Tu material no cubre todo el
+    objetivo» y debajo la lista de cuáles. La lista sale de aquí, y la Fase A ya
+    las calcula y las guarda en `learning_paths.coverage_notes`. Sin servirlas,
+    el mensaje cae siempre al genérico y el aprendiz elige la política de
+    cobertura a ciegas.
+    """
+    contenido.ruta.coverage_notes = ["Sin material de window functions"]
+    db.flush()
+
+    cuerpo = cliente.get(f"/api/v1/paths/{contenido.ruta.id}").json()
+
+    assert cuerpo["coverage_notes"] == ["Sin material de window functions"]
+
+
+def test_una_ruta_sin_notas_manda_la_lista_vacia(cliente, contenido):
+    """Vacía, no ausente: el cliente distingue «no hay huecos» de «no llegó»."""
+    cuerpo = cliente.get(f"/api/v1/paths/{contenido.ruta.id}").json()
+
+    assert cuerpo["coverage_notes"] == []
 
 
 def test_el_cupo_del_desafio_se_cuenta_en_la_fecha_del_aprendiz(

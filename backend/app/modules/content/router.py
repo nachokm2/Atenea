@@ -297,6 +297,7 @@ def _detalle_out(detalle: servicio_rutas.DetalleRuta) -> PathDetailOut:
         completion_pct=mapa.completion_pct,
         current_module_id=mapa.current_module_id,
         current_lesson_id=mapa.current_lesson_id,
+        coverage_notes=[str(n) for n in (detalle.path.coverage_notes or [])],
         modules=[
             ModuleNodeOut(
                 module_id=modulo.module_id,
@@ -335,6 +336,7 @@ def _detalle_out(detalle: servicio_rutas.DetalleRuta) -> PathDetailOut:
                         position=tema.position,
                         mastery=tema.mastery,
                         is_weak=tema.is_weak,
+                        coverage=tema.coverage,
                         lessons=[
                             LessonNodeOut(
                                 lesson_id=leccion.lesson_id,
