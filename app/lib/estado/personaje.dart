@@ -44,6 +44,10 @@ class ControladorPersonaje extends ChangeNotifier {
   Compra? _ultimaCompra;
   final Map<String, String> _clavesCompra = <String, String>{};
 
+  // --- Ficha (nombre y Orden) ------------------------------------------------
+  bool _guardandoFicha = false;
+  ErrorAtenea? _errorFicha;
+
   // -------------------------------------------------------------------------
   // Lecturas — avatar
   // -------------------------------------------------------------------------
@@ -161,8 +165,42 @@ class ControladorPersonaje extends ChangeNotifier {
       _tienda?.itemsDeConocimiento ?? const <Anuncio>[];
 
   // -------------------------------------------------------------------------
+  // Lecturas — ficha
+  // -------------------------------------------------------------------------
+
+  /// Guardando un cambio de nombre u Orden.
+  bool get guardandoFicha => _guardandoFicha;
+
+  /// Error de la ficha (nombre u Orden).
+  ErrorAtenea? get errorFicha => _errorFicha;
+
+  // -------------------------------------------------------------------------
   // Avatar
   // -------------------------------------------------------------------------
+
+  /// Renombra el personaje o le cambia la Orden (gratis en el MVP, §7.2).
+  ///
+  /// Devuelve el [Personaje] ya actualizado para que quien llama lo reparta a
+  /// `ControladorSesion` y refresque el Perfil: esta clase no guarda su propia
+  /// copia porque no es quien la muestra.
+  Future<Personaje?> actualizarFicha({String? nombre, Arquetipo? arquetipo}) async {
+    _guardandoFicha = true;
+    _errorFicha = null;
+    notifyListeners();
+    try {
+      final Personaje actualizado = await _repos.personaje.actualizar(
+        nombre: nombre,
+        arquetipo: arquetipo,
+      );
+      return actualizado;
+    } catch (e) {
+      _errorFicha = _comoError(e);
+      return null;
+    } finally {
+      _guardandoFicha = false;
+      notifyListeners();
+    }
+  }
 
   /// Trae el avatar y su manifiesto de capas.
   Future<void> cargarAvatar({bool forzar = false}) async {

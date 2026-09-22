@@ -919,10 +919,23 @@ desalineado), así que son **nueve** desconexiones reales:
   de más ya dominada de antes, para probar que el conteo es de toda la cuenta
   y no solo la tocada; una en `test_lecciones.py`, el otro emisor),
   verificadas por mutación dos veces.
+* **`PATCH /characters/me` huérfano** (22-09). Renombrar el personaje o
+  cambiarle la Orden estaba entero del lado servidor (gratis en el MVP,
+  CONTRACT.md §7.2) y el cliente hasta tenía `RepoPersonaje.actualizar()`
+  ya escrito — pero `grep -rn "RepoPersonaje" app/lib` solo encontraba su
+  propia declaración: ningún controlador ni pantalla lo llamaba nunca. Ahora
+  `ControladorPersonaje.actualizarFicha()` es el primer llamador real, y P17
+  (Perfil) suma un lápiz junto al nombre que abre un diálogo simple (nombre +
+  Orden) — al guardar, empuja el personaje actualizado a `ControladorSesion`
+  (para que la cabecera y el resto de la app se enteren al instante) y
+  refresca el Perfil. No se tocó nada del lado servidor: el contrato ya
+  documentaba la forma exacta. Tres pruebas nuevas en
+  `actualizar_ficha_test.dart` (contra el estado, con un adaptador de Dio
+  falso: qué manda, que un campo sin cambiar no viaja, y que un 422 no
+  revienta), verificadas por mutación.
 
 **Abiertos:**
 
-* `PATCH /characters/me` huérfano.
 * `GET /me/knowledge` huérfano y desalineado (arreglo recomendado: extender
   `AreaConocimiento.desdeJson` para leer los campos de `ProfileOut.knowledge`,
   que ya viaja en `/profile`, en vez de cablear el endpoint aparte).

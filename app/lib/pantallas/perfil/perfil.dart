@@ -255,9 +255,21 @@ class _Cabecera extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Text(
-                          heroe?.nombre ?? sesion.nombreVisible,
-                          style: context.textos.displaySmall,
+                        Row(
+                          children: <Widget>[
+                            Expanded(
+                              child: Text(
+                                heroe?.nombre ?? sesion.nombreVisible,
+                                style: context.textos.displaySmall,
+                              ),
+                            ),
+                            if (heroe != null)
+                              IconButton(
+                                icon: const Icon(Icons.edit_rounded, size: 20),
+                                tooltip: 'Renombrar o cambiar de Orden',
+                                onPressed: () => _editarFicha(context, heroe),
+                              ),
+                          ],
                         ),
                         const SizedBox(height: Espacio.xxs),
                         Wrap(
@@ -310,6 +322,84 @@ class _Cabecera extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Abre la ficha para renombrar o cambiar de Orden (`PATCH /characters/me`).
+///
+/// El endpoint estaba entero del lado servidor y el cliente hasta tenía
+/// `RepoPersonaje.actualizar()` escrito —pero nadie lo llamaba desde ninguna
+/// pantalla—. Gratis en el MVP: sin confirmación de precio ni cooldown.
+Future<void> _editarFicha(BuildContext context, Personaje heroe) async {
+  final ControladorPersonaje personaje = context.read<ControladorPersonaje>();
+  final TextEditingController controlNombre =
+      TextEditingController(text: heroe.nombre);
+  Arquetipo arquetipo = heroe.arquetipo;
+
+  final bool? confirmado = await showDialog<bool>(
+    context: context,
+    builder: (BuildContext dialogo) => StatefulBuilder(
+      builder: (BuildContext ctx, StateSetter fijar) => AlertDialog(
+        title: const Text('Renombrar o cambiar de Orden'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            TextField(
+              controller: controlNombre,
+              maxLength: 24,
+              decoration: const InputDecoration(labelText: 'Nombre'),
+            ),
+            const SizedBox(height: Espacio.xs),
+            DropdownButtonFormField<Arquetipo>(
+              initialValue: arquetipo,
+              decoration: const InputDecoration(labelText: 'Orden'),
+              items: Arquetipo.values
+                  .map(
+                    (Arquetipo a) => DropdownMenuItem<Arquetipo>(
+                      value: a,
+                      child: Text(a.etiqueta),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (Arquetipo? nuevo) {
+                if (nuevo != null) fijar(() => arquetipo = nuevo);
+              },
+            ),
+          ],
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(dialogo).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogo).pop(true),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    ),
+  );
+  if (confirmado != true || !context.mounted) return;
+
+  final String nombreNuevo = controlNombre.text.trim();
+  final Personaje? actualizado = await personaje.actualizarFicha(
+    nombre: nombreNuevo == heroe.nombre ? null : nombreNuevo,
+    arquetipo: arquetipo == heroe.arquetipo ? null : arquetipo,
+  );
+  if (!context.mounted) return;
+  if (actualizado != null) {
+    context.read<ControladorSesion>().actualizarPersonaje(actualizado);
+    await context.read<ControladorPerfil>().cargar(forzar: true);
+  } else {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          personaje.errorFicha?.mensaje ?? 'No se pudo guardar el cambio.',
+        ),
       ),
     );
   }
