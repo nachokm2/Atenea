@@ -85,6 +85,10 @@ class NivelRecibo(_Base):
     xp_to_next: int = 0
     progress_pct: Decimal = Decimal("0.00")
     gold_bonus: int = 0
+    # Bono de `gold.rank_up_bonus`, aparte del de `gold_bonus` (nivel): el
+    # cliente los funde en el mismo total de oro del recibo si no viajan
+    # desglosados, y no puede mostrar cuánto vino de cada uno.
+    rank_bonus: int = 0
     unlocked_shop_rarities: list[str] = Field(default_factory=list)
 
 

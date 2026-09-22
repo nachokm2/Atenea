@@ -5845,6 +5845,7 @@ class NivelRecibo {
     this.xpParaSiguiente = 0,
     this.porcentajeProgreso = 0,
     this.oroBonus = 0,
+    this.oroBonusRango = 0,
     this.rarezasDesbloqueadas = const <String>[],
   });
 
@@ -5859,6 +5860,7 @@ class NivelRecibo {
         xpParaSiguiente: _ent(json['xp_to_next']),
         porcentajeProgreso: _dec(json['progress_pct']),
         oroBonus: _ent(json['gold_bonus']),
+        oroBonusRango: _ent(json['rank_bonus']),
         rarezasDesbloqueadas: _textos(json['unlocked_shop_rarities']),
       );
 
@@ -5888,6 +5890,9 @@ class NivelRecibo {
 
   /// Oro de bonificación por subir.
   final int oroBonus;
+
+  /// Oro de bonificación por cambiar de rango, aparte del de nivel.
+  final int oroBonusRango;
 
   /// Rarezas del Mercado que habilita.
   final List<String> rarezasDesbloqueadas;

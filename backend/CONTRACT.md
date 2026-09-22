@@ -3166,7 +3166,7 @@ Lo devuelven **todas** las acciones que otorgan recompensas: `POST /characters`,
   "level": {
     "before": 6, "after": 7, "leveled_up": true,
     "rank_title_before": "Iniciado/a", "rank_title_after": "Iniciado/a", "rank_changed": false,
-    "xp_to_next": 1360, "progress_pct": 4.2, "gold_bonus": 50,
+    "xp_to_next": 1360, "progress_pct": 4.2, "gold_bonus": 50, "rank_bonus": 0,
     "unlocked_shop_rarities": []
   },
   "knowledge": {

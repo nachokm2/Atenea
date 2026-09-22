@@ -35,8 +35,16 @@ class ModalSubidaDeNivel extends StatelessWidget {
     final String salto = nivel == null || nivel.despues - nivel.antes <= 1
         ? ''
         : 'Nivel ${nivel.antes} → ${nivel.despues}';
-    final String rango = nivel?.tituloRangoDespues ?? '';
+    final bool cambioRango = nivel?.cambioRango ?? false;
+    // Con cambio de rango se anuncia el salto de rango, no solo el vigente:
+    // cruzar a un rango nuevo es un hito propio y merece su propio texto,
+    // no el mismo que ascender de nivel dentro del mismo rango.
+    final String rango = cambioRango &&
+            (nivel?.tituloRangoAntes ?? '').isNotEmpty
+        ? '${nivel!.tituloRangoAntes} → ${nivel.tituloRangoDespues}'
+        : nivel?.tituloRangoDespues ?? '';
     final int nuevasRarezas = nivel?.rarezasDesbloqueadas.length ?? 0;
+    final int oroBonusRango = nivel?.oroBonusRango ?? 0;
 
     return MarcoCelebracion(
       acento: p.arcano,
@@ -61,7 +69,10 @@ class ModalSubidaDeNivel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: Espacio.md),
-          RotuloCelebracion(texto: 'Subiste de nivel', color: p.textoSecundario),
+          RotuloCelebracion(
+            texto: cambioRango ? '¡Nuevo rango!' : 'Subiste de nivel',
+            color: p.textoSecundario,
+          ),
           const SizedBox(height: Espacio.xxs),
           Center(
             child: salto.isNotEmpty
@@ -103,7 +114,9 @@ class ModalSubidaDeNivel extends StatelessWidget {
                   : null,
             ),
           ],
-          if ((nivel?.oroBonus ?? 0) > 0 || nuevasRarezas > 0) ...<Widget>[
+          if ((nivel?.oroBonus ?? 0) > 0 ||
+              oroBonusRango > 0 ||
+              nuevasRarezas > 0) ...<Widget>[
             const SizedBox(height: Espacio.md),
             Wrap(
               alignment: WrapAlignment.center,
@@ -114,6 +127,12 @@ class ModalSubidaDeNivel extends StatelessWidget {
                   Pildora(
                     texto: '+${nivel!.oroBonus} de oro',
                     icono: Medallon.oro.icono,
+                    color: p.oro,
+                  ),
+                if (oroBonusRango > 0)
+                  Pildora(
+                    texto: '+$oroBonusRango de oro por el rango',
+                    icono: Icons.military_tech_rounded,
                     color: p.oro,
                   ),
                 if (nuevasRarezas > 0)

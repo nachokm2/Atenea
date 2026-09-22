@@ -31,7 +31,7 @@ from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger
-from app.core.time import utcnow
+from app.core.time import to_zone, utcnow
 from app.models.enums import (
     EventStatus,
     EventType,
@@ -781,6 +781,11 @@ def _actualizar_dia_y_racha(db: Session, ctx: Contexto, evento: DomainEvent, xp_
                 "goal_type": objetivo.goal_type.value,
                 "goal_target": objetivo.target,
                 "achieved": objetivo.progress,
+                # Hora local en la que se cumplió, no la de UTC: de ella
+                # dependen "Madrugador/a" (ACH_EARLY_BIRD, local_hour_lt: 9)
+                # y la misión D13 (local_hour_lt: 14) — sin esto ninguna de
+                # las dos podía cumplirse jamás.
+                "local_hour": to_zone(evento.occurred_at, ctx.timezone).hour,
                 "streak_after": racha_actual,
             },
             idempotency_key=clave_derivada("daily-goal-met", ctx.usuario_id, ctx.local_date),

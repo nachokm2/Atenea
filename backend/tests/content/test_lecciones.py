@@ -13,18 +13,23 @@ import pytest
 import sqlalchemy as sa
 
 from app.core.errors import AteneaError
-from app.core.time import utcnow
+from app.core.time import to_zone, utcnow
 from app.models.content import KnowledgeArea
+from app.models.economy import GoldTransaction
 from app.models.enums import (
     AttemptResult,
     AttemptStatus,
     EventType,
+    GoalType,
+    GoldSource,
     KnowledgeAreaStatus,
     KnowledgeCategory,
+    LevelScope,
     ModuleStatus,
     ProgressState,
+    XPSource,
 )
-from app.models.gamification import DomainEvent
+from app.models.gamification import DailyGoal, DomainEvent, XPTransaction
 from app.models.progress import (
     QuestionAttempt,
     UserAreaProgress,
@@ -32,6 +37,8 @@ from app.models.progress import (
     UserModuleProgress,
 )
 from app.modules.content import lecciones, preguntas
+from app.modules.gamification import niveles
+from app.modules.gamification import xp as motor_xp
 from app.modules.progress.progreso import ServicioProgreso
 
 pytestmark = pytest.mark.db
@@ -326,6 +333,111 @@ def test_completar_la_leccion_devuelve_recibo_con_xp_y_oro(db, cfg, usuario, con
     ).scalar_one()
     assert avance.status == ProgressState.COMPLETED
     assert avance.completion_count == 1
+
+
+def test_completar_la_leccion_manda_local_hour_en_daily_goal_met(
+    db, cfg, usuario, contenido
+):
+    """`ACH_EARLY_BIRD` y la misión D13 leen `local_hour` del payload de
+    `DAILY_GOAL_MET` (`local_hour_lt: 9` y `local_hour_lt: 14`), pero el
+    motor nunca lo calculaba: ninguna de las dos podía cumplirse jamás, para
+    ningún usuario."""
+    db.add(
+        DailyGoal(
+            user_id=usuario.id,
+            goal_type=GoalType.ACTIVITIES,
+            target=1,
+            effective_from=utcnow() - timedelta(days=60),
+        )
+    )
+    db.flush()
+
+    inicio = utcnow() - timedelta(seconds=200)
+    abierta = lecciones.iniciar_leccion(
+        db, cfg, usuario, contenido.leccion1.id, idempotency_key=_clave(), momento=inicio
+    )
+    _responder_todo(db, cfg, usuario, abierta.activity.id, contenido.preguntas_l1)
+
+    # Igual que el resto del ciclo: sin `momento` propio, así que el motor usa
+    # el instante real. Se acota entre `antes` y `despues` en vez de fijar una
+    # hora exacta, para no fallar por una carrera de milisegundos si el
+    # cierre cruza justo un límite de hora.
+    antes = utcnow()
+    lecciones.completar(db, cfg, usuario, abierta.activity.id, idempotency_key=_clave())
+    despues = utcnow()
+
+    evento = db.execute(
+        sa.select(DomainEvent).where(DomainEvent.event_type == EventType.DAILY_GOAL_MET)
+    ).scalar_one()
+    horas_posibles = {
+        to_zone(antes, usuario.timezone).hour,
+        to_zone(despues, usuario.timezone).hour,
+    }
+    assert evento.payload["local_hour"] in horas_posibles
+
+
+def test_completar_la_leccion_que_cambia_de_rango_manda_el_bono_aparte(
+    db, cfg, usuario, contenido
+):
+    """El bono de `gold.rank_up_bonus` se fundía, anónimo, en el oro total
+    del recibo (el mismo acumulador que el bono de nivel): el cliente no
+    podía mostrarlo desglosado ni distinguir un cambio de rango de un simple
+    ascenso de nivel dentro del mismo rango."""
+    umbral_nivel_5 = niveles.xp_para_nivel(db, cfg, 5, LevelScope.GLOBAL)
+
+    inicio = utcnow() - timedelta(seconds=200)
+    abierta = lecciones.iniciar_leccion(
+        db, cfg, usuario, contenido.leccion1.id, idempotency_key=_clave(), momento=inicio
+    )
+    _responder_todo(db, cfg, usuario, abierta.activity.id, contenido.preguntas_l1)
+
+    # Se siembra el resto justo después de responder (no antes): el XP de
+    # "primera actividad del día" y el de las respuestas ya se otorgó en el
+    # paso anterior, y adivinar esos montos de antemano habría hecho la
+    # prueba frágil ante cualquier ajuste de configuración.
+    xp_actual = motor_xp.xp_total(db, usuario.id)
+    faltante = max(0, umbral_nivel_5 - xp_actual - 1)
+    if faltante:
+        db.add(
+            XPTransaction(
+                user_id=usuario.id,
+                event_type=EventType.LESSON_COMPLETED,
+                source=XPSource.LESSON,
+                is_educational=True,
+                base_amount=faltante,
+                multiplier=Decimal("1.000"),
+                amount=faltante,
+                reason_code="admin_adjustment",
+                config_version=1,
+                balance_after=xp_actual + faltante,
+                local_date=utcnow().date(),
+                idempotency_key=f"seed-xp-rango:{usuario.id}",
+            )
+        )
+        db.flush()
+
+    recibo = lecciones.completar(db, cfg, usuario, abierta.activity.id, idempotency_key=_clave())
+
+    assert recibo.level is not None
+    assert recibo.level.rank_changed is True
+    assert recibo.level.rank_title_before == "Aprendiz"
+    assert recibo.level.rank_title_after == "Iniciado/a"
+    assert recibo.level.gold_bonus == cfg.obtener_int("gold.level_up_bonus")
+    assert recibo.level.rank_bonus == cfg.obtener_int("gold.rank_up_bonus")
+    assert recibo.level.rank_bonus > 0
+    # No son el mismo número por casualidad de la config de prueba: si lo
+    # fueran, esta prueba no distinguiría un campo fusionado del otro.
+    assert recibo.level.rank_bonus != recibo.level.gold_bonus
+
+    # El campo del recibo no es solo un eco: coincide con el oro real que de
+    # verdad se otorgó por el cambio de rango (no con el de nivel).
+    movimiento = db.execute(
+        sa.select(GoldTransaction).where(
+            GoldTransaction.user_id == usuario.id,
+            GoldTransaction.source == GoldSource.RANK_UP,
+        )
+    ).scalar_one()
+    assert movimiento.amount == recibo.level.rank_bonus
 
 
 def test_completar_la_leccion_manda_areas_mastered_en_mastery_updated(

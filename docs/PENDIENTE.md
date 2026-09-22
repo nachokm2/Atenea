@@ -968,15 +968,46 @@ desalineado), así que son **nueve** desconexiones reales:
   `monedero_test.dart` (con un adaptador de Dio falso: qué pide, los tres
   totales, los motivos en español, y que «Cargar más» agrega en vez de
   reemplazar), verificadas por mutación dos veces.
+* **`local_hour` ausente de `DAILY_GOAL_MET`: dos condiciones imposibles**
+  (22-09). CONTRACT.md:2394 ya documentaba el payload con `local_hour`, y la
+  prueba «kitchen sink» de logros y misiones (`test_logros_misiones.py`) ya
+  traía `local_hour: 8` en su sobre sintético — pero el emisor real
+  (`motor.py`) nunca lo calculaba. Afectaba a dos reglas reales a la vez:
+  el logro «Madrugador/a» (`ACH_EARLY_BIRD`, `local_hour_lt: 9`) y la misión
+  activa D13 («Cumple tu objetivo antes de las 14:00», `local_hour_lt: 14`,
+  asignada a usuarios con racha ≥ 3) — ninguna de las dos podía cumplirse
+  jamás, para nadie. `Contexto` ya llevaba `timezone`; bastaba con
+  `to_zone(evento.occurred_at, ctx.timezone).hour`, el mismo helper que ya
+  usa el resto del motor para fechas locales. Sin decisión de diseño: el
+  cálculo ya estaba especificado en el contrato, solo faltaba escribirlo.
+  Una prueba nueva en `test_lecciones.py`, verificada por mutación.
+* **El cambio de rango (con su propio bono de oro) nunca se distinguía de
+  subir de nivel** (22-09). El servidor calculaba `rank_changed` y le daba su
+  propio bono (`gold.rank_up_bonus`, aparte del de nivel) y su propio evento
+  (`RANK_UP`) — pero ese bono se otorgaba por el mismo acumulador genérico de
+  oro que el de nivel, sin dejar rastro propio en el recibo, y el modal de
+  P13 siempre decía «Subiste de nivel» mostrando solo el rango vigente. La
+  prueba de la cola de celebraciones (`cola_celebraciones_test.dart`) ya
+  montaba el caso exacto (`rank_changed: true`) y ni siquiera lo notaba,
+  porque no había nada en pantalla que lo distinguiera. Decisión tomada sin
+  preguntar, por ser mecánica y no de producto: se calcula `bono_rango` antes
+  de armar el recibo (`motor.py`, misma cifra que ya se otorgaba, solo que
+  ahora también viaja desglosada) y se añade `rank_bonus` a `NivelRecibo`.
+  El modal (P13) ahora dice «¡Nuevo rango!» y muestra el salto completo
+  (`Iniciado/a → Aprendiz del Reino`) en vez de solo el vigente, con una
+  píldora de oro aparte para el bono de rango; `celebraciones.dart`
+  (`_deNivel`) recibe el mismo tratamiento para el overlay corto. Ocho
+  pruebas nuevas (dos en `test_lecciones.py`, con la asignación de XP justo
+  bajo el umbral de nivel calculada en tiempo de prueba —no adivinada— para
+  no depender de bonos de configuración frágiles, y una comprobación cruzada
+  contra el `GoldTransaction` real; tres en `modal_nivel_test.dart`; una
+  actualizada en `cola_celebraciones_test.dart`), verificadas por mutación
+  tres veces.
 
 **Abiertos:**
 
 * «Semana Perfecta» sin emisor — necesita decisión de diseño (el cálculo de
   «lunes local» que `misiones-semanales.md` ya marca como pendiente).
-* `local_hour` ausente de `DAILY_GOAL_MET` — necesita decisión de diseño
-  (cómo calcular la hora local en el motor de eventos).
-* El cambio de rango, indistinguible de subir de nivel — necesita decisión de
-  diseño (qué mostrar).
 
 ---
 

@@ -307,9 +307,12 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 
-      // 3 · P13, la subida de nivel, con el rango que mandó el servidor.
-      expect(find.text('SUBISTE DE NIVEL'), findsOneWidget);
-      expect(find.text('Aprendiz del Reino'), findsOneWidget);
+      // 3 · P13, con cambio de rango: no es lo mismo que subir de nivel
+      // dentro del mismo rango, y el modal lo distingue en vez de decir
+      // siempre "SUBISTE DE NIVEL".
+      expect(find.text('¡NUEVO RANGO!'), findsOneWidget);
+      expect(find.text('SUBISTE DE NIVEL'), findsNothing);
+      expect(find.text('Iniciado/a → Aprendiz del Reino'), findsOneWidget);
       expect(
         find.textContaining('+50 de oro', findRichText: true),
         findsOneWidget,
@@ -322,7 +325,7 @@ void main() {
 
       // Se acabó la cola: vuelve a verse el Reino, sin overlays.
       expect(find.text('El Reino'), findsOneWidget);
-      expect(find.text('SUBISTE DE NIVEL'), findsNothing);
+      expect(find.text('¡NUEVO RANGO!'), findsNothing);
       expect(cola.hayPendientes, isFalse);
     },
   );

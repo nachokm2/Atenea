@@ -312,10 +312,21 @@ class ColaCelebraciones extends ChangeNotifier {
     final NivelRecibo? nivel = r.nivel;
     if (nivel == null || !nivel.subioNivel) return null;
     // Si se cruzaron varios niveles de una vez se muestra solo el final.
-    final String titulo = 'Nivel ${nivel.despues}';
+    // Con cambio de rango, el título anuncia el rango: cruzarlo es un hito
+    // propio, no el mismo que ascender de nivel dentro del mismo rango.
+    final String titulo =
+        nivel.cambioRango ? '¡Nuevo rango!' : 'Nivel ${nivel.despues}';
+    final String? tituloRangoAntes = nivel.tituloRangoAntes;
+    final String? tituloRangoDespues = nivel.tituloRangoDespues;
+    final String? lineaRango = nivel.cambioRango &&
+            (tituloRangoAntes ?? '').isNotEmpty &&
+            (tituloRangoDespues ?? '').isNotEmpty
+        ? '$tituloRangoAntes → $tituloRangoDespues'
+        : ((tituloRangoDespues ?? '').isNotEmpty ? tituloRangoDespues : null);
     final List<String> lineas = <String>[
-      if ((nivel.tituloRangoDespues ?? '').isNotEmpty) nivel.tituloRangoDespues!,
+      ?lineaRango,
       if (nivel.oroBonus > 0) '+${nivel.oroBonus} de oro',
+      if (nivel.oroBonusRango > 0) '+${nivel.oroBonusRango} de oro por el rango',
       if (nivel.rarezasDesbloqueadas.isNotEmpty)
         'Nuevas rarezas en el Mercado',
     ];
