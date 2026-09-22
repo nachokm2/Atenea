@@ -29,6 +29,7 @@ import '../pantallas/entrada/crear_personaje.dart';
 import '../pantallas/entrada/nueva_contrasena.dart';
 import '../pantallas/inicio/inicio.dart';
 import '../pantallas/inicio/misiones.dart';
+import '../pantallas/repaso/repasos_recomendados.dart';
 import '../pantallas/aventura/aventura.dart';
 import '../pantallas/aventura/crear_ruta.dart';
 import '../pantallas/aventura/generacion.dart';
@@ -118,6 +119,11 @@ GoRouter crearEnrutador(ControladorSesion sesion) {
                     // P19 · Misiones diarias, semanales y de ruta.
                     builder: (BuildContext context, GoRouterState state) =>
                         const PantallaMisiones(),
+                  ),
+                  GoRoute(
+                    path: Rutas.segRepasosRecomendados,
+                    builder: (BuildContext context, GoRouterState state) =>
+                        const PantallaRepasosRecomendados(),
                   ),
                 ],
               ),

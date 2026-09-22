@@ -86,6 +86,12 @@ class ControladorLeccion extends ChangeNotifier with WidgetsBindingObserver {
   /// Cuántas veces se ha enviado ya cada pregunta de esta actividad.
   final Map<String, int> _intentosPorPregunta = <String, int>{};
 
+  List<SugerenciaRepaso> _repasosRecomendados = const <SugerenciaRepaso>[];
+  InfoPagina _paginaRepasos = const InfoPagina();
+  bool _cargandoRepasos = false;
+  bool _cargandoMasRepasos = false;
+  ErrorAtenea? _errorRepasos;
+
   // -------------------------------------------------------------------------
   // Lecturas
   // -------------------------------------------------------------------------
@@ -169,6 +175,22 @@ class ControladorLeccion extends ChangeNotifier with WidgetsBindingObserver {
   /// Segundos efectivos medidos en esta sesión de estudio.
   int get segundosActivos => _segundosAcumulados;
 
+  /// Temas en riesgo o débiles que el Reino recomienda repasar.
+  List<SugerenciaRepaso> get repasosRecomendados =>
+      List<SugerenciaRepaso>.unmodifiable(_repasosRecomendados);
+
+  /// ¿Se está trayendo la primera página de repasos recomendados?
+  bool get cargandoRepasos => _cargandoRepasos;
+
+  /// ¿Se está trayendo una página siguiente de repasos recomendados?
+  bool get cargandoMasRepasos => _cargandoMasRepasos;
+
+  /// Fallo al traer los repasos recomendados, si lo hubo.
+  ErrorAtenea? get errorRepasos => _errorRepasos;
+
+  /// ¿Quedan más repasos recomendados por cargar?
+  bool get hayMasRepasos => _paginaRepasos.puedeSeguir;
+
   // -------------------------------------------------------------------------
   // Ciclo de la lección
   // -------------------------------------------------------------------------
@@ -218,6 +240,54 @@ class ControladorLeccion extends ChangeNotifier with WidgetsBindingObserver {
       _error = _comoError(e);
     } finally {
       _cargando = false;
+      notifyListeners();
+    }
+  }
+
+  /// Trae la primera página de repasos recomendados.
+  ///
+  /// El servidor ya calcula de verdad qué temas se están olvidando
+  /// (`GET /reviews/recommended`, con decaimiento real por tema); lo único
+  /// que faltaba era una pantalla que lo pidiera.
+  Future<void> cargarRepasosRecomendados({bool forzar = false}) async {
+    if (_cargandoRepasos) return;
+    if (!forzar && _repasosRecomendados.isNotEmpty) return;
+    _cargandoRepasos = true;
+    _errorRepasos = null;
+    notifyListeners();
+    try {
+      final Pagina<SugerenciaRepaso> pagina =
+          await _repos.leccion.repasosRecomendados();
+      _repasosRecomendados = pagina.elementos;
+      _paginaRepasos = pagina.info;
+    } catch (e) {
+      _errorRepasos = _comoError(e);
+    } finally {
+      _cargandoRepasos = false;
+      notifyListeners();
+    }
+  }
+
+  /// Trae la siguiente página y la agrega al final de la lista ya cargada.
+  Future<void> cargarMasRepasos() async {
+    if (_cargandoMasRepasos || !_paginaRepasos.puedeSeguir) return;
+    _cargandoMasRepasos = true;
+    notifyListeners();
+    try {
+      final Pagina<SugerenciaRepaso> pagina =
+          await _repos.leccion.repasosRecomendados(
+        cursor: _paginaRepasos.cursorSiguiente,
+      );
+      _repasosRecomendados = <SugerenciaRepaso>[
+        ..._repasosRecomendados,
+        ...pagina.elementos,
+      ];
+      _paginaRepasos = pagina.info;
+      _errorRepasos = null;
+    } catch (e) {
+      _errorRepasos = _comoError(e);
+    } finally {
+      _cargandoMasRepasos = false;
       notifyListeners();
     }
   }
@@ -405,6 +475,9 @@ class ControladorLeccion extends ChangeNotifier with WidgetsBindingObserver {
   void cerrar() {
     _detenerLatido();
     _reiniciar();
+    _repasosRecomendados = const <SugerenciaRepaso>[];
+    _paginaRepasos = const InfoPagina();
+    _errorRepasos = null;
     notifyListeners();
   }
 

@@ -14,7 +14,7 @@ sobrevive a su sesión es otra cosa que promete y no cumple.
 | | |
 |---|---|
 | Rama | `main`, todo subido a `origin` |
-| Pruebas del cliente | **217 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
+| Pruebas del cliente | **223 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
 | Pruebas del servidor | **690 verdes**, suite completa, corrida de un tirón (22-09, ver nota en §5 sobre cómo se corrió pese a la deriva de entorno); `ruff check` limpio |
 | `flutter analyze` | limpio |
 | APK de release | compilado y enviado a Rodrigo a las 02:38 del 18, **con todo lo de la sesión** |
@@ -590,7 +590,7 @@ hueco duplicado, no el arreglo); y que falte una prueba con dos usuarios sobre
 la misma evaluación (el código es correcto y el «fallo» solo aparece después de
 editarlo).
 
-### 4.9 Un segundo rastreo (21-09) — 13 confirmados, 10 cerrados, 2 abiertos
+### 4.9 Un segundo rastreo (21-09) — 13 confirmados, 11 cerrados, 1 abierto
 
 Mismo patrón de §2, buscado a propósito en cinco direcciones —claves que el
 servidor no manda, repositorios y controladores sin llamar, `game_configs`
@@ -732,22 +732,35 @@ con escéptico, y los tres se confirmaron reales — de ahí los trece.
   `cambios` o cambiar de política; regenerar solo no basta con subir un
   documento y reintentar. Dos pruebas HTTP nuevas, verificadas por mutación
   dos veces (el bloqueo y que no es un freno general).
+* **El servidor calculaba qué temas se le estaban olvidando al aprendiz y
+  ninguna pantalla se lo enseñaba** (22-09, decisión de Rodrigo: construir la
+  pantalla). `dominio.py` calcula de verdad la curva de decaimiento y persiste
+  `mastery`/`is_weak` por tema; `GET /reviews/recommended` estaba terminado y
+  probado del lado servidor (CONTRACT.md §7.6), con `RepoLeccion.repasosRecomendados()`
+  y el DTO `SugerenciaRepaso` ya escritos en el cliente — pero
+  `repositorios.dart:964` no tenía ni un solo sitio de llamada en todo
+  `app/lib`, y no existía carpeta `repaso/` ni `review/` en `pantallas/`.
+  Ahora sí: `PantallaRepasosRecomendados`
+  (`app/lib/pantallas/repaso/repasos_recomendados.dart`) lista los temas en
+  riesgo con su duración estimada, con esqueleto de carga, error con
+  reintentar, vacío distinto de «no hay nada» y paginación por cursor
+  («Cargar más»). Reutiliza `TarjetaRepaso`, la misma tarjeta que ya usaba el
+  resultado del Desafío (extraída a un widget compartido en vez de duplicarla).
+  Dos entradas reales, no solo la pantalla suelta: la píldora «pide repaso» de
+  `fila_conocimiento.dart` —que prometía justo eso y en realidad llevaba al
+  mapa del Territorio, donde no hay ni una pregunta que responder— ahora
+  navega aquí, y el Inicio (P04) suma una sección «Repasos pendientes» con
+  las dos primeras sugerencias y un «Ver todos». `GET /knowledge-areas/{id}.weak_topics`
+  y `.area(areaId)` quedan sin cablear todavía —es la explicabilidad del
+  Conocimiento, no la lista de repasos; no era parte de lo pedido—. Cuatro
+  pruebas de widget nuevas (`app/test/repasos_recomendados_test.dart`), con
+  un adaptador de Dio falso atando la llamada real a `GET /reviews/recommended`
+  y su `cursor`, verificadas por mutación dos veces (la paginación y el
+  estado vacío).
 
 **Abiertos, por orden de daño:**
 
-1. **El servidor calcula qué temas se le están olvidando al aprendiz y
-   ninguna pantalla se lo enseña.** `dominio.py` calcula de verdad la curva de
-   decaimiento y persiste `mastery`/`is_weak` por tema; `GET /reviews/recommended`
-   y el `weak_topics` de `GET /knowledge-areas/{id}` están terminados y
-   probados del lado servidor (CONTRACT.md §7.6). Pero
-   `repositorios.dart:964` (`repasosRecomendados()`) y `repositorios.dart:664`
-   (`.area(areaId)`) no tienen ni un solo sitio de llamada en todo `app/lib`,
-   y no existe carpeta `repaso/` ni `review/` en `pantallas/`. Lo único que
-   llega al aprendiz son tres migajas con otro origen: temas flojos de un
-   desafío puntual (no del decaimiento continuo), un tema de refuerzo único
-   cuando la Ruta entera ya está completa, y una píldora agregada por
-   Conocimiento que al tocarla va al mapa, no a un repaso.
-2. **`challenges_per_module_max` no genera ni un desafío**, y el logro
+1. **`challenges_per_module_max` no genera ni un desafío**, y el logro
    «Retador/a» queda visible, en la cuadrícula de Logros, con progreso clavado
    en 0/5 · 0/25 · 0/100, inalcanzable para siempre: no existe una sola
    actividad de tipo `challenge` en el juego. `StudyActivityType.CHALLENGE`,

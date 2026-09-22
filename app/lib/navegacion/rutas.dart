@@ -37,6 +37,9 @@ abstract final class Rutas {
   /// P19 · Misiones, colgada de Inicio.
   static const String misiones = '/inicio/misiones';
 
+  /// Repasos recomendados, colgada de Inicio: temas en riesgo o débiles.
+  static const String repasosRecomendados = '/inicio/repasos';
+
   /// P22 · Aventura: mis territorios y Rutas del Reino.
   static const String aventura = '/aventura';
 
@@ -93,6 +96,9 @@ abstract final class Rutas {
 
   /// Segmento de P19 bajo Inicio.
   static const String segMisiones = 'misiones';
+
+  /// Segmento de repasos recomendados bajo Inicio.
+  static const String segRepasosRecomendados = 'repasos';
 
   /// Segmento de P15 bajo Personaje.
   static const String segMercado = 'mercado';

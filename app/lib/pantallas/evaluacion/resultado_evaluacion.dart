@@ -22,6 +22,7 @@ import '../../navegacion/rutas.dart';
 import '../leccion/widgets/desglose_recompensas.dart';
 import '../leccion/widgets/hoja_fuente.dart';
 import '../leccion/widgets/texto_rico.dart';
+import '../repaso/widgets/tarjeta_repaso.dart';
 
 /// Puntaje, desglose por tema y siguiente paso tras el desafío.
 class PantallaResultadoEvaluacion extends StatefulWidget {
@@ -147,7 +148,7 @@ class _PantallaResultadoEvaluacionState
           if (resultado.sugerenciasRepaso.isNotEmpty) ...<Widget>[
             const EncabezadoSeccion(titulo: 'Repasos recomendados'),
             for (final SugerenciaRepaso s in resultado.sugerenciasRepaso)
-              _TarjetaRepaso(
+              TarjetaRepaso(
                 sugerencia: s,
                 alTocar: () => _irA(Rutas.repaso(s.temaId)),
               ),
@@ -434,49 +435,6 @@ class _FilaTema extends StatelessWidget {
                   label: const Text('Repasar este tema'),
                 ),
               ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Sugerencia de repaso devuelta por el servidor.
-class _TarjetaRepaso extends StatelessWidget {
-  const _TarjetaRepaso({required this.sugerencia, required this.alTocar});
-
-  final SugerenciaRepaso sugerencia;
-  final VoidCallback alTocar;
-
-  @override
-  Widget build(BuildContext context) {
-    final AteneaPalette p = context.paleta;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: Espacio.xs),
-      child: TarjetaAtenea(
-        alTocar: alTocar,
-        colorBorde: sugerencia.esUrgente ? p.advertencia : null,
-        hijo: Row(
-          children: <Widget>[
-            Icon(Icons.refresh_rounded, color: p.dominio),
-            const SizedBox(width: Espacio.sm),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(sugerencia.titulo, style: context.textos.titleMedium),
-                  Text(
-                    sugerencia.motivo ??
-                        '${sugerencia.preguntas} preguntas · '
-                            '${sugerencia.minutosEstimados} min',
-                    style: context.textos.bodyMedium?.copyWith(
-                      color: p.textoSecundario,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right_rounded, color: p.textoSecundario),
           ],
         ),
       ),

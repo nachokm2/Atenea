@@ -12,6 +12,7 @@ library;
 
 import 'package:atenea/datos/repositorios.dart';
 import 'package:atenea/estado/gamificacion.dart';
+import 'package:atenea/estado/leccion.dart';
 import 'package:atenea/estado/panel.dart';
 import 'package:atenea/estado/sesion.dart';
 import 'package:atenea/pantallas/inicio/inicio.dart';
@@ -121,6 +122,9 @@ void main() {
           ),
           ChangeNotifierProvider<ControladorGamificacion>(
             create: (_) => ControladorGamificacion(repos),
+          ),
+          ChangeNotifierProvider<ControladorLeccion>(
+            create: (_) => ControladorLeccion(repos),
           ),
         ],
         // Con el armazon de verdad: la aplicacion mete el Scaffold de la

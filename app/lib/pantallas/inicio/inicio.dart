@@ -23,9 +23,11 @@ import '../../datos/repositorios.dart';
 import '../../design/components.dart';
 import '../../design/tokens.dart';
 import '../../estado/gamificacion.dart';
+import '../../estado/leccion.dart';
 import '../../estado/panel.dart';
 import '../../estado/sesion.dart';
 import '../../navegacion/rutas.dart';
+import '../repaso/widgets/tarjeta_repaso.dart';
 import 'widgets/banner_generacion.dart';
 import 'widgets/cabecera_heroe.dart';
 import 'widgets/esqueletos.dart';
@@ -48,6 +50,9 @@ class _PantallaInicioState extends State<PantallaInicio>
   /// Cuántos conocimientos se ven sin abrir "Ver todo".
   static const int _conocimientosVisibles = 3;
 
+  /// Cuántos repasos recomendados se ven sin abrir "Ver todos".
+  static const int _repasosVisibles = 2;
+
   @override
   void initState() {
     super.initState();
@@ -55,6 +60,7 @@ class _PantallaInicioState extends State<PantallaInicio>
     WidgetsBinding.instance.addPostFrameCallback((Duration _) {
       if (!mounted) return;
       context.read<ControladorPanel>().cargar();
+      context.read<ControladorLeccion>().cargarRepasosRecomendados();
     });
   }
 
@@ -192,6 +198,8 @@ class _PantallaInicioState extends State<PantallaInicio>
     final List<AreaConocimiento> conocimientos = panel.conocimientos;
     final List<AreaConocimiento> visibles =
         conocimientos.take(_conocimientosVisibles).toList(growable: false);
+    final List<SugerenciaRepaso> repasos =
+        context.watch<ControladorLeccion>().repasosRecomendados;
 
     return <Widget>[
       CabeceraHeroe(
@@ -256,7 +264,12 @@ class _PantallaInicioState extends State<PantallaInicio>
         for (final AreaConocimiento area in visibles) ...<Widget>[
           FilaConocimiento(
             area: area,
-            alTocar: () => context.go(Rutas.aventura),
+            // «Pide repaso» prometía justo eso y llevaba al mapa del
+            // Territorio, que no repasa nada: ahí no hay ni una pregunta que
+            // responder. Ahora sí lleva a los repasos recomendados.
+            alTocar: () => context.go(
+              area.estado.pideRepaso ? Rutas.repasosRecomendados : Rutas.aventura,
+            ),
           ),
           const SizedBox(height: Espacio.xs),
         ],
@@ -268,6 +281,23 @@ class _PantallaInicioState extends State<PantallaInicio>
           label: const Text('Crear nueva ruta'),
         ),
       ),
+
+      // --- Repasos pendientes ----------------------------------------------
+      // El servidor calcula de verdad qué temas se están olvidando; esta es
+      // la primera vista de esa lista mientras el aprendiz estudia con
+      // normalidad, no solo al reprobar un desafío o terminar una Ruta.
+      if (repasos.isNotEmpty) ...<Widget>[
+        EncabezadoSeccion(
+          titulo: 'Repasos pendientes',
+          textoAccion: repasos.length > _repasosVisibles ? 'Ver todos' : null,
+          alTocarAccion: () => context.go(Rutas.repasosRecomendados),
+        ),
+        for (final SugerenciaRepaso s in repasos.take(_repasosVisibles))
+          TarjetaRepaso(
+            sugerencia: s,
+            alTocar: () => context.push(Rutas.repaso(s.temaId)),
+          ),
+      ],
 
       // --- Esta semana -----------------------------------------------------
       const EncabezadoSeccion(titulo: 'Esta semana'),
