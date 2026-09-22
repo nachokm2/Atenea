@@ -15,7 +15,7 @@ sobrevive a su sesión es otra cosa que promete y no cumple.
 |---|---|
 | Rama | `main`, todo subido a `origin` |
 | Pruebas del cliente | **217 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
-| Pruebas del servidor | **667 verdes** en la última corrida completa (21-09, antes de la deriva de entorno de más abajo), `ruff check` limpio |
+| Pruebas del servidor | **667 verdes** en la última corrida completa (21-09, antes de la deriva de entorno de §5); **+12** nuevas de `rachas.py` hoy, verdes por su cuenta —la suite entera ya no se puede correr de un tirón hasta resolver §5—; `ruff check` limpio |
 | `flutter analyze` | limpio |
 | APK de release | compilado y enviado a Rodrigo a las 02:38 del 18, **con todo lo de la sesión** |
 | Producción | desplegada, `/health` en 200 con base y worker `ok`, migración aplicada, arranque sin trazas |
@@ -617,31 +617,44 @@ diez confirmados.
   cuales se abre—. Faltaba la llamada. `_HojaFuente` la hace ahora al abrirse,
   con esqueleto mientras llega y sin que el fallo de una cita arrastre a las
   demás. Cinco pruebas nuevas.
+* **La recomendación adaptativa del objetivo diario no la calculaba nadie**
+  (esta sesión). El caso más completo de la enfermedad: `GET /daily-goal` ya
+  servía `recommendation`, `accept`/`dismiss` ya la aplicaban o la
+  descartaban, y la tarjeta «El Reino te propone» ya existía en
+  `racha.dart`. Nadie escribía el campo — nacía y moría en `{}`. Ahora
+  `rachas.evaluar_recomendacion_objetivo` decide qué proponer (§6.11 al pie
+  de la letra: sube al 12/14 con logro medio ≥ 150 %, baja al ≤ 4/14 con ≥ 8
+  activos, y con menos de 4 días activos no un número menor sino el suelo,
+  `actividades = 1`) y `planificador.planificar` decide el cuándo —solo
+  lunes—, reutilizando el mismo barrido semanal que ya existía para los
+  avisos. Doce pruebas, seis de ellas de mutación verificada: la ventana se
+  divide entre los `window_days` del contrato y no entre los días que tengan
+  fila —si no, un aprendiz de tres días perfectos con once vacíos saldría con
+  un 300 % de logro—, cada día pesa con **su propia** foto de objetivo y no
+  con la de hoy, y los dos enfriamientos (`cooldown_days`,
+  `rejected_cooldown_days`) protegen que no se repita la propuesta cada
+  quince minutos del mismo lunes. De paso: **`rachas.py` —500 líneas, toda la
+  racha y el objetivo diario— no tenía ni una prueba en el proyecto**; estas
+  doce son las primeras.
 
 **Abiertos, por orden de daño:**
 
-1. **La recomendación adaptativa del objetivo diario no la calcula nadie.**
-   Tres claves sembradas (`goal.adapt.*`), §6.11 la promete con su fórmula
-   exacta, y no hay tarea semanal que la escriba. Quien revienta su objetivo
-   todos los días nunca recibe la invitación a subirlo; quien lleva dos
-   semanas sin llegar nunca recibe la de bajarlo, que es justo el momento en
-   que abandona.
-2. **«Qué entra» no aparece antes del Desafío.** `topic_titles` y `rules` no
+1. **«Qué entra» no aparece antes del Desafío.** `topic_titles` y `rules` no
    viajan en `AssessmentInfoOut`: se entra a una prueba puntuada, con tope de
    intentos por día, sin que la pantalla diga de qué trata ni cuáles son las
    reglas.
-3. **Las citas de la re-explicación pierden título y páginas.** Es un hallazgo
+2. **Las citas de la re-explicación pierden título y páginas.** Es un hallazgo
    distinto del `GET /chunks/{id}` de arriba: aquí el servidor ya resuelve
    `document_title`, `page_start` y `page_end` en `ai/adaptativo.py` al pedir
    «otra explicación», y su propio esquema de salida (`CitationOut` en
    `content/schemas.py`) los tira porque no los declara.
-4. **El ajuste de racha por viaje no se dispara nunca.** La bandera
+3. **El ajuste de racha por viaje no se dispara nunca.** La bandera
    `viaje_hacia_el_este` existe como parámetro y su único llamador
    (`motor.py:758`) nunca se lo pasa; el umbral sembrado
    (`streak.tz_change_min_delta_h`) no lo lee nadie. Quien viaja hacia el este
    y pierde un día por el salto horario gasta el día de gracia del mes en vez
    de recibir la protección que el contrato le promete por viajar.
-5. **`challenges_per_module_max` no genera ni un desafío**, y el logro
+4. **`challenges_per_module_max` no genera ni un desafío**, y el logro
    «Retador/a» queda visible, en la cuadrícula de Logros, con progreso clavado
    en 0/5 · 0/25 · 0/100, inalcanzable para siempre: no existe una sola
    actividad de tipo `challenge` en el juego.
@@ -692,6 +705,15 @@ No se cuentan como hallazgos hasta comprobarlos.
   sabiendo que puede afectar a lo otro que corra en este mismo Python, o crear
   por fin un entorno virtual propio para Atenea, que es lo que evita que esto
   vuelva a pasar.
+
+  **Alcanza a más que a `pytest`.** `ruff` está pinneado en `0.14.4` y el
+  sistema tiene `0.16.7`: `ruff check` (el linter) sigue pasando limpio, pero
+  `ruff format --check` marca el proyecto entero como mal formateado —incluida
+  la versión que ya está en `main`, comprobado contra el `HEAD` sin tocar—.
+  No se reformateó nada por lo mismo: mezclar una deriva de entorno con un
+  cambio de código real habría sido un diff ilegible. Con esto, las dos
+  comprobaciones de estilo de la CI (`ruff check` y `ruff format --check`) van
+  a decir cosas distintas según qué máquina las corra hasta que se resuelva.
 
 ---
 

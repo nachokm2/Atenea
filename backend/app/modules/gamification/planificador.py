@@ -277,7 +277,13 @@ def planificar(
         logger.warning("planificador.barrido_truncado", vistos=tope, tope=tope)
         filas = filas[:tope]
 
-    cuenta = {"recordatorios": 0, "ultimas_llamadas": 0, "reactivaciones": 0, "misiones": 0}
+    cuenta = {
+        "recordatorios": 0,
+        "ultimas_llamadas": 0,
+        "reactivaciones": 0,
+        "misiones": 0,
+        "objetivos_recomendados": 0,
+    }
     for fila in filas:
         prefs = avisos.preferencias_de_fila(fila)
         local = to_zone(ahora, prefs.zona)
@@ -297,6 +303,15 @@ def planificar(
 
         if delta >= 1 and _misiones(db, cfg, prefs, hoy=hoy, local=local, ahora=ahora):
             cuenta["misiones"] += 1
+
+        # Solo los lunes: es el único día en que la recomendación (§6.11) puede
+        # tener algo nuevo que decir, y comprobarlo el resto de la semana sería
+        # una consulta entera por candidato para no encontrar nunca nada. El
+        # enfriamiento vive dentro de `evaluar_recomendacion_objetivo`, así que
+        # aunque el barrido pase por aquí varias veces el mismo lunes, solo la
+        # primera escribe algo.
+        if hoy.weekday() == 0 and _recomendar_objetivo(db, cfg, prefs, hoy):
+            cuenta["objetivos_recomendados"] += 1
 
     if any(cuenta.values()):
         logger.info("planificador.barrido", candidatos=len(filas), **cuenta)
@@ -468,6 +483,19 @@ def _misiones(
         )
         is not None
     )
+
+
+def _recomendar_objetivo(db: Session, cfg: Any, prefs: Preferencias, hoy: date_type) -> bool:
+    """Envuelve `rachas.evaluar_recomendacion_objetivo` para el barrido semanal.
+
+    Vive en `rachas.py` —el módulo dueño de `daily_goals`— y no aquí: decidir
+    QUÉ recomendar es una regla de dominio del objetivo, no del reloj. Este
+    módulo solo aporta el CUÁNDO (`hoy.weekday() == 0`, ya filtrado por quien
+    llama).
+    """
+    from app.modules.gamification import rachas  # noqa: PLC0415 - evita el ciclo de importación
+
+    return rachas.evaluar_recomendacion_objetivo(db, cfg, prefs.usuario_id, hoy, prefs.zona)
 
 
 def _queda_gracia(cfg: Any, fila: Any, hoy: date_type) -> bool:

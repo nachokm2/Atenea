@@ -151,6 +151,10 @@ SEMILLAS_CONFIG: dict[str, tuple[Any, str, bool]] = {
         True,
     ),
     "goal.adapt.window_days": (14, "int", False),
+    "goal.adapt.up_rule": ({"met_days_gte": 12, "ratio_gte": 1.5}, "map", False),
+    "goal.adapt.down_rule": ({"met_days_lte": 4, "active_days_gte": 8}, "map", False),
+    "goal.adapt.cooldown_days": (14, "int", False),
+    "goal.adapt.rejected_cooldown_days": (28, "int", False),
     # §5.7 Avisos
     "notifications.reminder.default_hour": ("19:00", "string", True),
     "notifications.reminder.offset_min": (45, "int", False),

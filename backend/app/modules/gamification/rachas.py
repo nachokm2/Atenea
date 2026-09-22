@@ -293,6 +293,185 @@ def evaluar_objetivo(
 
 
 # ---------------------------------------------------------------------------
+# Recomendación adaptativa del objetivo (§6.11)
+# ---------------------------------------------------------------------------
+#
+# Todo lo de aquí abajo estaba construido y sin usar: el endpoint que lee
+# `daily_goals.recommendation`, los dos que la aceptan o la rechazan, el DTO del
+# cliente y hasta la tarjeta «El Reino te propone» ya existían. Lo único que
+# faltaba era que alguien escribiera ese campo alguna vez: `recommendation`
+# nacía y moría en `{}`, así que la tarjeta no se pintó jamás.
+
+#: Días de la ventana que observa la recomendación. El mismo `planificador.py`
+#: reutiliza esta clave para la hora habitual del recordatorio —está explicado
+#: allí por qué—: las dos son «cuántos días recientes hay que mirar para que el
+#: dato signifique algo», y sembrar una segunda clave idéntica solo confundiría
+#: cuál manda.
+CLAVE_VENTANA_RECOMENDACION = "goal.adapt.window_days"
+CLAVE_REGLA_SUBIDA = "goal.adapt.up_rule"
+CLAVE_REGLA_BAJADA = "goal.adapt.down_rule"
+CLAVE_ENFRIAMIENTO = "goal.adapt.cooldown_days"
+CLAVE_ENFRIAMIENTO_RECHAZO = "goal.adapt.rejected_cooldown_days"
+
+#: Bajo cuántos días activos en la ventana los datos son demasiado pocos para
+#: sugerir un número concreto. Por debajo de esto no se propone «un poco menos
+#: de lo que tienes», que sería ruido sobre casi nada de información: se
+#: propone el objetivo más simple que existe, para que cualquier actividad
+#: cuente (§6.11).
+MIN_DIAS_ACTIVOS_PARA_NUMERO = 4
+
+#: Clave de `game_configs` con las opciones de cada tipo, para poder subir o
+#: bajar un peldaño sin inventar un número.
+_CLAVE_OPCIONES = {
+    GoalType.MINUTES: "goal.minutes.options",
+    GoalType.ACTIVITIES: "goal.activities.options",
+    GoalType.XP: "goal.xp.options",
+}
+
+
+def _siguiente_opcion(cfg: ServicioConfig, tipo: GoalType, actual: int, *, subir: bool) -> int | None:
+    """La opción justo por encima (o por debajo) de `actual` en `goal.<tipo>.options`.
+
+    `None` si ya está en el extremo: no hay una más alta —o más baja— que
+    proponer, y proponer la misma no sería un cambio.
+    """
+    opciones = sorted(int(v) for v in cfg.obtener_lista(_CLAVE_OPCIONES[tipo]))
+    candidatas = [o for o in opciones if (o > actual if subir else o < actual)]
+    if not candidatas:
+        return None
+    return min(candidatas) if subir else max(candidatas)
+
+
+def evaluar_recomendacion_objetivo(
+    db: Session,
+    cfg: ServicioConfig,
+    usuario_id: uuid.UUID,
+    hoy: date_type,
+    zona: str,
+) -> bool:
+    """Calcula si toca proponer un cambio de objetivo, y lo escribe si sí (§6.11).
+
+    Quién decide **cuándo** llamar es el llamador —el barrido semanal de
+    `planificador.planificar`, un lunes en la hora local de cada uno—; esta
+    función solo decide **qué** proponer. Devuelve si escribió una
+    recomendación nueva, para que el barrido pueda contarlo.
+
+    ## La ventana termina ayer, no hoy
+
+    Evaluar en la mañana del lunes con el día de hoy ya dentro de la ventana
+    metería un día que casi no ha empezado —progreso cerca de cero— y sesgaría
+    la cuenta hacia «bajar» por el simple hecho de la hora a la que corre el
+    barrido. La ventana son los `window_days` días naturales que terminan
+    ayer.
+
+    ## Un día sin fila cuenta como cero, no se descarta
+
+    Sin actividad ese día no se crea fila en `streak_days`, así que la ventana
+    puede tener menos filas que días. Se cuenta la ausencia como lo que es —ni
+    cumplido, ni activo, cociente cero— y el promedio de logro se divide entre
+    `window_days`, no entre las filas que existan: si se dividiera solo entre
+    los días con datos, tres días perfectos y once sin ninguno saldrían con un
+    logro medio del 300 %, cuando lo cierto es que ese aprendiz casi no
+    apareció.
+
+    ## El cociente de cada día usa SU PROPIA foto, no el objetivo de hoy
+
+    `goal_progress / goal_target_snapshot` de cada fila, no el objetivo
+    vigente. Así un cambio de tipo o de meta a mitad de la ventana no rompe la
+    cuenta: cada día se mide contra lo que de verdad tenía que cumplir ese día,
+    y el cociente es la misma unidad adimensional venga del tipo que venga.
+
+    ## Por qué hace falta que la racha lleve `window_days` de vida
+
+    Sin este resguardo, un aprendiz de tres días perfectos activaría «pocos
+    días activos» —activo solo 3 de 14— y se le rebajaría el objetivo con tres
+    datos, que es media semana, no evidencia. Se exige que `streaks.started_on`
+    tenga al menos `window_days` de antigüedad antes de opinar nada.
+
+    ## Solo se escribe cuando hay algo que decir
+
+    Si ninguna regla dispara no se toca `recommendation`: no se sella
+    `computed_on` de un «no» porque el enfriamiento general se cuenta desde la
+    última vez que **se propuso algo**, no desde la última vez que se miró. Con
+    un enfriamiento de sello vacío, una semana borde sin regla habría bloqueado
+    la evaluación real de la semana siguiente.
+    """
+    objetivo = obtener_o_crear_objetivo(db, cfg, usuario_id, hoy)
+
+    if objetivo.recommendation_rejected_at is not None:
+        rechazado_el = user_local_date(objetivo.recommendation_rejected_at, zona)
+        dias_desde_rechazo = (hoy - rechazado_el).days
+        if dias_desde_rechazo < cfg.obtener_int(CLAVE_ENFRIAMIENTO_RECHAZO):
+            return False
+
+    calculada_el = (objetivo.recommendation or {}).get("computed_on")
+    if calculada_el and (hoy - date_type.fromisoformat(calculada_el)).days < cfg.obtener_int(
+        CLAVE_ENFRIAMIENTO
+    ):
+        return False
+
+    racha = obtener_o_crear_racha(db, usuario_id)
+    ventana = cfg.obtener_int(CLAVE_VENTANA_RECOMENDACION)
+    if racha.started_on is None or (hoy - racha.started_on).days < ventana:
+        return False
+
+    fin = hoy - timedelta(days=1)
+    inicio = fin - timedelta(days=ventana - 1)
+    dias = list(
+        db.execute(
+            sa.select(StreakDay).where(
+                StreakDay.user_id == usuario_id,
+                StreakDay.local_date >= inicio,
+                StreakDay.local_date <= fin,
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    cumplidos = sum(1 for d in dias if d.goal_met_at is not None)
+    activos = sum(1 for d in dias if dia_activo(cfg, d))
+    suma_cocientes = sum(
+        int(d.goal_progress) / int(d.goal_target_snapshot)
+        for d in dias
+        if d.goal_target_snapshot
+    )
+    logro_medio = suma_cocientes / ventana
+
+    regla_subida = cfg.obtener_json(CLAVE_REGLA_SUBIDA)
+    regla_bajada = cfg.obtener_json(CLAVE_REGLA_BAJADA)
+
+    if cumplidos >= int(regla_subida["met_days_gte"]) and logro_medio >= float(regla_subida["ratio_gte"]):
+        direccion = "up"
+        tipo = objetivo.goal_type
+        meta = _siguiente_opcion(cfg, tipo, int(objetivo.target), subir=True)
+    elif activos < MIN_DIAS_ACTIVOS_PARA_NUMERO:
+        # Muy pocos datos para sugerir «un poco menos»: se ofrece el suelo,
+        # donde cualquier actividad del día ya cuenta.
+        direccion, tipo, meta = "down", GoalType.ACTIVITIES, 1
+    elif cumplidos <= int(regla_bajada["met_days_lte"]) and activos >= int(regla_bajada["active_days_gte"]):
+        direccion = "down"
+        tipo = objetivo.goal_type
+        meta = _siguiente_opcion(cfg, tipo, int(objetivo.target), subir=False)
+    else:
+        return False
+
+    if meta is None or (tipo == objetivo.goal_type and int(meta) == int(objetivo.target)):
+        # Ya está en el extremo de sus opciones, o la sugerencia coincide con lo
+        # que ya tiene: no hay cambio real que proponer.
+        return False
+
+    objetivo.recommendation = {
+        "direction": direccion,
+        "suggested_type": tipo.value,
+        "suggested_target": int(meta),
+        "computed_on": hoy.isoformat(),
+    }
+    db.flush()
+    return True
+
+
+# ---------------------------------------------------------------------------
 # Racha (`streaks`)
 # ---------------------------------------------------------------------------
 
@@ -531,6 +710,7 @@ __all__ = [
     "dia_activo",
     "estado_visible",
     "evaluar_objetivo",
+    "evaluar_recomendacion_objetivo",
     "fecha_local_de",
     "gracia_disponible",
     "hito_de_racha",
