@@ -15,7 +15,7 @@ sobrevive a su sesión es otra cosa que promete y no cumple.
 |---|---|
 | Rama | `main`, todo subido a `origin` |
 | Pruebas del cliente | **217 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
-| Pruebas del servidor | **667 verdes** en la última corrida completa (21-09, antes de la deriva de entorno de §5); **+12** nuevas de `rachas.py` hoy, verdes por su cuenta —la suite entera ya no se puede correr de un tirón hasta resolver §5—; `ruff check` limpio |
+| Pruebas del servidor | **680 verdes**, suite completa, corrida de un tirón (22-09, ver nota en §5 sobre cómo se corrió pese a la deriva de entorno); `ruff check` limpio |
 | `flutter analyze` | limpio |
 | APK de release | compilado y enviado a Rodrigo a las 02:38 del 18, **con todo lo de la sesión** |
 | Producción | desplegada, `/health` en 200 con base y worker `ok`, migración aplicada, arranque sin trazas |
@@ -590,14 +590,18 @@ hueco duplicado, no el arreglo); y que falte una prueba con dos usuarios sobre
 la misma evaluación (el código es correcto y el «fallo» solo aparece después de
 editarlo).
 
-### 4.9 Un segundo rastreo (21-09) — 10 confirmados, 5 cerrados, 5 abiertos
+### 4.9 Un segundo rastreo (21-09) — 13 confirmados, 6 cerrados, 6 abiertos
 
 Mismo patrón de §2, buscado a propósito en cinco direcciones —claves que el
 servidor no manda, repositorios y controladores sin llamar, `game_configs`
 sembrado y sin leer, lo que el servidor calcula y ninguna pantalla pide, y
 frases de la interfaz que afirman algo sin respaldo—, con un escéptico por
 hallazgo que intentaba refutarlo ejecutando código. Diecinueve propuestos,
-diez confirmados.
+diez confirmados en la corrida original. De los cuatro que se quedaron **sin
+verificar** por el límite semanal de la cuenta, uno resultó ser el mismo
+hallazgo que «`GET /chunks/{id}` sin llamar» (ya cerrado más abajo, encontrado
+por otra dirección de búsqueda) y los otros tres se verificaron hoy (22-09),
+con escéptico, y los tres se confirmaron reales — de ahí los trece.
 
 **Cerrados:**
 
@@ -636,34 +640,74 @@ diez confirmados.
   quince minutos del mismo lunes. De paso: **`rachas.py` —500 líneas, toda la
   racha y el objetivo diario— no tenía ni una prueba en el proyecto**; estas
   doce son las primeras.
+* **«Qué entra» no aparecía antes del Desafío** (22-09). `topic_titles` no
+  viajaba en `AssessmentInfoOut`: se entraba a una prueba puntuada, con tope
+  de intentos por día, sin que la pantalla dijera de qué trata. Ahora
+  `info_evaluacion` trae los temas del módulo (`Topic.title`, ordenados por
+  `position`) y la sección «Qué entra» de P11 —que ya existía en
+  `evaluacion.dart`, esperando esta lista— se pinta. `rules` se dejó tal cual
+  (siempre vacía): no es el mismo defecto, es una previsión del cliente para
+  un dato que el dominio nunca tuvo —`Assessment` no tiene columna de reglas
+  en ningún lado— y que se degrada bien a «no mostrar nada extra»; inventar
+  un origen para eso habría sido fabricar dato, no arreglar una desconexión.
+  Una prueba nueva, verificada por mutación (rompí el cableado, la prueba
+  falló, lo repuse).
 
 **Abiertos, por orden de daño:**
 
-1. **«Qué entra» no aparece antes del Desafío.** `topic_titles` y `rules` no
-   viajan en `AssessmentInfoOut`: se entra a una prueba puntuada, con tope de
-   intentos por día, sin que la pantalla diga de qué trata ni cuáles son las
-   reglas.
-2. **Las citas de la re-explicación pierden título y páginas.** Es un hallazgo
+1. **La política de cobertura elegida por el aprendiz se guarda y no se
+   aplica jamás.** En «Tu material no cubre todo», el aprendiz elige entre
+   «Completar con el saber del Reino», «Solo con mi material» (más corta,
+   toda con fuente) o «Pedirme más material». La Fase A (`arquitecto_ruta.py`,
+   `_aplicar_politica`) ya resolvió los temas insuficientes con la política
+   **por defecto** (`MODEL_KNOWLEDGE`) al crear la ruta, *antes* de que el
+   aprendiz eligiera nada; `POST /paths/{id}/confirm` (`rutas.py:398-401`)
+   solo sobreescribe la columna `coverage_policy` y avanza a `GENERATING` sin
+   condición — no vuelve a tocar los temas ya persistidos, y `autor_leccion.py`
+   (Fase B, quien redacta cada lección) no importa `CoveragePolicy` en ningún
+   punto del archivo. Quien toca «Solo con mi material» recibe exactamente la
+   misma ruta que si hubiera tocado «Completar con el saber del Reino» —ningún
+   tema se elimina, la Fase B sigue inventando contenido para los temas sin
+   respaldo—; quien toca «Pedirme más material» ve el Módulo 1 generarse
+   igual, de inmediato, sin esperar nada.
+2. **«Dominio del territorio»: 0 % en la cabecera de toda Ruta y en toda
+   tarjeta de Ruta, siempre.** `ResumenRuta.dominio` (`dtos.dart:1802,1847`)
+   busca `mastery`/`mastery_pct` en el sobre de `GET /paths` y
+   `GET /paths/{id}`, pero ni `PathSummaryOut` ni `PathDetailOut` declaran ese
+   campo, y `_ruta_out`/`_detalle_out` nunca lo asignan —aunque sí propagan
+   `mastery` para cada módulo y cada tema dentro del mismo sobre—. El dato ni
+   siquiera existe a nivel de Ruta en el modelo: el dominio del territorio es
+   `UserAreaProgress.mastery`, ligado al `KnowledgeArea`, no a la
+   `LearningPath`; nadie hace ese join. Todo aprendiz ve «0 %» en el medallón
+   de dominio de cada Ruta que abre, incluso con módulos completados y dominio
+   real visible en otras pantallas.
+3. **El servidor calcula qué temas se le están olvidando al aprendiz y
+   ninguna pantalla se lo enseña.** `dominio.py` calcula de verdad la curva de
+   decaimiento y persiste `mastery`/`is_weak` por tema; `GET /reviews/recommended`
+   y el `weak_topics` de `GET /knowledge-areas/{id}` están terminados y
+   probados del lado servidor (CONTRACT.md §7.6). Pero
+   `repositorios.dart:964` (`repasosRecomendados()`) y `repositorios.dart:664`
+   (`.area(areaId)`) no tienen ni un solo sitio de llamada en todo `app/lib`,
+   y no existe carpeta `repaso/` ni `review/` en `pantallas/`. Lo único que
+   llega al aprendiz son tres migajas con otro origen: temas flojos de un
+   desafío puntual (no del decaimiento continuo), un tema de refuerzo único
+   cuando la Ruta entera ya está completa, y una píldora agregada por
+   Conocimiento que al tocarla va al mapa, no a un repaso.
+4. **Las citas de la re-explicación pierden título y páginas.** Es un hallazgo
    distinto del `GET /chunks/{id}` de arriba: aquí el servidor ya resuelve
    `document_title`, `page_start` y `page_end` en `ai/adaptativo.py` al pedir
    «otra explicación», y su propio esquema de salida (`CitationOut` en
    `content/schemas.py`) los tira porque no los declara.
-3. **El ajuste de racha por viaje no se dispara nunca.** La bandera
+5. **El ajuste de racha por viaje no se dispara nunca.** La bandera
    `viaje_hacia_el_este` existe como parámetro y su único llamador
    (`motor.py:758`) nunca se lo pasa; el umbral sembrado
    (`streak.tz_change_min_delta_h`) no lo lee nadie. Quien viaja hacia el este
    y pierde un día por el salto horario gasta el día de gracia del mes en vez
    de recibir la protección que el contrato le promete por viajar.
-4. **`challenges_per_module_max` no genera ni un desafío**, y el logro
+6. **`challenges_per_module_max` no genera ni un desafío**, y el logro
    «Retador/a» queda visible, en la cuadrícula de Logros, con progreso clavado
    en 0/5 · 0/25 · 0/100, inalcanzable para siempre: no existe una sola
    actividad de tipo `challenge` en el juego.
-
-**Sin verificar, no confirmados ni descartados:** cuatro candidatos no
-llegaron a pasar por el escéptico —se agotó el límite semanal de la cuenta a
-mitad del rastreo—. Entre ellos, uno que suena grave: «Dominio del territorio:
-0 % en la cabecera de toda ruta y en toda tarjeta de ruta, para siempre».
-No se cuentan como hallazgos hasta comprobarlos.
 
 ---
 
@@ -714,6 +758,22 @@ No se cuentan como hallazgos hasta comprobarlos.
   cambio de código real habría sido un diff ilegible. Con esto, las dos
   comprobaciones de estilo de la CI (`ruff check` y `ruff format --check`) van
   a decir cosas distintas según qué máquina las corra hasta que se resuelva.
+
+  **Cómo corrí la suite completa hoy (22-09) sin tocar el Python
+  compartido.** Para no imponerte una de las dos salidas de arriba, armé un
+  entorno virtual aparte, solo para verificar, en `C:\av` (fuera de
+  `backend/`, no es parte del proyecto): `python -m venv C:\av` y
+  `pip install -r requirements-dev.txt` ahí dentro, con las versiones que este
+  proyecto fija. Dos tropiezos que quizás te sirvan si eliges la salida de
+  reinstalar o crear un venv propio: (1) `uvloop` —que `uvicorn[standard]`
+  pide— no compila en Windows («uvloop does not support Windows»; tuve que
+  excluirlo, no lo necesita nada para correr bajo pytest ni bajo
+  `uvicorn` con el loop por defecto); (2) si el venv queda en una ruta muy
+  anidada (como la carpeta temporal de esta sesión), `pip` falla instalando
+  `lxml` por el límite de ruta larga de Windows —con una ruta corta como
+  `C:\av` no pasa—. `C:\av` quedó creado en tu máquina; es desechable, lo
+  puedes borrar (`Remove-Item -Recurse -Force C:\av`) o dejarlo si te sirve
+  para seguir corriendo pruebas mientras decides la salida definitiva.
 
 ---
 

@@ -1013,6 +1013,7 @@ def obtener_info_evaluacion(
         best_effective=info.best_effective,
         passed_at=info.passed_at,
         reward_preview=info.reward_preview,
+        topic_titles=info.topic_titles,
     )
 
 

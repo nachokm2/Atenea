@@ -584,6 +584,10 @@ class AssessmentInfoOut(EsquemaBase):
     best_effective: float | None = None
     passed_at: datetime | None = None
     reward_preview: dict[str, int] = Field(default_factory=dict)
+    # Los temas del módulo, ordenados. Alimenta «Qué entra» en P11: sin esto,
+    # `info.temas` llegaba siempre vacía y esa sección de la pantalla no se
+    # pintaba nunca.
+    topic_titles: list[str] = Field(default_factory=list)
 
 
 class AssessmentAttemptOut(EsquemaBase):

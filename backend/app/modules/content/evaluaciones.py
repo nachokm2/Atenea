@@ -76,6 +76,11 @@ class InfoEvaluacion:
     best_effective: float | None
     passed_at: datetime | None
     reward_preview: dict[str, int]
+    # Los temas del módulo, para la sección «Qué entra» de P11. El cliente ya
+    # la tenía escrita —`if (info.temas.isNotEmpty)` en evaluacion.dart— y
+    # nunca se pintaba: nada en el sobre le daba con qué. Se entra a una
+    # prueba puntuada, con tope de intentos por día, sin saber de qué trata.
+    topic_titles: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -216,6 +221,12 @@ def info_evaluacion(
     elif usados >= tope:
         motivo = "ASSESSMENT_ATTEMPT_LIMIT"
 
+    temas = list(
+        db.execute(
+            sa.select(Topic.title).where(Topic.module_id == module_id).order_by(Topic.position)
+        ).scalars()
+    )
+
     return InfoEvaluacion(
         assessment=evaluacion,
         module=contexto.module,
@@ -246,6 +257,7 @@ def info_evaluacion(
             "xp": cfg.obtener_int("xp.assessment_passed"),
             "gold": cfg.obtener_int("gold.assessment_passed"),
         },
+        topic_titles=temas,
     )
 
 

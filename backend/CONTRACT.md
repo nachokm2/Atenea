@@ -3106,7 +3106,7 @@ Convenciones de la columna "Respuesta": los nombres en `PascalCase` son esquemas
 
 | Método | Ruta | Auth | Descripción | Respuesta |
 |---|---|---|---|---|
-| GET | `/api/v1/modules/{module_id}/assessment` | Sí | Pantalla de entrada (P11): reglas, recompensa, intentos usados y enfriamiento. | `AssessmentInfoOut` `{assessment, attempts_used, cooldown_until, can_start, reward_preview}` |
+| GET | `/api/v1/modules/{module_id}/assessment` | Sí | Pantalla de entrada (P11): reglas, recompensa, intentos usados y enfriamiento. | `AssessmentInfoOut` `{assessment, attempts_used, cooldown_until, can_start, reward_preview, topic_titles}`. `topic_titles` son los temas del módulo, en orden, para la sección «Qué entra»: sin ellos esa sección no tiene nada que pintar. |
 | POST | `/api/v1/assessments/{assessment_id}/start` | Sí (**Idempotency-Key**) | Crea el intento y muestrea el banco (solapamiento ≤ 30 %). | `AssessmentAttemptOut` `{attempt_id, questions[], question_count}` |
 | POST | `/api/v1/assessment-attempts/{attempt_id}/answers` | Sí (**Idempotency-Key**) | Registra una respuesta (feedback mínimo: correcto/incorrecto, sin explicación). | `{"recorded": true, "index": 3, "total": 10}` |
 | POST | `/api/v1/assessment-attempts/{attempt_id}/submit` | Sí (**Idempotency-Key**) | Cierra el intento, calcula puntaje y dominio (P12). | **`RewardsReceipt`** con `assessment_result` `{score_pct, outcome, per_topic[], weak_topics[], cooldown_until, review_suggestions[]}` |

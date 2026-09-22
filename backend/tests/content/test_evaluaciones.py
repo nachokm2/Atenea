@@ -14,6 +14,7 @@ import sqlalchemy as sa
 
 from app.core.errors import AteneaError
 from app.core.time import utcnow
+from app.models.content import Topic
 from app.models.enums import AssessmentOutcome, AttemptStatus
 from app.models.progress import AssessmentAttempt, UserModuleProgress
 from app.modules.content import evaluaciones, preguntas
@@ -70,6 +71,21 @@ def test_info_evaluacion_muestra_reglas_intentos_y_recompensa(db, cfg, usuario, 
     assert info.pass_score == 70.0
     assert info.reward_preview["xp"] == cfg.obtener_int("xp.assessment_passed")
     assert info.reward_preview["gold"] == cfg.obtener_int("gold.assessment_passed")
+
+
+def test_info_evaluacion_trae_los_temas_del_modulo_en_orden(db, cfg, usuario, contenido):
+    """P11 «Qué entra»: `topic_titles` trae los temas del módulo, en orden (§7.7)."""
+    ServicioProgreso(db).asegurar_progreso_ruta(usuario.id, contenido.ruta.id)
+
+    otro_tema = Topic(
+        module_id=contenido.modulo1.id, position=2, title="Subconsultas", lesson_count=1
+    )
+    db.add(otro_tema)
+    db.flush()
+
+    info = evaluaciones.info_evaluacion(db, cfg, usuario, contenido.modulo1.id)
+
+    assert info.topic_titles == ["JOINs", "Subconsultas"]
 
 
 def test_info_de_un_modulo_bloqueado_responde_module_locked(db, cfg, usuario, contenido):
