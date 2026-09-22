@@ -141,6 +141,7 @@ Future<List<String>> _montar(
             alTocarDesafio:
                 (ModuloRuta _, ResumenEvaluacion e, EstiloNodo estilo) =>
                     tocados.add('desafio:${e.id}:${estilo.name}'),
+            alTocarReto: (ModuloRuta m) => tocados.add('reto:${m.id}'),
             alVerLaForja: () => tocados.add('forja'),
           ),
         ),
@@ -186,6 +187,64 @@ void main() {
 
     expect(find.byType(ContenidoLeccion), findsOneWidget);
     expect(find.byType(ContenidoDesafio), findsNothing);
+  });
+
+  testWidgets('el módulo completado ofrece el Reto opcional',
+      (WidgetTester tester) async {
+    final List<String> tocados = await _montar(
+      tester,
+      _ruta(<Map<String, dynamic>>[
+        _modulo(
+          'mod-1',
+          estado: 'completed',
+          desafio: _desafio(aprobada: true),
+          lecciones: <Map<String, dynamic>>[_leccion('a', estado: 'completed')],
+        ),
+      ]),
+    );
+
+    expect(find.byType(ContenidoReto), findsOneWidget);
+
+    await tester.tap(find.byType(ContenidoReto));
+    expect(tocados, <String>['reto:mod-1']);
+  });
+
+  testWidgets('un módulo todavía sin terminar no ofrece el Reto',
+      (WidgetTester tester) async {
+    // El Reto es un extra tras terminar el módulo, no otro camino para
+    // avanzarlo: sin esto, se ofrecería antes incluso de haber estudiado.
+    await _montar(
+      tester,
+      _ruta(<Map<String, dynamic>>[
+        _modulo(
+          'mod-1',
+          estado: 'in_progress',
+          desafio: _desafio(),
+          lecciones: <Map<String, dynamic>>[_leccion('a')],
+        ),
+      ]),
+    );
+
+    expect(find.byType(ContenidoReto), findsNothing);
+  });
+
+  testWidgets('el Reto va después de la prueba del módulo',
+      (WidgetTester tester) async {
+    await _montar(
+      tester,
+      _ruta(<Map<String, dynamic>>[
+        _modulo(
+          'mod-1',
+          estado: 'completed',
+          desafio: _desafio(aprobada: true),
+          lecciones: <Map<String, dynamic>>[_leccion('a', estado: 'completed')],
+        ),
+      ]),
+    );
+
+    final double desafio = tester.getCenter(find.byType(ContenidoDesafio)).dy;
+    final double reto = tester.getCenter(find.byType(ContenidoReto)).dy;
+    expect(desafio, lessThan(reto));
   });
 
   testWidgets('cada módulo lleva su prueba, y van después de sus lecciones',

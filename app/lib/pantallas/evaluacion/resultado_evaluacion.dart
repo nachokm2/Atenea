@@ -184,15 +184,29 @@ class _PantallaResultadoEvaluacionState
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        if (aprobo)
+        if (aprobo) ...<Widget>[
           BotonPrimario(
             texto: 'Continuar',
             icono: Icons.arrow_forward_rounded,
             subtitulo: rutaId == null ? null : 'Sigue tu Ruta',
             alTocar: () =>
                 _irA(rutaId == null ? Rutas.inicio : Rutas.ruta(rutaId)),
-          )
-        else
+          ),
+          // Es el único momento en que el cliente sabe, sin ambigüedad, que
+          // el módulo acaba de pasar a completado: la entrada natural al
+          // Reto opcional, antes de que el aprendiz vuelva al mapa. No hay
+          // forma de saber aquí si ya se agotó (content.challenges_per_module_max):
+          // se intenta, y CHALLENGE_ALREADY_USED lo cuenta el intérprete de
+          // errores genérico (ErrorAtenea.desdeDio), sin lógica nueva.
+          Padding(
+            padding: const EdgeInsets.only(top: Espacio.xs),
+            child: TextButton.icon(
+              onPressed: () => _irA(Rutas.reto(widget.moduloId)),
+              icon: const Icon(Icons.military_tech_rounded),
+              label: const Text('Hacer el Reto de este módulo'),
+            ),
+          ),
+        ] else
           BotonPrimario(
             texto: 'Reforzar temas débiles',
             icono: Icons.auto_fix_high_rounded,

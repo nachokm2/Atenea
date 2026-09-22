@@ -100,6 +100,7 @@ class CaminoDeLaRuta extends StatelessWidget {
     required this.alTocarModulo,
     required this.alTocarLeccion,
     required this.alTocarDesafio,
+    required this.alTocarReto,
     required this.alVerLaForja,
     super.key,
   });
@@ -119,6 +120,9 @@ class CaminoDeLaRuta extends StatelessWidget {
     ResumenEvaluacion evaluacion,
     EstiloNodo estilo,
   ) alTocarDesafio;
+
+  /// El Reto opcional del módulo, ya completado.
+  final void Function(ModuloRuta modulo) alTocarReto;
 
   /// Salida cuando la ruta no tiene ni un módulo todavía.
   final VoidCallback alVerLaForja;
@@ -232,6 +236,26 @@ class CaminoDeLaRuta extends StatelessWidget {
                 estilo: estiloDesafio,
                 alTocar: () => alTocarDesafio(modulo, evaluacion, estiloDesafio),
               ),
+            ),
+          ),
+        );
+      }
+
+      // Reto opcional: solo tras completar el módulo. El servidor no manda
+      // si ya se agotó (content.challenges_per_module_max) — se ofrece
+      // siempre que el módulo esté hecho, y el 409 CHALLENGE_ALREADY_USED
+      // avisa al tocarlo si ya no queda.
+      if (hecho) {
+        nodos.add(
+          AparecerEnCascada(
+            indice: indice++,
+            hijo: NodoCamino(
+              estilo: EstiloNodo.disponible,
+              sangria: Espacio.xs,
+              icono: Icons.military_tech_rounded,
+              tramoSuperiorHecho: hecho,
+              tramoInferiorHecho: hecho,
+              hijo: ContenidoReto(alTocar: () => alTocarReto(modulo)),
             ),
           ),
         );

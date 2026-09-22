@@ -85,6 +85,9 @@ abstract final class Rutas {
   /// Lección en modo repaso de un tema.
   static String repaso(String temaId) => '/repaso/$temaId';
 
+  /// Reto opcional de un módulo ya completado.
+  static String reto(String moduloId) => '/reto/$moduloId';
+
   /// P11 · Desafío del módulo.
   static String evaluacion(String moduloId) => '/evaluacion/$moduloId';
 
@@ -131,6 +134,9 @@ abstract final class Rutas {
 
   /// Patrón del repaso de un tema.
   static const String patronRepaso = '/repaso/:$paramTema';
+
+  /// Patrón del Reto de un módulo.
+  static const String patronReto = '/reto/:$paramModulo';
 
   /// Patrón de P11.
   static const String patronEvaluacion = '/evaluacion/:$paramModulo';

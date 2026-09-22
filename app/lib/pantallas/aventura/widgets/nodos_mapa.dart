@@ -497,6 +497,55 @@ class ContenidoDesafio extends StatelessWidget {
   }
 }
 
+/// Nodo del Reto opcional del módulo: unas pocas preguntas de todo lo
+/// aprendido, tras completarlo.
+///
+/// Distinto del Desafío (`ContenidoDesafio`, arriba): ese es la evaluación
+/// del módulo, con aprobación y reprobación; el Reto es opcional, sin
+/// castigo, y paga otra recompensa (`CHALLENGE_COMPLETED`, D12). El servidor
+/// no manda ningún campo que diga si ya se agotó
+/// (`content.challenges_per_module_max`): este nodo se ofrece siempre que el
+/// módulo está completo, y quien ya lo hizo se entera al tocarlo, por el
+/// mensaje que trae el `409 CHALLENGE_ALREADY_USED`.
+class ContenidoReto extends StatelessWidget {
+  const ContenidoReto({required this.alTocar, super.key});
+
+  final VoidCallback alTocar;
+
+  @override
+  Widget build(BuildContext context) {
+    final AteneaPalette p = context.paleta;
+
+    return TarjetaAtenea(
+      alTocar: alTocar,
+      colorBorde: p.arcano.withValues(alpha: 0.5),
+      semantica: 'Reto del módulo, opcional. Preguntas de todo lo que '
+          'aprendiste aquí, más difíciles.',
+      hijo: Row(
+        children: <Widget>[
+          Icon(Icons.military_tech_rounded, color: p.arcano, size: 22),
+          const SizedBox(width: Espacio.xs),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text('Reto del módulo', style: context.textos.titleMedium),
+                Text(
+                  'Opcional: preguntas de todo lo que aprendiste aquí, más '
+                  'difíciles.',
+                  style: context.textos.bodyMedium
+                      ?.copyWith(color: p.textoSecundario),
+                ),
+              ],
+            ),
+          ),
+          Icon(Icons.chevron_right_rounded, color: p.textoSecundario),
+        ],
+      ),
+    );
+  }
+}
+
 /// Tesoro del final del camino: el ítem de conocimiento de la Ruta.
 class ContenidoTesoro extends StatelessWidget {
   const ContenidoTesoro({

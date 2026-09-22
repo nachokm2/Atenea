@@ -14,7 +14,7 @@ sobrevive a su sesión es otra cosa que promete y no cumple.
 | | |
 |---|---|
 | Rama | `main`, todo subido a `origin` |
-| Pruebas del cliente | **223 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
+| Pruebas del cliente | **228 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
 | Pruebas del servidor | **694 verdes**, suite completa, corrida de un tirón (22-09, ver nota en §5 sobre cómo se corrió pese a la deriva de entorno); `ruff check` limpio |
 | `flutter analyze` | limpio |
 | APK de release | compilado y enviado a Rodrigo a las 02:38 del 18, **con todo lo de la sesión** |
@@ -590,7 +590,7 @@ hueco duplicado, no el arreglo); y que falte una prueba con dos usuarios sobre
 la misma evaluación (el código es correcto y el «fallo» solo aparece después de
 editarlo).
 
-### 4.9 Un segundo rastreo (21-09) — 13 confirmados, 12 cerrados (uno a medias), 1 abierto
+### 4.9 Un segundo rastreo (21-09) — 13 confirmados, 13 cerrados
 
 Mismo patrón de §2, buscado a propósito en cinco direcciones —claves que el
 servidor no manda, repositorios y controladores sin llamar, `game_configs`
@@ -790,19 +790,49 @@ con escéptico, y los tres se confirmaron reales — de ahí los trece.
   el de lección —esa mutación reventaba con una `LookupError` real: la
   prueba de que antes de este cambio, completar un reto de verdad habría
   roto el servidor—).
+* **El Reto en el cliente: pantalla, entrada y el bug que quedó al
+  descubierto al construirla** (22-09). `PantallaLeccion`/`ControladorLeccion`
+  ya servían lección y repaso con el mismo ciclo genérico de actividad
+  (abrir → responder → terminar); el Reto encaja como tercer modo, calcado
+  del patrón de `abrirRepaso`/`temaId` — no hizo falta pantalla nueva.
+  `RepoLeccion.empezarReto(moduloId)` llama a `POST /modules/{id}/challenge/start`
+  (`Actividad.desdeJson` y el enum `TipoActividad.desafio` ya reconocían la
+  forma `activity_type: "challenge"`, sin tocar ningún DTO);
+  `ControladorLeccion.abrirReto(moduloId)` copia `abrirRepaso` casi al pie de
+  la letra; `Rutas.reto(moduloId)` = `/reto/:moduloId`, tercer `GoRoute`
+  idéntico en forma al de repaso, con el mismo `onExit` (ya agnóstico al modo).
 
-**Abiertos, por orden de daño:**
+  Dos entradas reales: un botón «Hacer el Reto de este módulo» en el pie de
+  P12 justo tras aprobar el Desafío (único momento en que el cliente sabe
+  con certeza que el módulo se completó), y un nodo nuevo (`ContenidoReto`)
+  en el mapa de la Ruta, después del nodo del Desafío, visible siempre que
+  el módulo esté completado —el servidor no manda si el reto ya se agotó, así
+  que se ofrece siempre y el `409 CHALLENGE_ALREADY_USED` avisa al tocarlo
+  si ya no queda—.
 
-1. **Falta la mitad del reto: pantalla y entrada en el cliente.** El backend
-   ya funciona de punta a punta (arriba). Pendiente: una pantalla o tarjeta
-   «Reto» (nombre elegido para no chocar con «Desafío», que ya es la
-   evaluación de módulo) que llame a `POST /modules/{id}/challenge/start`,
-   reutilice el flujo de preguntas ya existente (`Actividad`/`empezar*` en
-   el cliente) y aparezca donde el aprendiz ya ve que terminó un módulo —el
-   nodo del módulo en el mapa, o la pantalla de resultado del Desafío
-   cuando aprueba—, con sus dos avisos nuevos (`CHALLENGE_LOCKED`,
-   `CHALLENGE_ALREADY_USED`) manejados por el intérprete de errores genérico
-   que ya existe (`ErrorAtenea.desdeDio`), sin tocarlo.
+  Al construirlo salió a la luz un bug real y ya viejo, no nuevo de este
+  cambio: `ControladorLeccion.esRepaso` leía `_leccion?.esRepaso`, que es
+  `null` (o sea `false`) tanto en repaso como en el Reto, porque ninguno de
+  los dos tiene Lección de origen — `PantallaFinLeccion` llevaba mostrando
+  «LECCIÓN COMPLETADA» al terminar un repaso desde que existe, y ninguna
+  prueba lo notaba porque ninguna terminaba un repaso de punta a punta. Se
+  reemplazó por un `ModoActividad` explícito (`leccion`/`repaso`/`reto`) que
+  viaja desde `PantallaLeccion` a `PantallaFinLeccion` como parámetro, en vez
+  de inferirse de un estado que no lo distingue; de paso, `rutaId` en el
+  cierre ahora también mira `Actividad.rutaId` y no solo `Leccion.rutaId`,
+  así que un repaso o un Reto que sí pertenecen a una Ruta vuelven a esa
+  Ruta al tocar «Continuar», en vez de caer siempre a Inicio.
+
+  Cinco pruebas de cliente nuevas: tres en `camino_ruta_test.dart` (el nodo
+  del Reto aparece solo con el módulo completado, y después del Desafío) y
+  dos en `reto_del_modulo_test.dart`, con un adaptador de Dio falso que ata
+  todo el ciclo real (`/challenge/start` → `/answers` → `/complete`) y
+  comprueba el texto exacto de cierre —«RETO SUPERADO», nunca «LECCIÓN
+  COMPLETADA»—, verificadas por mutación tres veces (el nodo del mapa, el
+  modo Reto de la pantalla, y la etiqueta de cierre).
+
+  Con esto se cierra el rastreo del 21-09 completo: los 13 confirmados,
+  cerrados.
 
 ---
 

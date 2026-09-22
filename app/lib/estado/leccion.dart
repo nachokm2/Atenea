@@ -33,6 +33,18 @@ class PasoLeccion {
   bool get esCierre => bloque?.tipo == TipoBloque.resumen;
 }
 
+/// Qué actividad está abierta: cambia el título, el aviso y el cierre de P08–P10.
+enum ModoActividad {
+  /// Lección normal, con su contenido y sus preguntas.
+  leccion,
+
+  /// Repaso de un tema: solo preguntas, sin XP de lección.
+  repaso,
+
+  /// Reto opcional de un módulo ya completado: preguntas de todos sus temas.
+  reto,
+}
+
 /// Fase de la pregunta que se está viendo en P09.
 enum FasePregunta {
   /// Todavía no se ha seleccionado nada.
@@ -169,9 +181,6 @@ class ControladorLeccion extends ChangeNotifier with WidgetsBindingObserver {
   /// ¿Este es el último paso?
   bool get esUltimoPaso => _indice >= _pasos.length - 1;
 
-  /// La lección es un repaso: el XP de lección no se vuelve a otorgar.
-  bool get esRepaso => _leccion?.esRepaso ?? false;
-
   /// Segundos efectivos medidos en esta sesión de estudio.
   int get segundosActivos => _segundosAcumulados;
 
@@ -229,6 +238,35 @@ class ControladorLeccion extends ChangeNotifier with WidgetsBindingObserver {
       _actividad = await _repos.leccion.empezarRepaso(
         temaId,
         clave: claveDeterminista('review-start', temaId),
+      );
+      _pasos = <PasoLeccion>[
+        for (int i = 0; i < _actividad!.preguntas.length; i++)
+          PasoLeccion(indice: i, pregunta: _actividad!.preguntas[i]),
+      ];
+      _error = null;
+      _arrancarLatido();
+    } catch (e) {
+      _error = _comoError(e);
+    } finally {
+      _cargando = false;
+      notifyListeners();
+    }
+  }
+
+  /// Abre el Reto opcional de un módulo ya completado (sin lección de origen).
+  ///
+  /// El servidor guarda el candado (`CHALLENGE_LOCKED`) y el tope de uno por
+  /// módulo (`CHALLENGE_ALREADY_USED`): aquí no se repite esa comprobación,
+  /// solo se deja que [error] traiga el mensaje que el Reino ya manda listo.
+  Future<void> abrirReto(String moduloId) async {
+    if (_cargando) return;
+    _reiniciar();
+    _cargando = true;
+    notifyListeners();
+    try {
+      _actividad = await _repos.leccion.empezarReto(
+        moduloId,
+        clave: claveDeterminista('challenge-start', moduloId),
       );
       _pasos = <PasoLeccion>[
         for (int i = 0; i < _actividad!.preguntas.length; i++)

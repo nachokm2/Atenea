@@ -251,6 +251,15 @@ GoRouter crearEnrutador(ControladorSesion sesion) {
         ),
       ),
       GoRoute(
+        path: Rutas.patronReto,
+        onExit: (BuildContext context, GoRouterState state) =>
+            confirmarSalidaDeLeccion(context),
+        // P08 en modo Reto: preguntas de todos los temas del módulo.
+        builder: (BuildContext context, GoRouterState state) => PantallaLeccion(
+          moduloId: state.pathParameters[Rutas.paramModulo],
+        ),
+      ),
+      GoRoute(
         path: Rutas.patronEvaluacion,
         onExit: (BuildContext context, GoRouterState state) =>
             confirmarSalidaDeEvaluacion(context),

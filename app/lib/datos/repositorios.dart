@@ -982,6 +982,16 @@ class RepoLeccion {
     return Actividad.desdeJson(r);
   }
 
+  /// Abre el Reto opcional del módulo: preguntas de todos sus temas, tras
+  /// completarlo. Distinto del Desafío (evaluación de módulo, D12).
+  Future<Actividad> empezarReto(String moduloId, {String? clave}) async {
+    final Map<String, dynamic> r = await cliente.enviar(
+      '/modules/$moduloId/challenge/start',
+      claveIdempotencia: clave ?? claveDeterminista('challenge-start', moduloId),
+    );
+    return Actividad.desdeJson(r);
+  }
+
   /// Pide otra explicación del tema, con enfoque distinto y citas.
   Future<Explicacion> reexplicar(String temaId, {String? enfoque}) async {
     final Map<String, dynamic> r = await cliente.enviar(

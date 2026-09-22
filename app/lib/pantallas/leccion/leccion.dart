@@ -28,16 +28,27 @@ import 'widgets/widgets_pregunta.dart';
 
 /// Lección paso a paso (P08) con su panel de retroalimentación (P09).
 class PantallaLeccion extends StatefulWidget {
-  const PantallaLeccion({super.key, this.leccionId, this.temaId});
+  const PantallaLeccion({super.key, this.leccionId, this.temaId, this.moduloId});
 
-  /// Lección a estudiar. Nulo en el modo repaso.
+  /// Lección a estudiar. Nulo en modo repaso o Reto.
   final String? leccionId;
 
-  /// Tema a repasar. Nulo en una lección normal.
+  /// Tema a repasar. Nulo salvo en modo repaso.
   final String? temaId;
+
+  /// Módulo del que es el Reto. Nulo salvo en modo Reto.
+  final String? moduloId;
 
   /// ¿Esta pantalla está en modo repaso?
   bool get esRepaso => leccionId == null && temaId != null;
+
+  /// ¿Esta pantalla está en modo Reto?
+  bool get esReto => moduloId != null;
+
+  /// Qué actividad está abierta, derivado de qué parámetro llegó no-nulo.
+  ModoActividad get modo => esReto
+      ? ModoActividad.reto
+      : (esRepaso ? ModoActividad.repaso : ModoActividad.leccion);
 
   @override
   State<PantallaLeccion> createState() => _PantallaLeccionState();
@@ -64,6 +75,7 @@ class _PantallaLeccionState extends State<PantallaLeccion> {
     final ControladorLeccion control = context.read<ControladorLeccion>();
     final String? leccionId = widget.leccionId;
     final String? temaId = widget.temaId;
+    final String? moduloId = widget.moduloId;
 
     if (leccionId != null) {
       final bool yaAbierta =
@@ -77,6 +89,13 @@ class _PantallaLeccionState extends State<PantallaLeccion> {
           control.actividad?.temaId == temaId && control.recibo == null;
       if (yaAbierto) return;
       await control.abrirRepaso(temaId);
+      return;
+    }
+    if (moduloId != null) {
+      final bool yaAbierto =
+          control.actividad?.moduloId == moduloId && control.recibo == null;
+      if (yaAbierto) return;
+      await control.abrirReto(moduloId);
     }
   }
 
@@ -104,12 +123,16 @@ class _PantallaLeccionState extends State<PantallaLeccion> {
     final ControladorLeccion control = context.watch<ControladorLeccion>();
 
     // Cierre: el recibo ya está y toca celebrar (P10). Se comprueba que el
-    // recibo sea el de *esta* lección, y no el que quedó de la anterior.
-    final bool esMiRecibo = widget.esRepaso
-        ? control.actividad?.temaId == widget.temaId
-        : control.leccion?.id == widget.leccionId;
+    // recibo sea el de *esta* actividad, y no el que quedó de la anterior.
+    final bool esMiRecibo = widget.esReto
+        ? control.actividad?.moduloId == widget.moduloId
+        : widget.esRepaso
+            ? control.actividad?.temaId == widget.temaId
+            : control.leccion?.id == widget.leccionId;
     if (control.recibo != null && esMiRecibo) {
-      if (widget.esRepaso) return const PantallaFinLeccion();
+      if (widget.esRepaso || widget.esReto) {
+        return PantallaFinLeccion(modo: widget.modo);
+      }
       _irAlResumen(control);
       return const PantallaAtenea(
         cuerpo: EstadoCarga(mensaje: 'Contando tus recompensas…'),
@@ -171,7 +194,7 @@ class _PantallaLeccionState extends State<PantallaLeccion> {
       cuerpo: ListView(
         padding: const EdgeInsets.only(bottom: Espacio.lg),
         children: <Widget>[
-          _Encabezado(control: control, esRepaso: widget.esRepaso),
+          _Encabezado(control: control, modo: widget.modo),
           const SizedBox(height: Espacio.md),
           AnimatedSwitcher(
             duration: quieto ? Duration.zero : Movimiento.corta,
@@ -220,6 +243,12 @@ class _PantallaLeccionState extends State<PantallaLeccion> {
     return _VistaBloque(bloque: bloque);
   }
 
+  String get _textoTerminar => switch (widget.modo) {
+        ModoActividad.repaso => 'Terminar el repaso',
+        ModoActividad.reto => 'Terminar el reto',
+        ModoActividad.leccion => 'Terminar la lección',
+      };
+
   Widget _pie(ControladorLeccion control, PasoLeccion? paso) {
     final bool esPregunta = paso?.esPregunta ?? false;
 
@@ -230,8 +259,7 @@ class _PantallaLeccionState extends State<PantallaLeccion> {
         resultado: control.resultado!,
         reexplicando: _reexplicando,
         alReexplicar: control.resultado!.esCorrecta ? null : _reexplicar,
-        textoContinuar:
-            control.esUltimoPaso ? 'Terminar la lección' : 'Continuar',
+        textoContinuar: control.esUltimoPaso ? _textoTerminar : 'Continuar',
         alContinuar: () => control.continuar(),
       );
     }
@@ -240,7 +268,7 @@ class _PantallaLeccionState extends State<PantallaLeccion> {
         control.fasePregunta == FasePregunta.comprobando;
     final String texto = esPregunta
         ? 'Comprobar'
-        : (control.esUltimoPaso ? 'Terminar la lección' : 'Continuar');
+        : (control.esUltimoPaso ? _textoTerminar : 'Continuar');
     final VoidCallback? accion = esPregunta
         ? (control.puedeComprobar ? () => control.comprobar() : null)
         : (control.puedeContinuar ? () => control.continuar() : null);
@@ -491,12 +519,12 @@ class _MenuLeccion extends StatelessWidget {
   }
 }
 
-/// Título, miga de pan y aviso de repaso.
+/// Título, miga de pan y aviso de repaso o Reto.
 class _Encabezado extends StatelessWidget {
-  const _Encabezado({required this.control, required this.esRepaso});
+  const _Encabezado({required this.control, required this.modo});
 
   final ControladorLeccion control;
-  final bool esRepaso;
+  final ModoActividad modo;
 
   @override
   Widget build(BuildContext context) {
@@ -504,7 +532,11 @@ class _Encabezado extends StatelessWidget {
     final Leccion? leccion = control.leccion;
     final String titulo = leccion?.titulo ??
         control.actividad?.tituloTema ??
-        (esRepaso ? 'Repaso' : 'Lección');
+        switch (modo) {
+          ModoActividad.repaso => 'Repaso',
+          ModoActividad.reto => 'Reto del módulo',
+          ModoActividad.leccion => 'Lección',
+        };
     final String miga = leccion?.migaDePan ?? '';
 
     return Column(
@@ -519,13 +551,22 @@ class _Encabezado extends StatelessWidget {
           ),
         const SizedBox(height: Espacio.xxs),
         Text(titulo, style: context.textos.headlineMedium),
-        if (esRepaso || (leccion?.esRepaso ?? false)) ...<Widget>[
+        if (modo == ModoActividad.repaso || (leccion?.esRepaso ?? false)) ...<Widget>[
           const SizedBox(height: Espacio.sm),
           _Aviso(
             icono: Icons.refresh_rounded,
             color: p.dominio,
             texto: 'Repaso: la XP de lección no se vuelve a pagar, pero las '
                 'preguntas nuevas sí suman.',
+          ),
+        ],
+        if (modo == ModoActividad.reto) ...<Widget>[
+          const SizedBox(height: Espacio.sm),
+          _Aviso(
+            icono: Icons.military_tech_rounded,
+            color: p.arcano,
+            texto: 'Reto: preguntas de todo el módulo, más difíciles — con '
+                'una recompensa mayor.',
           ),
         ],
         if (leccion?.contenidoEscaso ?? false) ...<Widget>[

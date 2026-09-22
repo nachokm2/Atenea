@@ -303,6 +303,7 @@ class _PantallaMapaRutaState extends State<PantallaMapaRuta> {
               alTocarModulo: (ModuloRuta m) => _tocarModulo(detalle, m),
               alTocarLeccion: _tocarLeccion,
               alTocarDesafio: _tocarDesafio,
+              alTocarReto: (ModuloRuta m) => context.push(Rutas.reto(m.id)),
               alVerLaForja: () => context.push(Rutas.generacion(widget.rutaId)),
             ).nodos(context),
           ],

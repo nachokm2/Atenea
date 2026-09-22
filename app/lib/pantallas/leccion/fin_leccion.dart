@@ -20,12 +20,21 @@ import '../../estado/leccion.dart';
 import '../../navegacion/rutas.dart';
 import 'widgets/desglose_recompensas.dart';
 
-/// Resumen de recompensas de la lección recién completada.
+/// Resumen de recompensas de la lección, repaso o Reto recién completado.
 class PantallaFinLeccion extends StatefulWidget {
-  const PantallaFinLeccion({super.key, this.leccionId});
+  const PantallaFinLeccion({
+    super.key,
+    this.leccionId,
+    this.modo = ModoActividad.leccion,
+  });
 
   /// Lección cerrada, cuando se llega por la ruta `/leccion/{id}/resumen`.
   final String? leccionId;
+
+  /// Qué se acaba de cerrar. En repaso y Reto llega explícito desde
+  /// `PantallaLeccion`, porque aquí no hay ningún parámetro de origen del que
+  /// derivarlo (se monta sin ruta propia, dentro de la misma pantalla).
+  final ModoActividad modo;
 
   @override
   State<PantallaFinLeccion> createState() => _PantallaFinLeccionState();
@@ -75,8 +84,14 @@ class _PantallaFinLeccionState extends State<PantallaFinLeccion> {
 
     final AteneaPalette p = context.paleta;
     final Leccion? leccion = control.leccion;
-    final String titulo = leccion?.titulo ?? 'Actividad completada';
-    final String? rutaId = leccion?.rutaId;
+    final String titulo = leccion?.titulo ??
+        (widget.modo == ModoActividad.reto
+            ? 'Reto del módulo'
+            : 'Actividad completada');
+    // En repaso y Reto no hay Lección de origen: `Actividad.rutaId` es lo
+    // único que sabe a qué Ruta volver (antes, un repaso siempre volvía al
+    // Inicio, aunque su tema perteneciera a una Ruta concreta).
+    final String? rutaId = leccion?.rutaId ?? control.actividad?.rutaId;
     final int respuestas = control.pasos
         .where((PasoLeccion paso) => paso.esPregunta)
         .length;
@@ -106,7 +121,7 @@ class _PantallaFinLeccionState extends State<PantallaFinLeccion> {
       ),
       cuerpo: ListView(
         children: <Widget>[
-          _Corona(titulo: titulo, esRepaso: control.esRepaso),
+          _Corona(titulo: titulo, modo: widget.modo),
           const SizedBox(height: Espacio.lg),
           DesgloseRecompensas(recibo: recibo, respuestas: respuestas),
           const SizedBox(height: Espacio.sm),
@@ -130,9 +145,12 @@ class _PantallaFinLeccionState extends State<PantallaFinLeccion> {
           const SizedBox(height: Espacio.md),
           Center(
             child: Text(
-              control.esRepaso
-                  ? 'Lo que se repasa, se queda.'
-                  : 'Un paso más en tu Ruta. El Reino lo anota.',
+              switch (widget.modo) {
+                ModoActividad.repaso => 'Lo que se repasa, se queda.',
+                ModoActividad.reto => 'Lo que cuesta más, vale más.',
+                ModoActividad.leccion =>
+                  'Un paso más en tu Ruta. El Reino lo anota.',
+              },
               textAlign: TextAlign.center,
               style: context.textos.bodyMedium?.copyWith(
                 color: p.textoSecundario,
@@ -146,17 +164,27 @@ class _PantallaFinLeccionState extends State<PantallaFinLeccion> {
   }
 }
 
-/// Corona de cierre: destello, título y nombre de la lección.
+/// Corona de cierre: destello, título y nombre de la actividad.
 class _Corona extends StatelessWidget {
-  const _Corona({required this.titulo, required this.esRepaso});
+  const _Corona({required this.titulo, required this.modo});
 
   final String titulo;
-  final bool esRepaso;
+  final ModoActividad modo;
 
   @override
   Widget build(BuildContext context) {
     final AteneaPalette p = context.paleta;
     final bool quieto = reducirMovimiento(context);
+    final IconData icono = switch (modo) {
+      ModoActividad.repaso => Icons.refresh_rounded,
+      ModoActividad.reto => Icons.military_tech_rounded,
+      ModoActividad.leccion => Icons.workspace_premium_rounded,
+    };
+    final String etiqueta = switch (modo) {
+      ModoActividad.repaso => 'Repaso completado',
+      ModoActividad.reto => 'Reto superado',
+      ModoActividad.leccion => 'Lección completada',
+    };
 
     final Widget emblema = Container(
       width: 116,
@@ -167,17 +195,13 @@ class _Corona extends StatelessWidget {
         border: Border.all(color: p.oro, width: 2),
         boxShadow: quieto ? null : Sombra.brillo(p.oro, 18),
       ),
-      child: Icon(
-        esRepaso ? Icons.refresh_rounded : Icons.workspace_premium_rounded,
-        size: 58,
-        color: p.oro,
-      ),
+      child: Icon(icono, size: 58, color: p.oro),
     );
 
     return Column(
       children: <Widget>[
         Semantics(
-          label: esRepaso ? 'Repaso completado' : 'Lección completada',
+          label: etiqueta,
           child: ExcludeSemantics(
             child: quieto
                 ? emblema
@@ -197,7 +221,7 @@ class _Corona extends StatelessWidget {
         ),
         const SizedBox(height: Espacio.md),
         Text(
-          esRepaso ? 'REPASO COMPLETADO' : 'LECCIÓN COMPLETADA',
+          etiqueta.toUpperCase(),
           textAlign: TextAlign.center,
           style: context.textos.labelSmall?.copyWith(color: p.textoSecundario),
         ),
