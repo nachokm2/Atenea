@@ -25,9 +25,10 @@ from typing import Any
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
-from app.core.time import user_local_date, utcnow
+from app.core.time import get_zone, user_local_date, utcnow
 from app.models.enums import DayStatus, EventType, GoalType, StreakChange
 from app.models.gamification import DailyGoal, Streak, StreakDay
+from app.models.identity import User
 from app.modules.gamification.servicio_config import ServicioConfig
 
 #: Estados visibles de la racha (solo lectura, no mutan nada; §6.10).
@@ -507,6 +508,31 @@ def ajuste_viaje_disponible(cfg: ServicioConfig, racha: Streak, hoy: date_type) 
     return (hoy - racha.travel_skip_used_on).days >= 30
 
 
+def _viaje_hacia_el_este(cfg: ServicioConfig, usuario: User, desde: date_type, hasta: date_type) -> bool:
+    """`viaje_hacia_el_este(desde, hasta)` de CONTRACT.md §6.10.
+
+    `users.previous_timezone`/`timezone_changed_at` existen justo para esto
+    («habilita el ajuste de racha por viaje», dice su propio comentario) y
+    `cambiar_zona_horaria` ya los escribe — lo que faltaba era leerlos. Un
+    salto hacia el este (el nuevo huso queda con más horas de offset UTC que
+    el anterior) de al menos `streak.tz_change_min_delta_h` puede comerse un
+    día completo del calendario local sin que el aprendiz haya estado
+    inactivo de verdad. Solo cuenta si el cambio cayó dentro de la ventana del
+    día perdido: uno de la semana pasada no explica el día de ayer.
+    """
+    if usuario.previous_timezone is None or usuario.timezone_changed_at is None:
+        return False
+    fecha_cambio = user_local_date(usuario.timezone_changed_at, usuario.timezone)
+    if not (desde <= fecha_cambio <= hasta):
+        return False
+    offset_anterior = get_zone(usuario.previous_timezone).utcoffset(usuario.timezone_changed_at)
+    offset_actual = get_zone(usuario.timezone).utcoffset(usuario.timezone_changed_at)
+    if offset_anterior is None or offset_actual is None:
+        return False
+    delta_horas = (offset_actual - offset_anterior).total_seconds() / 3600
+    return delta_horas >= cfg.obtener_int("streak.tz_change_min_delta_h")
+
+
 def _marcar_dia(db: Session, cfg: ServicioConfig, usuario_id: uuid.UUID, fecha: date_type, estado: DayStatus) -> None:
     """Marca una fecha local con un estado del calendario (gracia o viaje)."""
     dia = obtener_o_crear_dia(db, cfg, usuario_id, fecha)
@@ -565,7 +591,6 @@ def activar_dia(
     hoy: date_type,
     *,
     momento: datetime | None = None,
-    viaje_hacia_el_este: bool = False,
 ) -> ResultadoRacha:
     """Marca `hoy` como día activo y actualiza la racha (§6.10, idempotente)."""
     instante = momento or utcnow()
@@ -598,7 +623,11 @@ def activar_dia(
         cambio = StreakChange.EXTENDED
     elif racha.last_active_date == hoy - timedelta(days=2):
         perdido = hoy - timedelta(days=1)
-        if viaje_hacia_el_este and ajuste_viaje_disponible(cfg, racha, hoy):
+        usuario = db.get(User, usuario_id)
+        viajo_al_este = usuario is not None and _viaje_hacia_el_este(
+            cfg, usuario, hoy - timedelta(days=2), hoy
+        )
+        if viajo_al_este and ajuste_viaje_disponible(cfg, racha, hoy):
             _marcar_dia(db, cfg, usuario_id, perdido, DayStatus.TRAVEL)
             racha.travel_skip_used_on = perdido
             racha.current_length = anterior + 1
