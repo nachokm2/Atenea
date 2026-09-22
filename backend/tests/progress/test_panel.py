@@ -17,7 +17,8 @@ from datetime import timedelta
 from sqlalchemy.orm import Session
 
 from app.core.time import utcnow
-from app.models.enums import NotificationType, ProgressState
+from app.models.enums import NotificationType, ProgressState, StreakChange
+from app.models.gamification import Streak
 from app.models.identity import User
 from app.models.progress import UserPathProgress, UserTopicProgress
 from app.modules.gamification import avisos
@@ -28,6 +29,7 @@ from app.modules.progress.panel import (
     CONTINUAR_RUTA_COMPLETA,
     ServicioPanel,
 )
+from app.modules.progress.schemas import DashboardOut
 
 ZONA = "America/Santiago"
 
@@ -176,3 +178,51 @@ def test_un_aviso_programado_no_enciende_la_campana(
     panel = ServicioPanel(db).construir(usuario.id, ZONA)
 
     assert panel.unread_notifications == 0
+
+
+# ---------------------------------------------------------------------------
+# El bloque `streak`: racha anterior y motivo del último cambio
+# ---------------------------------------------------------------------------
+
+
+def test_el_bloque_streak_trae_la_racha_anterior_y_su_motivo(
+    db: Session, config_sembrada: None, usuario: User
+) -> None:
+    """`previous_length` y `last_change` se calculan en `rachas.py` y antes
+    morían ahí: el panel solo traía `{current, best, status, day_status}`."""
+    db.add(
+        Streak(
+            user_id=usuario.id,
+            current_length=1,
+            best_length=12,
+            previous_length=12,
+            last_change=StreakChange.BROKEN,
+            started_on=dt.date(2026, 3, 10),
+            last_active_date=MEDIODIA,
+            total_active_days=20,
+        )
+    )
+    db.flush()
+
+    panel = ServicioPanel(db).construir(usuario.id, ZONA)
+
+    assert panel.streak.previous_length == 12
+    assert panel.streak.last_change == StreakChange.BROKEN
+    assert panel.streak.started_on == dt.date(2026, 3, 10)
+
+    # La forma que de verdad viaja por HTTP: no solo el dataclass interno.
+    salida = DashboardOut.model_validate(panel)
+    assert salida.streak.previous_length == 12
+    assert salida.streak.last_change == StreakChange.BROKEN
+    assert salida.streak.started_on == dt.date(2026, 3, 10)
+
+
+def test_sin_fila_de_racha_el_bloque_streak_no_inventa_un_cambio(
+    db: Session, config_sembrada: None, usuario: User
+) -> None:
+    """Usuario nuevo, sin `Streak`: los tres campos salen en su default."""
+    panel = ServicioPanel(db).construir(usuario.id, ZONA)
+
+    assert panel.streak.previous_length == 0
+    assert panel.streak.last_change is None
+    assert panel.streak.started_on is None

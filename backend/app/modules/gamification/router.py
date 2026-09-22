@@ -31,6 +31,7 @@ from app.models.enums import (
     MissionScope,
     MissionStatus,
     NotificationStatus,
+    StreakChange,
 )
 from app.models.gamification import Notification, UserMission
 from app.modules.gamification import avisos, eventos, logros, misiones, motor, niveles, rachas
@@ -149,6 +150,9 @@ class StreakOut(_Out):
     total_active_days: int
     grace_available: bool
     next_milestone: dict[str, Any] | None = None
+    previous_length: int = 0
+    last_change: StreakChange | None = None
+    started_on: date_type | None = None
 
 
 class StreakDayOut(_Out):
@@ -460,6 +464,9 @@ def obtener_racha(db: DbSession, usuario: CurrentUser) -> StreakOut:
         total_active_days=int(racha.total_active_days),
         grace_available=rachas.gracia_disponible(cfg, racha, f"{hoy.year:04d}-{hoy.month:02d}"),
         next_milestone=rachas.proximo_hito(cfg, int(racha.current_length)),
+        previous_length=int(racha.previous_length),
+        last_change=racha.last_change,
+        started_on=racha.started_on,
     )
 
 

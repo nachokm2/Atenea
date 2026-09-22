@@ -24,6 +24,7 @@ from app.models.enums import (
     ModuleStatus,
     PathStatus,
     ProgressState,
+    StreakChange,
 )
 
 T = TypeVar("T")
@@ -78,6 +79,9 @@ class DashboardStreakOut(SalidaBase):
     best: int
     status: str
     day_status: DayStatus
+    previous_length: int = 0
+    last_change: StreakChange | None = None
+    started_on: date_type | None = None
 
 
 class DashboardDailyGoalOut(SalidaBase):

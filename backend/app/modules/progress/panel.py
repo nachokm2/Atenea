@@ -4,7 +4,8 @@ Contrato §7.8, `GET /api/v1/dashboard` → `DashboardOut`:
 
 ```
 {greeting_key, character{level, rank_title, xp_total, xp_to_next, progress_pct},
- gold_balance, streak{current, best, status, day_status},
+ gold_balance, streak{current, best, status, day_status, previous_length, last_change,
+ started_on},
  daily_goal{type, target, progress, met, bonus_gold},
  continue_action{type, path_id, module_id, lesson_id, title, breadcrumb, reward_preview},
  knowledge_summary[], missions_summary[],
@@ -57,6 +58,7 @@ from app.models.enums import (
     MissionStatus,
     PathStatus,
     ProgressState,
+    StreakChange,
 )
 from app.models.gamification import DailyGoal, LevelDefinition, Streak, StreakDay, UserMission
 from app.models.identity import Character
@@ -127,6 +129,9 @@ class PanelRacha:
     best: int
     status: str
     day_status: DayStatus
+    previous_length: int = 0
+    last_change: StreakChange | None = None
+    started_on: date_type | None = None
 
 
 @dataclass(slots=True)
@@ -418,6 +423,9 @@ class ServicioPanel:
                     racha.last_active_date, hoy, gracia_disponible=gracia_disponible
                 ),
                 day_status=dia.day_status if dia is not None else DayStatus.INACTIVE,
+                previous_length=int(racha.previous_length),
+                last_change=racha.last_change,
+                started_on=racha.started_on,
             ),
             dia,
         )
