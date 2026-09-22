@@ -31,7 +31,7 @@ from sqlalchemy import update as sa_update
 from sqlalchemy.orm import Session
 
 from app.core.logging import get_logger
-from app.core.time import to_zone, utcnow
+from app.core.time import to_zone, utcnow, week_start_date
 from app.models.enums import (
     EventStatus,
     EventType,
@@ -795,6 +795,22 @@ def _actualizar_dia_y_racha(db: Session, ctx: Contexto, evento: DomainEvent, xp_
             idempotency_key=clave_derivada("daily-goal-met", ctx.usuario_id, ctx.local_date),
             causante=evento,
         )
+
+        # Una semana solo puede confirmarse perfecta el domingo, que es el
+        # último de sus siete días — antes no hay forma de saber si el que
+        # falta se va a cumplir. `semana_perfecta` cuenta los `StreakDay`
+        # con `goal_met_at`, no la racha: son cosas distintas (§4.2).
+        if ctx.local_date.weekday() == 6:
+            lunes = week_start_date(ctx.local_date)
+            if rachas.semana_perfecta(db, ctx.usuario_id, lunes):
+                _emitir_derivado(
+                    db,
+                    ctx,
+                    tipo=EventType.WEEK_PERFECT,
+                    payload={"week_start_date": lunes.isoformat()},
+                    idempotency_key=clave_derivada("week-perfect", ctx.usuario_id, lunes),
+                    causante=evento,
+                )
 
     ctx.agregador.daily_goal = ObjetivoDiarioRecibo(
         type=objetivo.goal_type.value,

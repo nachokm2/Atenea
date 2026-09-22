@@ -6,14 +6,14 @@ Todas estas pruebas usan la base real dentro de una transacción que se revierte
 from __future__ import annotations
 
 import uuid
-from datetime import timedelta
+from datetime import UTC, date as date_type, datetime, timedelta
 from decimal import Decimal
 
 import pytest
 import sqlalchemy as sa
 
 from app.core.errors import AteneaError
-from app.core.time import to_zone, utcnow
+from app.core.time import to_zone, utcnow, week_start_date
 from app.models.content import KnowledgeArea
 from app.models.economy import GoldTransaction
 from app.models.enums import (
@@ -29,7 +29,7 @@ from app.models.enums import (
     ProgressState,
     XPSource,
 )
-from app.models.gamification import DailyGoal, DomainEvent, XPTransaction
+from app.models.gamification import DailyGoal, DomainEvent, StreakDay, XPTransaction
 from app.models.progress import (
     QuestionAttempt,
     UserAreaProgress,
@@ -49,7 +49,7 @@ def _clave() -> str:
     return str(uuid.uuid4())
 
 
-def _responder_todo(db, cfg, usuario, actividad_id, pool, *, correctas=True):
+def _responder_todo(db, cfg, usuario, actividad_id, pool, *, correctas=True, momento=None):
     """Responde todas las preguntas de la actividad y devuelve el último resultado."""
     respuestas = {
         "multiple_choice": {"option_id": "a"} if correctas else {"option_id": "b"},
@@ -69,6 +69,7 @@ def _responder_todo(db, cfg, usuario, actividad_id, pool, *, correctas=True):
             response=respuestas[pregunta.question_type.value],
             response_ms=6400,
             idempotency_key=_clave(),
+            momento=momento,
         )
     return ultimo
 
@@ -374,6 +375,118 @@ def test_completar_la_leccion_manda_local_hour_en_daily_goal_met(
         to_zone(despues, usuario.timezone).hour,
     }
     assert evento.payload["local_hour"] in horas_posibles
+
+
+def _semana_de_lunes_a_sabado_cumplida(db, usuario, lunes: date_type) -> None:
+    """Seis `StreakDay` (lunes..sábado) con el objetivo ya cumplido."""
+    for delta in range(6):
+        db.add(
+            StreakDay(
+                user_id=usuario.id,
+                local_date=lunes + timedelta(days=delta),
+                goal_met_at=datetime(lunes.year, lunes.month, lunes.day, 12, 0, tzinfo=UTC),
+            )
+        )
+    db.flush()
+
+
+def test_completar_la_leccion_el_domingo_de_una_semana_perfecta_emite_week_perfect(
+    db, cfg, usuario, contenido, monkeypatch
+):
+    """`ACH_PERFECT_WEEK` escucha `WEEK_PERFECT` («siete de siete, de lunes a
+    domingo»), pero nada lo emitía: la condición no podía cumplirse jamás,
+    sin importar cuántas semanas perfectas tuviera nadie."""
+    from app.core import time as modulo_tiempo
+
+    db.add(
+        DailyGoal(
+            user_id=usuario.id,
+            goal_type=GoalType.ACTIVITIES,
+            target=1,
+            effective_from=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    )
+    ancla = date_type(2026, 3, 9)  # un lunes cualquiera, ya conocido
+    lunes = week_start_date(ancla)
+    domingo = lunes + timedelta(days=6)
+    _semana_de_lunes_a_sabado_cumplida(db, usuario, lunes)
+
+    # Domingo a las 18:00 UTC: en America/Santiago (UTC-3/-4) sigue siendo
+    # domingo con margen de sobra. El reloj se congela aquí porque
+    # `resolve_occurred_at` (§6.10) compara el `momento` que se pasa contra
+    # el `utcnow()` real del servidor y, fuera de los diez minutos de
+    # tolerancia, descarta el que se pasa y usa la fecha de hoy de verdad —
+    # exactamente lo que rompía esta prueba antes de congelar el reloj.
+    momento = datetime(domingo.year, domingo.month, domingo.day, 18, 0, tzinfo=UTC)
+    monkeypatch.setattr(modulo_tiempo, "utcnow", lambda: momento)
+    assert to_zone(momento, usuario.timezone).weekday() == 6
+    inicio = momento - timedelta(seconds=200)
+    abierta = lecciones.iniciar_leccion(
+        db, cfg, usuario, contenido.leccion1.id, idempotency_key=_clave(), momento=inicio
+    )
+    _responder_todo(
+        db, cfg, usuario, abierta.activity.id, contenido.preguntas_l1, momento=momento
+    )
+
+    lecciones.completar(
+        db, cfg, usuario, abierta.activity.id, idempotency_key=_clave(), momento=momento
+    )
+
+    evento = db.execute(
+        sa.select(DomainEvent).where(DomainEvent.event_type == EventType.WEEK_PERFECT)
+    ).scalar_one()
+    assert evento.payload["week_start_date"] == lunes.isoformat()
+
+
+def test_completar_la_leccion_con_solo_cinco_de_seis_dias_no_emite_week_perfect(
+    db, cfg, usuario, contenido, monkeypatch
+):
+    """Un domingo cumplido no basta si algún día anterior de la semana no lo
+    estaba: sin esto, «siete de siete» se convertiría en «el domingo solo»."""
+    from app.core import time as modulo_tiempo
+
+    db.add(
+        DailyGoal(
+            user_id=usuario.id,
+            goal_type=GoalType.ACTIVITIES,
+            target=1,
+            effective_from=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    )
+    ancla = date_type(2026, 3, 9)
+    lunes = week_start_date(ancla)
+    domingo = lunes + timedelta(days=6)
+    _semana_de_lunes_a_sabado_cumplida(db, usuario, lunes)
+    # Se descumple el viernes: cinco de seis antes de llegar al domingo.
+    viernes = db.execute(
+        sa.select(StreakDay).where(
+            StreakDay.user_id == usuario.id, StreakDay.local_date == lunes + timedelta(days=4)
+        )
+    ).scalar_one()
+    viernes.goal_met_at = None
+    db.flush()
+
+    # Mismo congelamiento de reloj que la prueba anterior, y por la misma
+    # razón: sin él, `resolve_occurred_at` descarta el domingo fabricado y
+    # esta prueba pasaría igual sin tocar la rama de "es domingo" del motor.
+    momento = datetime(domingo.year, domingo.month, domingo.day, 18, 0, tzinfo=UTC)
+    monkeypatch.setattr(modulo_tiempo, "utcnow", lambda: momento)
+    inicio = momento - timedelta(seconds=200)
+    abierta = lecciones.iniciar_leccion(
+        db, cfg, usuario, contenido.leccion1.id, idempotency_key=_clave(), momento=inicio
+    )
+    _responder_todo(
+        db, cfg, usuario, abierta.activity.id, contenido.preguntas_l1, momento=momento
+    )
+
+    lecciones.completar(
+        db, cfg, usuario, abierta.activity.id, idempotency_key=_clave(), momento=momento
+    )
+
+    eventos = db.execute(
+        sa.select(DomainEvent).where(DomainEvent.event_type == EventType.WEEK_PERFECT)
+    ).scalars().all()
+    assert eventos == []
 
 
 def test_completar_la_leccion_que_cambia_de_rango_manda_el_bono_aparte(

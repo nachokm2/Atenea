@@ -834,7 +834,7 @@ con escéptico, y los tres se confirmaron reales — de ahí los trece.
   Con esto se cierra el rastreo del 21-09 completo: los 13 confirmados,
   cerrados.
 
-### 4.10 Un tercer rastreo (22-09) — 10 confirmados, 9 hallazgos distintos
+### 4.10 Un tercer rastreo (22-09) — 9 hallazgos, los 9 cerrados
 
 Misma enfermedad, buscada en direcciones nuevas: endpoints con controlador y DTO
 listos que ninguna pantalla llama (`dtos-sin-pantalla`), columnas de progreso que
@@ -1003,11 +1003,43 @@ desalineado), así que son **nueve** desconexiones reales:
   contra el `GoldTransaction` real; tres en `modal_nivel_test.dart`; una
   actualizada en `cola_celebraciones_test.dart`), verificadas por mutación
   tres veces.
+* **«Semana Perfecta» (`ACH_PERFECT_WEEK`) sin emisor** (22-09). El logro
+  escucha `WEEK_PERFECT` («siete de siete objetivos cumplidos, de lunes a
+  domingo»), y nada en el proyecto lo emitía — `docs/planes/misiones-
+  semanales.md:61` ya marcaba el «ayudante de lunes local» como un
+  prerrequisito compartido con `week_stats` y este mismo logro, pero nunca
+  se escribió. Importante: esto **no** es encender las misiones semanales
+  —esa mecánica sigue recortada a propósito (§4.1)—; el logro no necesita
+  `UserMission` ni `assigned_for`, solo saber si los siete `streak_days` de
+  una semana tienen `goal_met_at`.
 
-**Abiertos:**
+  Se construyó exactamente lo que el logro pedía y nada más: `week_start_date`
+  (`backend/app/core/time.py`, junto a `day_start_utc` como pedía el plan) —
+  pura, el lunes ISO de cualquier fecha local—; `rachas.semana_perfecta`, que
+  cuenta los `streak_days` con `goal_met_at` puesto en esa semana (no días
+  activos ni racha: son cosas distintas, un día puede contar para la racha
+  sin haber cumplido el objetivo); y en `motor.py`, dentro del mismo bloque
+  que ya emite `DAILY_GOAL_MET`, un chequeo que solo se dispara el domingo
+  —el único día en que una semana puede confirmarse perfecta, porque antes
+  no hay forma de saber si el día que falta se va a cumplir— y que emite
+  `WEEK_PERFECT` con `week_start_date` si los siete días están.
 
-* «Semana Perfecta» sin emisor — necesita decisión de diseño (el cálculo de
-  «lunes local» que `misiones-semanales.md` ya marca como pendiente).
+  **Autocorrección en el camino:** al escribir esta prueba se descubrió que
+  el commit anterior (`c83c0a6`, rank_bonus) había dejado `motor.py` a
+  medio editar — el campo viajaba en el esquema y la prueba lo esperaba,
+  pero el cálculo real nunca se re-aplicó tras un revert temporal durante
+  ese mismo commit. Corregido aparte en `37ca1f3`, verificado de nuevo por
+  mutación.
+
+  Nueve pruebas nuevas (cuatro en `test_rachas.py`: la pureza de
+  `week_start_date`, y `semana_perfecta` exigiendo los siete días, no seis,
+  y sin confundir «activo» con «objetivo cumplido»; dos en `test_lecciones.py`,
+  con el reloj congelado vía `monkeypatch` porque `resolve_occurred_at`
+  descarta cualquier `momento` de prueba a más de diez minutos del reloj
+  real y sin congelarlo la prueba fabricaba un domingo que el servidor
+  nunca veía como domingo), verificadas por mutación tres veces.
+
+Con esto se cierra el tercer rastreo completo: los nueve hallazgos, cerrados.
 
 ---
 

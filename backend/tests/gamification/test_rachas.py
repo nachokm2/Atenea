@@ -15,9 +15,9 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from app.core.time import UTC
+from app.core.time import UTC, week_start_date
 from app.models.enums import DayStatus, StreakChange
-from app.models.gamification import Streak
+from app.models.gamification import Streak, StreakDay
 from app.modules.gamification import rachas
 
 pytestmark = pytest.mark.db
@@ -99,3 +99,55 @@ def test_un_cambio_de_zona_viejo_no_protege_el_dia_de_hoy(db, cfg, usuario):
     resultado = rachas.activar_dia(db, cfg, usuario.id, HOY)
 
     assert resultado.change is StreakChange.GRACE_USED
+
+
+# ---------------------------------------------------------------------------
+# «Semana Perfecta» (§4.2, ACH_PERFECT_WEEK): el lunes local y los siete días
+# ---------------------------------------------------------------------------
+
+
+def test_week_start_date_da_el_lunes_de_cualquier_dia_de_esa_semana():
+    """`week_start_date` es pura: mismo lunes para los siete días que contiene."""
+    lunes = date(2026, 9, 21)
+    for delta in range(7):
+        assert week_start_date(lunes + timedelta(days=delta)) == lunes
+
+
+def _dia_con_objetivo(usuario, fecha: date, *, cumplido: bool) -> StreakDay:
+    return StreakDay(
+        user_id=usuario.id,
+        local_date=fecha,
+        goal_met_at=datetime(2026, 1, 1, 12, 0, tzinfo=UTC) if cumplido else None,
+    )
+
+
+def test_semana_perfecta_exige_los_siete_dias_no_seis(db, cfg, usuario):
+    """Domingo sin cumplir: seis de siete no es una semana perfecta."""
+    lunes = HOY - timedelta(days=HOY.weekday())
+    for delta in range(7):
+        db.add(_dia_con_objetivo(usuario, lunes + timedelta(days=delta), cumplido=delta < 6))
+    db.flush()
+
+    assert rachas.semana_perfecta(db, usuario.id, lunes) is False
+
+
+def test_semana_perfecta_con_los_siete_dias_cumplidos(db, cfg, usuario):
+    lunes = HOY - timedelta(days=HOY.weekday())
+    for delta in range(7):
+        db.add(_dia_con_objetivo(usuario, lunes + timedelta(days=delta), cumplido=True))
+    db.flush()
+
+    assert rachas.semana_perfecta(db, usuario.id, lunes) is True
+
+
+def test_semana_perfecta_no_cuenta_dias_activos_sin_objetivo_cumplido(db, cfg, usuario):
+    """Un día activo (XP educativo alto) no es lo mismo que un día con el
+    objetivo cumplido: `semana_perfecta` mira `goal_met_at`, no la racha."""
+    lunes = HOY - timedelta(days=HOY.weekday())
+    for delta in range(7):
+        dia = _dia_con_objetivo(usuario, lunes + timedelta(days=delta), cumplido=delta != 6)
+        dia.educational_xp = 999
+        db.add(dia)
+    db.flush()
+
+    assert rachas.semana_perfecta(db, usuario.id, lunes) is False

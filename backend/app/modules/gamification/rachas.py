@@ -724,6 +724,26 @@ def fecha_local_de(usuario_timezone: str | None, momento: datetime | None = None
     return user_local_date(momento, usuario_timezone)
 
 
+def semana_perfecta(db: Session, usuario_id: uuid.UUID, lunes: date_type) -> bool:
+    """¿Los siete días de la semana que empieza en `lunes` cumplieron el objetivo?
+
+    Base de `ACH_PERFECT_WEEK` (§4.2, evento `WEEK_PERFECT`): "siete de siete
+    objetivos cumplidos, de lunes a domingo". Cuenta filas con
+    `goal_met_at` puesto, no días activos ni rachas — un día puede contar
+    para la racha (XP educativo ≥ piso) sin haber cumplido el objetivo.
+    """
+    domingo = lunes + timedelta(days=6)
+    cumplidos = db.execute(
+        sa.select(sa.func.count(StreakDay.id)).where(
+            StreakDay.user_id == usuario_id,
+            StreakDay.local_date >= lunes,
+            StreakDay.local_date <= domingo,
+            StreakDay.goal_met_at.is_not(None),
+        )
+    ).scalar_one()
+    return int(cumplidos) == 7
+
+
 __all__ = [
     "ESTADO_ACTIVA_HOY",
     "ESTADO_PENDIENTE_HOY",

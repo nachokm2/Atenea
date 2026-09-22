@@ -86,6 +86,16 @@ def day_start_utc(day: date_type, tz: str | ZoneInfo | None) -> datetime:
     return day_bounds_utc(day, tz)[0]
 
 
+def week_start_date(local_date: date_type) -> date_type:
+    """Lunes de la semana ISO (lunes-domingo) que contiene `local_date`.
+
+    Puro: opera sobre una fecha ya local, sin zona horaria de por medio —
+    `week_stats`, `ACH_PERFECT_WEEK` y el evento `WEEK_PERFECT` (§4.2) lo
+    necesitan para acordar todos la misma semana.
+    """
+    return local_date - timedelta(days=local_date.weekday())
+
+
 def local_day_length_hours(day: date_type, tz: str | ZoneInfo | None) -> float:
     """Duración real en horas de una fecha local (23, 24 o 25 con horario de verano)."""
     start, end = day_bounds_utc(day, tz)
@@ -163,4 +173,5 @@ __all__ = [
     "user_local_now",
     "utc_offset_hours",
     "utcnow",
+    "week_start_date",
 ]
