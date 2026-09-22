@@ -590,6 +590,10 @@ def _revisar_nivel(db: Session, ctx: Contexto, evento: DomainEvent, xp_antes: in
     if subio:
         bono = ctx.cfg.obtener_int("gold.level_up_bonus")
 
+    # Se calcula aquí, antes de armar el recibo, para que viaje desglosado
+    # del bono de nivel en vez de perderse fundido en el oro total (§4.2).
+    bono_rango = ctx.cfg.obtener_int("gold.rank_up_bonus") if cambio_rango else 0
+
     ctx.agregador.level = NivelRecibo(
         before=antes.nivel,
         after=despues.nivel,
@@ -600,6 +604,7 @@ def _revisar_nivel(db: Session, ctx: Contexto, evento: DomainEvent, xp_antes: in
         xp_to_next=despues.xp_to_next,
         progress_pct=despues.progress_pct,
         gold_bonus=bono,
+        rank_bonus=bono_rango,
         unlocked_shop_rarities=[
             str(r)
             for r in niveles.desbloqueos_de_nivel(db, despues.nivel, LevelScope.GLOBAL).get(
@@ -635,7 +640,6 @@ def _revisar_nivel(db: Session, ctx: Contexto, evento: DomainEvent, xp_antes: in
         causante=evento,
     )
     if cambio_rango:
-        bono_rango = ctx.cfg.obtener_int("gold.rank_up_bonus")
         _otorgar_y_registrar_oro(
             db,
             ctx,
