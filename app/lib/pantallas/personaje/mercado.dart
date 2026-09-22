@@ -163,7 +163,9 @@ class _PantallaMercadoState extends State<PantallaMercado> {
         Espacio.md,
         Espacio.xl,
       ),
-      acciones: const <Widget>[ContadorOroActual()],
+      acciones: <Widget>[
+        ContadorOroActual(alTocar: () => context.push(Rutas.monedero)),
+      ],
       cuerpo: RefreshIndicator(
         onRefresh: () => personaje.cargarTienda(forzar: true),
         child: _cuerpo(context, personaje, tienda),

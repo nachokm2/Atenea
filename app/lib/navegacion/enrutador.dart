@@ -42,6 +42,7 @@ import '../pantallas/perfil/ajustes.dart';
 import '../pantallas/perfil/perfil.dart';
 import '../pantallas/perfil/racha.dart';
 import '../pantallas/personaje/mercado.dart';
+import '../pantallas/personaje/monedero.dart';
 import '../pantallas/personaje/vestidor.dart';
 import '../pantallas/perfil/logros.dart';
 import '../pantallas/galeria_estilo.dart';
@@ -153,6 +154,11 @@ GoRouter crearEnrutador(ControladorSesion sesion) {
                     path: Rutas.segMercado,
                     builder: (BuildContext context, GoRouterState state) =>
                         const PantallaMercado(),
+                  ),
+                  GoRoute(
+                    path: Rutas.segMonedero,
+                    builder: (BuildContext context, GoRouterState state) =>
+                        const PantallaMonedero(),
                   ),
                 ],
               ),

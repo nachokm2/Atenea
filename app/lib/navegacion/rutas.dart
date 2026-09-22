@@ -49,6 +49,9 @@ abstract final class Rutas {
   /// P15 · Mercado, colgado de Personaje.
   static const String mercado = '/personaje/mercado';
 
+  /// Monedero: saldo, oro de por vida y el historial de movimientos.
+  static const String monedero = '/personaje/monedero';
+
   /// P17 · Perfil.
   static const String perfil = '/perfil';
 
@@ -105,6 +108,9 @@ abstract final class Rutas {
 
   /// Segmento de P15 bajo Personaje.
   static const String segMercado = 'mercado';
+
+  /// Segmento del Monedero bajo Personaje.
+  static const String segMonedero = 'monedero';
 
   /// Segmento de P18 bajo Perfil.
   static const String segRacha = 'racha';

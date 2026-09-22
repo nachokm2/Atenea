@@ -950,6 +950,24 @@ desalineado), así que son **nueve** desconexiones reales:
   esperando a quien los usara primero. No se tocó nada del lado servidor.
   Tres pruebas nuevas en `area_conocimiento_dto_test.dart`, verificadas por
   mutación.
+* **`GET /wallet` sin pantalla** (22-09). Saldo, oro de por vida ganado y
+  gastado, y el historial paginado de movimientos estaban enteros del lado
+  servidor, y el cliente hasta tenía `Monedero`, `RepoTienda.monedero()` y un
+  método de controlador con manejo de error propio ya escritos — pero de un
+  solo uso, sin estado ni paginación, y ninguna pantalla lo llamaba. El oro
+  solo se veía como saldo suelto en la cabecera del héroe, el mercado, la
+  hoja de un ítem y las piezas del personaje. Ahora hay una pantalla de
+  Monedero (`/personaje/monedero`) con los tres totales y la lista de
+  movimientos (motivo en español según su `source`/`sink`, fecha, signo y
+  monto), con «Cargar más» por cursor. Entrada real: el contador de oro del
+  Mercado (`ContadorOroActual`, en la barra superior) ahora navega aquí — el
+  mismo widget en el Vestidor sigue llevando al Mercado, cada pantalla con su
+  propio destino. `ControladorPersonaje.monedero()` (de un solo uso) se
+  reemplazó por `cargarMonedero()`/`cargarMasMovimientos()`, con estado real.
+  No se tocó nada del lado servidor. Cuatro pruebas nuevas en
+  `monedero_test.dart` (con un adaptador de Dio falso: qué pide, los tres
+  totales, los motivos en español, y que «Cargar más» agrega en vez de
+  reemplazar), verificadas por mutación dos veces.
 
 **Abiertos:**
 
@@ -959,7 +977,6 @@ desalineado), así que son **nueve** desconexiones reales:
   (cómo calcular la hora local en el motor de eventos).
 * El cambio de rango, indistinguible de subir de nivel — necesita decisión de
   diseño (qué mostrar).
-* `GET /wallet` sin pantalla.
 
 ---
 

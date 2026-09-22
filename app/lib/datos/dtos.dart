@@ -1418,6 +1418,31 @@ class MovimientoOro {
 
   /// ¿Suma oro?
   bool get esIngreso => sentido == SentidoMovimiento.ingreso;
+
+  /// Motivo en español, a partir de la dimensión (`origen`/`destino`), con
+  /// respaldo genérico si la fuente es desconocida.
+  String get motivoLegible => switch (origen ?? destino) {
+        'welcome' => 'Bienvenida',
+        'lesson' => 'Lección completada',
+        'challenge' => 'Reto superado',
+        'assessment' => 'Desafío del módulo',
+        'module' => 'Módulo completado',
+        'path' => 'Ruta completada',
+        'review' => 'Repaso',
+        'daily_goal' => 'Objetivo diario',
+        'daily_mission' => 'Misión diaria',
+        'weekly_mission' => 'Misión semanal',
+        'special_mission' => 'Misión especial',
+        'streak_milestone' => 'Hito de racha',
+        'achievement' => 'Logro desbloqueado',
+        'level_up' => 'Subida de nivel',
+        'rank_up' => 'Cambio de rango',
+        'purchase_reversal' => 'Compra deshecha',
+        'purchase' => 'Compra',
+        'streak_protector' => 'Protector de racha',
+        'adjustment' => 'Ajuste del Reino',
+        _ => esIngreso ? 'Recompensa' : 'Gasto',
+      };
 }
 
 /// Saldo y últimos movimientos de oro (`WalletOut`).

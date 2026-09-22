@@ -44,6 +44,12 @@ class ControladorPersonaje extends ChangeNotifier {
   Compra? _ultimaCompra;
   final Map<String, String> _clavesCompra = <String, String>{};
 
+  // --- Monedero --------------------------------------------------------------
+  Monedero? _monedero;
+  bool _cargandoMonedero = false;
+  bool _cargandoMasMovimientos = false;
+  ErrorAtenea? _errorMonedero;
+
   // --- Ficha (nombre y Orden) ------------------------------------------------
   bool _guardandoFicha = false;
   ErrorAtenea? _errorFicha;
@@ -142,6 +148,21 @@ class ControladorPersonaje extends ChangeNotifier {
 
   /// Última compra ejecutada, para la animación de monedas y el CTA "Equipar".
   Compra? get ultimaCompra => _ultimaCompra;
+
+  /// Monedero: saldo, oro de por vida y movimientos ya cargados.
+  Monedero? get monedero => _monedero;
+
+  /// Primera carga del monedero en curso.
+  bool get cargandoMonedero => _cargandoMonedero;
+
+  /// Trayendo la siguiente página de movimientos.
+  bool get cargandoMasMovimientos => _cargandoMasMovimientos;
+
+  /// Error del monedero, si lo hubo.
+  ErrorAtenea? get errorMonedero => _errorMonedero;
+
+  /// ¿Quedan más movimientos por cargar?
+  bool get hayMasMovimientos => _monedero?.movimientos.info.puedeSeguir ?? false;
 
   /// Anuncios visibles según los filtros de P15.
   List<Anuncio> get anunciosVisibles {
@@ -506,14 +527,48 @@ class ControladorPersonaje extends ChangeNotifier {
     }
   }
 
-  /// Movimientos de oro, para el detalle del monedero.
-  Future<Monedero?> monedero() async {
+  /// Trae el monedero (saldo, oro de por vida y la primera página de
+  /// movimientos). `GET /wallet` estaba entero del lado servidor y este
+  /// método hasta existía —pero era de un solo uso, sin estado ni
+  /// paginación, y ninguna pantalla lo llamaba—.
+  Future<void> cargarMonedero({bool forzar = false}) async {
+    if (_cargandoMonedero) return;
+    if (!forzar && _monedero != null) return;
+    _cargandoMonedero = true;
+    _errorMonedero = null;
+    notifyListeners();
     try {
-      return await _repos.tienda.monedero();
+      _monedero = await _repos.tienda.monedero();
     } catch (e) {
-      _errorTienda = _comoError(e);
+      _errorMonedero = _comoError(e);
+    } finally {
+      _cargandoMonedero = false;
       notifyListeners();
-      return null;
+    }
+  }
+
+  /// Trae la siguiente página de movimientos y la agrega al final.
+  Future<void> cargarMasMovimientos() async {
+    final Monedero? actual = _monedero;
+    if (_cargandoMasMovimientos || actual == null || !hayMasMovimientos) return;
+    _cargandoMasMovimientos = true;
+    notifyListeners();
+    try {
+      final Monedero siguiente = await _repos.tienda.monedero(
+        cursor: actual.movimientos.cursorSiguiente,
+      );
+      _monedero = Monedero(
+        saldo: siguiente.saldo,
+        totalGanado: siguiente.totalGanado,
+        totalGastado: siguiente.totalGastado,
+        movimientos: actual.movimientos.mas(siguiente.movimientos),
+      );
+      _errorMonedero = null;
+    } catch (e) {
+      _errorMonedero = _comoError(e);
+    } finally {
+      _cargandoMasMovimientos = false;
+      notifyListeners();
     }
   }
 
@@ -526,12 +581,18 @@ class ControladorPersonaje extends ChangeNotifier {
 
   /// Borra los errores visibles.
   void limpiarErrores() {
-    if (_errorAvatar == null && _errorInventario == null && _errorTienda == null) {
+    if (_errorAvatar == null &&
+        _errorInventario == null &&
+        _errorTienda == null &&
+        _errorMonedero == null &&
+        _errorFicha == null) {
       return;
     }
     _errorAvatar = null;
     _errorInventario = null;
     _errorTienda = null;
+    _errorMonedero = null;
+    _errorFicha = null;
     notifyListeners();
   }
 
@@ -549,9 +610,12 @@ class ControladorPersonaje extends ChangeNotifier {
     _filtroOrigen = null;
     _categoriaMercado = null;
     _soloAlcanzables = false;
+    _monedero = null;
     _errorAvatar = null;
     _errorInventario = null;
     _errorTienda = null;
+    _errorMonedero = null;
+    _errorFicha = null;
     notifyListeners();
   }
 }
