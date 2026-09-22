@@ -15,7 +15,7 @@ sobrevive a su sesión es otra cosa que promete y no cumple.
 |---|---|
 | Rama | `main`, todo subido a `origin` |
 | Pruebas del cliente | **223 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
-| Pruebas del servidor | **690 verdes**, suite completa, corrida de un tirón (22-09, ver nota en §5 sobre cómo se corrió pese a la deriva de entorno); `ruff check` limpio |
+| Pruebas del servidor | **694 verdes**, suite completa, corrida de un tirón (22-09, ver nota en §5 sobre cómo se corrió pese a la deriva de entorno); `ruff check` limpio |
 | `flutter analyze` | limpio |
 | APK de release | compilado y enviado a Rodrigo a las 02:38 del 18, **con todo lo de la sesión** |
 | Producción | desplegada, `/health` en 200 con base y worker `ok`, migración aplicada, arranque sin trazas |
@@ -590,7 +590,7 @@ hueco duplicado, no el arreglo); y que falte una prueba con dos usuarios sobre
 la misma evaluación (el código es correcto y el «fallo» solo aparece después de
 editarlo).
 
-### 4.9 Un segundo rastreo (21-09) — 13 confirmados, 11 cerrados, 1 abierto
+### 4.9 Un segundo rastreo (21-09) — 13 confirmados, 12 cerrados (uno a medias), 1 abierto
 
 Mismo patrón de §2, buscado a propósito en cinco direcciones —claves que el
 servidor no manda, repositorios y controladores sin llamar, `game_configs`
@@ -757,29 +757,52 @@ con escéptico, y los tres se confirmaron reales — de ahí los trece.
   un adaptador de Dio falso atando la llamada real a `GET /reviews/recommended`
   y su `cursor`, verificadas por mutación dos veces (la paginación y el
   estado vacío).
+* **`challenges_per_module_max` no generaba ni un desafío, y el logro
+  «Retador/a» era inalcanzable — lado servidor cerrado** (22-09, decisión de
+  Rodrigo). `StudyActivityType.CHALLENGE`, `EventType.CHALLENGE_COMPLETED`,
+  el logro, la misión y la regla de recompensa existían enteros; nada los
+  creaba jamás. Con un agravante que el hallazgo original no traía: la
+  palabra «Desafío» que CONTRACT.md usa para esto en la regla A4
+  (`Desafío: máx(90 s, 0,25 × est.)`) ya la ocupa, en el cliente, la pantalla
+  de la evaluación de módulo (decisión D12, `nodos_mapa.dart:429`) — dos
+  conceptos con el mismo nombre en dos sitios distintos. Decisión de Rodrigo:
+  es un ejercicio extra **opcional** por módulo, más corto y más difícil que
+  una lección, unas pocas preguntas del banco del módulo ya existente (no
+  solo de una lección), sin lección nueva, disponible tras completar el
+  módulo; en el cliente se llamará «Reto», no «Desafío».
+
+  Construido: `preguntas.banco_de_modulo`/`muestrear_desafio` (muestreo
+  determinista, misma familia que `muestrear_repaso`); `modulos.
+  asegurar_modulo_completado` (nuevo `409 CHALLENGE_LOCKED` si el módulo no
+  está `COMPLETED`/`MASTERED`); `lecciones.iniciar_desafio` (guarda de
+  `content.challenges_per_module_max`, nuevo `409 CHALLENGE_ALREADY_USED`
+  cuando ya se agotó); `POST /modules/{module_id}/challenge/start`; y
+  `lecciones._completar_desafio`, que recalcula dominio a nivel de módulo y
+  Conocimiento (`topic_id=None`, igual que hace la evaluación en
+  `evaluaciones.py` — el reto cruza varios temas, no hay uno solo al que
+  anclar el recálculo). El cierre reutiliza `POST /activities/{id}/complete`
+  tal cual: no hizo falta tocarlo, `CONTEXTO_POR_ACTIVIDAD`/`EVENTO_DE_CIERRE`
+  ya mapeaban `CHALLENGE` desde antes. Nuevo parámetro `content.
+  challenge_questions` (5). Ocho pruebas nuevas en `tests/content/
+  test_lecciones.py`, verificadas por mutación tres veces (la guarda de
+  elegibilidad, el tope de una vez por módulo, y que el `completar()`
+  genérico de verdad despacha al camino del reto en vez de caer, sin más, en
+  el de lección —esa mutación reventaba con una `LookupError` real: la
+  prueba de que antes de este cambio, completar un reto de verdad habría
+  roto el servidor—).
 
 **Abiertos, por orden de daño:**
 
-1. **`challenges_per_module_max` no genera ni un desafío**, y el logro
-   «Retador/a» queda visible, en la cuadrícula de Logros, con progreso clavado
-   en 0/5 · 0/25 · 0/100, inalcanzable para siempre: no existe una sola
-   actividad de tipo `challenge` en el juego. `StudyActivityType.CHALLENGE`,
-   `EventType.CHALLENGE_COMPLETED`, el logro, la misión y la regla de
-   recompensa existen enteros; nada los crea jamás —ni generador de
-   contenido, ni endpoint, ni pantalla—. Con un agravante que el hallazgo
-   original no traía: la palabra «Desafío» que CONTRACT.md usa para esto en
-   la regla A4 (`Desafío: máx(90 s, 0,25 × est.)`) ya la ocupa, en el
-   cliente, la pantalla de la evaluación de módulo (decisión D12,
-   `nodos_mapa.dart:429`) — dos conceptos con el mismo nombre en dos sitios
-   distintos. Decisión de Rodrigo (22-09): es un ejercicio extra **opcional**
-   por módulo —más corto y más difícil que una lección, unas pocas preguntas
-   del banco del módulo ya existente, sin lección nueva, disponible tras
-   completar el módulo—, y en el cliente se llama distinto a «Desafío» (p.
-   ej. «Reto») para no chocar con la evaluación. Pendiente de construir:
-   Fase A/B que genere/marque el reto por módulo, un endpoint que abra y
-   cierre la actividad (`StudyActivityType.CHALLENGE`, ya mapeado en
-   `lecciones.py` a `EventType.CHALLENGE_COMPLETED` — solo falta quien la
-   cree), y una pantalla o tarjeta en el cliente.
+1. **Falta la mitad del reto: pantalla y entrada en el cliente.** El backend
+   ya funciona de punta a punta (arriba). Pendiente: una pantalla o tarjeta
+   «Reto» (nombre elegido para no chocar con «Desafío», que ya es la
+   evaluación de módulo) que llame a `POST /modules/{id}/challenge/start`,
+   reutilice el flujo de preguntas ya existente (`Actividad`/`empezar*` en
+   el cliente) y aparezca donde el aprendiz ya ve que terminó un módulo —el
+   nodo del módulo en el mapa, o la pantalla de resultado del Desafío
+   cuando aprueba—, con sus dos avisos nuevos (`CHALLENGE_LOCKED`,
+   `CHALLENGE_ALREADY_USED`) manejados por el intérprete de errores genérico
+   que ya existe (`ErrorAtenea.desdeDio`), sin tocarlo.
 
 ---
 

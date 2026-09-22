@@ -19,7 +19,7 @@ calcularon.
 
 Orden de siembra (importa: los pasos posteriores leen `game_configs`)::
 
-    1. game_configs          → 177 parámetros (§5)
+    1. game_configs          → 178 parámetros (§5)
     2. level_definitions     → curva global y por conocimiento (§6.1)
     3. knowledge_areas       → 7 conocimientos canónicos y sus territorios
     4. items                 → 46 ítems, sus requisitos y sus ofertas de tienda
@@ -155,7 +155,7 @@ def _upsert(
 
 
 def sembrar_configuracion(db: Session, resumen: Resumen) -> None:
-    """Siembra los 177 parámetros de §5 respetando el versionado de la tabla."""
+    """Siembra los 178 parámetros de §5 respetando el versionado de la tabla."""
     ahora = utcnow()
     for parametro in PARAMETROS:
         vigente = db.execute(

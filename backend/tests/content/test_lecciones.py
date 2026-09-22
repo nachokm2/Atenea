@@ -480,3 +480,111 @@ def test_el_muestreo_del_repaso_es_estable_para_la_misma_actividad(db, cfg, usua
     ]
 
     assert servidas == reconstruidas
+
+
+# ---------------------------------------------------------------------------
+# Reto del módulo
+# ---------------------------------------------------------------------------
+
+
+def _completar_modulo1(db, usuario, contenido) -> None:
+    """Dueño de las condiciones que habilitan el reto: el módulo, ya terminado."""
+    db.add(
+        UserModuleProgress(
+            user_id=usuario.id,
+            module_id=contenido.modulo1.id,
+            learning_path_id=contenido.ruta.id,
+            status=ModuleStatus.COMPLETED,
+        )
+    )
+    db.flush()
+
+
+def test_el_reto_no_se_abre_si_el_modulo_no_esta_completado(db, cfg, usuario, contenido):
+    """El reto es un extra tras terminar el módulo, no otro camino para avanzarlo."""
+    ServicioProgreso(db).asegurar_progreso_ruta(usuario.id, contenido.ruta.id)
+
+    with pytest.raises(AteneaError) as excinfo:
+        lecciones.iniciar_desafio(
+            db, cfg, usuario, contenido.modulo1.id, idempotency_key=_clave()
+        )
+
+    assert excinfo.value.code == "CHALLENGE_LOCKED"
+
+
+def test_el_reto_reune_preguntas_de_todo_el_modulo_no_de_una_sola_leccion(
+    db, cfg, usuario, contenido
+):
+    """El banco del reto es el del módulo entero (§7.6), no el de una lección.
+
+    El módulo de prueba tiene 13 preguntas repartidas entre dos lecciones y el
+    banco de la evaluación, todas bajo el mismo (único) tema. Si el reto
+    tomara solo las de una lección, nunca podría superar ese puñado.
+    """
+    _completar_modulo1(db, usuario, contenido)
+
+    abierta = lecciones.iniciar_desafio(
+        db, cfg, usuario, contenido.modulo1.id, idempotency_key=_clave()
+    )
+
+    assert abierta.activity.activity_type.value == "challenge"
+    assert abierta.activity.topic_id is None
+    assert len(abierta.questions) == cfg.obtener_int("content.challenge_questions")
+    for pregunta in abierta.questions:
+        assert "answer_key" not in pregunta
+
+
+def test_el_muestreo_del_reto_es_estable_para_la_misma_actividad(db, cfg, usuario, contenido):
+    """El conjunto presentado se reconstruye igual: A7 puede comprobarse después."""
+    _completar_modulo1(db, usuario, contenido)
+    clave = _clave()
+
+    abierta = lecciones.iniciar_desafio(
+        db, cfg, usuario, contenido.modulo1.id, idempotency_key=clave
+    )
+
+    servidas = [q["question_id"] for q in abierta.questions]
+    reconstruidas = [
+        q.id
+        for q in preguntas.muestrear_desafio(
+            db, cfg, contenido.modulo1.id, semilla=f"{usuario.id}:{contenido.modulo1.id}:{clave}"
+        )
+    ]
+
+    assert servidas == reconstruidas
+
+
+def test_completar_el_reto_da_recibo_y_dispara_challenge_completed(db, cfg, usuario, contenido):
+    """El reto paga XP y oro, y emite `CHALLENGE_COMPLETED` —lo que cuenta para «Retador/a»."""
+    _completar_modulo1(db, usuario, contenido)
+    inicio = utcnow() - timedelta(seconds=200)
+    abierta = lecciones.iniciar_desafio(
+        db, cfg, usuario, contenido.modulo1.id, idempotency_key=_clave(), momento=inicio
+    )
+    pool = list(preguntas.por_id(db, [q["question_id"] for q in abierta.questions]).values())
+    _responder_todo(db, cfg, usuario, abierta.activity.id, pool)
+
+    recibo = lecciones.completar(db, cfg, usuario, abierta.activity.id, idempotency_key=_clave())
+
+    assert recibo.event_type == "CHALLENGE_COMPLETED"
+    assert recibo.xp is not None and recibo.xp.amount > 0
+    assert recibo.gold is not None and recibo.gold.amount > 0
+
+
+def test_el_reto_de_un_modulo_solo_se_puede_hacer_una_vez(db, cfg, usuario, contenido):
+    """`content.challenges_per_module_max` (1): agotado el reto, no se abre otro."""
+    _completar_modulo1(db, usuario, contenido)
+    inicio = utcnow() - timedelta(seconds=200)
+    primero = lecciones.iniciar_desafio(
+        db, cfg, usuario, contenido.modulo1.id, idempotency_key=_clave(), momento=inicio
+    )
+    pool = list(preguntas.por_id(db, [q["question_id"] for q in primero.questions]).values())
+    _responder_todo(db, cfg, usuario, primero.activity.id, pool)
+    lecciones.completar(db, cfg, usuario, primero.activity.id, idempotency_key=_clave())
+
+    with pytest.raises(AteneaError) as excinfo:
+        lecciones.iniciar_desafio(
+            db, cfg, usuario, contenido.modulo1.id, idempotency_key=_clave()
+        )
+
+    assert excinfo.value.code == "CHALLENGE_ALREADY_USED"

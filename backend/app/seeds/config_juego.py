@@ -1,4 +1,4 @@
-"""Semilla de `game_configs`: los 177 parámetros de juego del contrato §5.
+"""Semilla de `game_configs`: los 178 parámetros de juego del contrato §5.
 
 Ningún valor de balance vive en el código Python: todos nacen aquí y se leen en
 ejecución con `ServicioConfig`. Esta tabla es la transcripción literal de §5 del
@@ -42,7 +42,7 @@ class ParametroConfig:
     """Texto en español mostrado en el panel de configuración."""
 
 
-#: Los 177 parámetros del contrato §5, en el orden de sus tablas.
+#: Los 178 parámetros del contrato §5, en el orden de sus tablas.
 PARAMETROS: tuple[ParametroConfig, ...] = (
     # -- §5.1 XP ---------------------------------------------------------
     ParametroConfig(
@@ -1223,6 +1223,13 @@ PARAMETROS: tuple[ParametroConfig, ...] = (
         value_type="int",
         is_public=False,
         description="Desafíos como máximo por módulo.",
+    ),
+    ParametroConfig(
+        key="content.challenge_questions",
+        value=5,
+        value_type="int",
+        is_public=False,
+        description="Preguntas del reto de un módulo, muestreadas del banco de sus temas.",
     ),
     ParametroConfig(
         key="content.difficulty_distribution",

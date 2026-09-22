@@ -288,6 +288,8 @@ SEMILLAS_CONFIG: dict[str, tuple[Any, str, bool]] = {
         "list",
         True,
     ),
+    "content.challenges_per_module_max": (1, "int", False),
+    "content.challenge_questions": (5, "int", False),
     "ai.judge": (
         {
             "correct_score": 70,
@@ -414,6 +416,8 @@ def semillas(conexion: sa.Connection) -> Iterator[None]:
     reglas = [
         ("C_LESSON", EventType.LESSON_COMPLETED, "xp.lesson_completed", XPSource.LESSON,
          "gold.lesson_completed", GoldSource.LESSON, {}),
+        ("C_CHALLENGE", EventType.CHALLENGE_COMPLETED, "xp.challenge_completed", XPSource.CHALLENGE,
+         "gold.challenge_completed", GoldSource.CHALLENGE, {}),
         ("C_MODULE", EventType.MODULE_COMPLETED, "xp.module_completed", XPSource.MODULE,
          "gold.module_completed", GoldSource.MODULE, {}),
         ("C_PATH", EventType.PATH_COMPLETED, "xp.path_completed", XPSource.PATH,

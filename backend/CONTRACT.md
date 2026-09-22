@@ -2650,6 +2650,7 @@ Esta es la **tabla única y canónica** de la semilla de `game_configs`. Reglas:
 | `content.questions_per_topic` | `5` | int | no | 04 |
 | `content.open_questions_per_lesson_max` | `1` | int | no | 01 |
 | `content.challenges_per_module_max` | `1` | int | no | 01 |
+| `content.challenge_questions` | `5` | int | no | nuevo, 22-09 |
 | `content.difficulty_distribution` | `{"easy": 0.50, "medium": 0.35, "hard": 0.15}` | map | no | 04 |
 | `content.mvp_question_types` | `["multiple_choice", "true_false", "fill_blank", "matching", "ordering", "open_short", "sql_exercise"]` | list | sí | 04 |
 | `content.seed_paths_target` | `5` | int | no | 01 |
@@ -3099,6 +3100,7 @@ Convenciones de la columna "Respuesta": los nombres en `PascalCase` son esquemas
 | POST | `/api/v1/activities/{activity_id}/abandon` | Sí | Marca la actividad como abandonada (sin recompensa). | `204` |
 | GET | `/api/v1/reviews/recommended` | Sí | Repasos recomendados (temas en riesgo o débiles) con duración estimada. | `Page<ReviewSuggestionOut>` |
 | POST | `/api/v1/reviews/start` | Sí (**Idempotency-Key**) | Abre un repaso de 4–8 preguntas sobre `{topic_id}`. | `ActivityOut` |
+| POST | `/api/v1/modules/{module_id}/challenge/start` | Sí (**Idempotency-Key**) | Abre el reto opcional del módulo (§7.6, 22-09): `content.challenge_questions` preguntas muestreadas de todos los temas del módulo, no de una sola lección. Solo disponible tras completar el módulo (`409 CHALLENGE_LOCKED` si no) y una sola vez por módulo, `content.challenges_per_module_max` (`409 CHALLENGE_ALREADY_USED` si ya se agotó). Se cierra por el mismo `POST /activities/{id}/complete` de siempre y emite `CHALLENGE_COMPLETED`, que es lo que cuenta para el logro «Retador/a». Nombrado «Reto» en el cliente y no «Desafío»: esa palabra ya la usa la pantalla de la evaluación de módulo (P11, decisión D12). | `ActivityOut` |
 | POST | `/api/v1/topics/{topic_id}/explain` | Sí | Re-explicación alternativa generada por IA (enfoque rotativo, con citas). Cada cita de `citations[]` es `{chunk_id, document_id, quote, document_title, page_start, page_end}` — `document_title`/`page_start`/`page_end` son los que arma el chip de fuente ("Guía de SQL · pp. 34–35"), sin ellos el chip solo dice "Tu material". | `ExplanationOut` `{approach, body, citations[]}` |
 | POST | `/api/v1/content/report` | Sí | Reporta un bloque o pregunta (`{content_type, content_id, reason, comment}`). | `204` |
 
@@ -3272,6 +3274,8 @@ En errores de validación (`422`), `field_errors` lleva `[{"field": "goal_text",
 | `ASSESSMENT_ATTEMPT_LIMIT` | 409 | Se alcanzó `mastery.assessment.max_attempts_per_day`. |
 | `CONTENT_NOT_READY` | 409 | El contenido aún se está generando; `details.job_id`. |
 | `MATERIAL_PENDING` | 409 | `POST /paths/{id}/confirm` con `coverage_policy = request_more` y todavía queda algún tema `insufficient`; `details.path_id`. |
+| `CHALLENGE_LOCKED` | 409 | El reto del módulo se abre solo tras completarlo; `details.module_id`, `details.status`. |
+| `CHALLENGE_ALREADY_USED` | 409 | Ya se agotó `content.challenges_per_module_max` retos para ese módulo; `details.module_id`. |
 | `IDEMPOTENCY_KEY_REQUIRED` | 400 | Falta la cabecera en una operación que otorga recompensas. |
 | `IDEMPOTENCY_KEY_CONFLICT` | 409 | La misma clave se usó con un cuerpo distinto. |
 | `QUOTA_EXCEEDED` | 429 | Cuota diaria de IA agotada (`details.quota`, `details.resets_at`). |
@@ -3307,7 +3311,7 @@ GET /api/v1/inventory?limit=30&cursor=eyJpZCI6…
 
 ## 8.3 Idempotencia
 
-- Cabecera **`Idempotency-Key`** (UUID v4) **obligatoria** en: `POST /paths`, `POST /documents`, `POST /documents/paste`, `POST /lessons/{id}/start`, `POST /activities/{id}/answers`, `POST /activities/{id}/complete`, `POST /reviews/start`, `POST /assessments/{id}/start`, `POST /assessment-attempts/{id}/answers`, `POST /assessment-attempts/{id}/submit`, `POST /missions/{id}/claim`, `POST /shop/purchase`, `POST /characters`. Sin ella → `400 IDEMPOTENCY_KEY_REQUIRED`.
+- Cabecera **`Idempotency-Key`** (UUID v4) **obligatoria** en: `POST /paths`, `POST /documents`, `POST /documents/paste`, `POST /lessons/{id}/start`, `POST /activities/{id}/answers`, `POST /activities/{id}/complete`, `POST /reviews/start`, `POST /modules/{id}/challenge/start`, `POST /assessments/{id}/start`, `POST /assessment-attempts/{id}/answers`, `POST /assessment-attempts/{id}/submit`, `POST /missions/{id}/claim`, `POST /shop/purchase`, `POST /characters`. Sin ella → `400 IDEMPOTENCY_KEY_REQUIRED`.
 - La clave se persiste en la tabla del recurso (`idempotency_key`, único por usuario). Un reintento con la misma clave y el mismo cuerpo devuelve **la misma respuesta** con `200` (no `201`) y sin efectos nuevos. Con un cuerpo distinto → `409 IDEMPOTENCY_KEY_CONFLICT`.
 - Los eventos derivados que el servidor genera dentro de una cascada construyen su clave de forma determinista: `"<evento>:<user_id>:<entidad_id>:<n>"` (por ejemplo `"lesson-complete:9b7f…:a1c2…:1"`), de modo que reprocesar no duplica.
 - Las claves se conservan al menos 30 días.

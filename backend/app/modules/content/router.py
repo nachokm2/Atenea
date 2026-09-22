@@ -823,6 +823,31 @@ def iniciar_repaso(
 
 
 @router.post(
+    "/modules/{module_id}/challenge/start",
+    response_model=ActivityOut,
+    status_code=status.HTTP_201_CREATED,
+    summary="Abre el reto opcional del módulo",
+)
+def iniciar_desafio(
+    module_id: uuid.UUID,
+    db: DbSession,
+    user: CurrentUser,
+    idem: IdempotencyDep,
+    response: Response,
+) -> ActivityOut:
+    """Abre el reto: unas pocas preguntas de todos los temas del módulo (§7.6).
+
+    Solo tras completar el módulo, y una sola vez —`content.challenges_per_module_max`—.
+    """
+    abierta = servicio_lecciones.iniciar_desafio(
+        db, ServicioConfig(db), user, module_id, idempotency_key=idem.require()
+    )
+    if not abierta.creada:
+        response.status_code = status.HTTP_200_OK
+    return _actividad_out(abierta)
+
+
+@router.post(
     "/topics/{topic_id}/explain",
     response_model=ExplanationOut,
     summary="Re-explicación alternativa del tema",

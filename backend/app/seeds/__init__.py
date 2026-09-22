@@ -9,7 +9,7 @@ Qué siembra cada módulo:
 ===================  =========================================================
 Módulo               Tablas que llena
 ===================  =========================================================
-`config_juego`       `game_configs` (los 177 parámetros del contrato §5)
+`config_juego`       `game_configs` (los 178 parámetros del contrato §5)
 `niveles`            `level_definitions` (curva global y por conocimiento, §6.1)
 `areas`              `knowledge_areas` y `territories`
 `items`              `items`, `item_requirements` y `shop_listings` (46 ítems)

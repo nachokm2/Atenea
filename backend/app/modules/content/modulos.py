@@ -49,6 +49,11 @@ ESTADOS_ABIERTOS: frozenset[ModuleStatus] = frozenset(
     }
 )
 
+#: Estados de módulo ya terminado (§7.6 desafío: solo se abre tras completarlo).
+ESTADOS_COMPLETADOS: frozenset[ModuleStatus] = frozenset(
+    {ModuleStatus.COMPLETED, ModuleStatus.MASTERED}
+)
+
 
 @dataclass(slots=True)
 class ContextoContenido:
@@ -195,6 +200,23 @@ def asegurar_desbloqueado(
     if fila.status not in ESTADOS_ABIERTOS:
         raise AteneaError(
             code="MODULE_LOCKED",
+            details={
+                "module_id": str(contexto.module.id),
+                "path_id": str(contexto.path.id),
+                "status": fila.status.value,
+            },
+        )
+    return fila
+
+
+def asegurar_modulo_completado(
+    db: Session, usuario_id: uuid.UUID, contexto: ContextoContenido
+) -> UserModuleProgress:
+    """Exige el módulo ya terminado; si no, `409 CHALLENGE_LOCKED` (§7.6 desafío)."""
+    fila = asegurar_desbloqueado(db, usuario_id, contexto)
+    if fila.status not in ESTADOS_COMPLETADOS:
+        raise AteneaError(
+            code="CHALLENGE_LOCKED",
             details={
                 "module_id": str(contexto.module.id),
                 "path_id": str(contexto.path.id),

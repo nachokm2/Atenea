@@ -30,7 +30,7 @@ y hora habitual)»).
 
 Cuántos días se miran sale de `goal.adapt.window_days` (14). Es la ventana que el
 juego ya usa para observar el comportamiento del aprendiz y sembrar una clave
-nueva solo para esto descuadraría los 177 parámetros del contrato §5 sin añadir
+nueva solo para esto descuadraría los 178 parámetros del contrato §5 sin añadir
 ninguna decisión de balance distinta.
 
 ## Por qué la racha viva no se lee de `current_length`

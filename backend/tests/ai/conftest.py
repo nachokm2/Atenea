@@ -229,7 +229,7 @@ def conexion() -> Iterator[sa.Connection]:
 def semillas(conexion: sa.Connection) -> Iterator[None]:
     """Siembra `game_configs` dentro de la transacción de prueba.
 
-    Si la base de desarrollo ya tiene la semilla oficial cargada (las 177 claves de §5),
+    Si la base de desarrollo ya tiene la semilla oficial cargada (las 178 claves de §5),
     no se duplica nada: solo se añaden las claves que falten. Así la suite funciona tanto
     contra una base recién migrada como contra una ya sembrada.
     """

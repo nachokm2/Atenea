@@ -365,6 +365,13 @@ def _preguntas_de_actividad(
             actividad.topic_id,
             semilla=f"{actividad.user_id}:{actividad.topic_id}:{actividad.idempotency_key}",
         )
+    if actividad.activity_type == StudyActivityType.CHALLENGE and actividad.module_id:
+        return preguntas.muestrear_desafio(
+            db,
+            cfg,
+            actividad.module_id,
+            semilla=f"{actividad.user_id}:{actividad.module_id}:{actividad.idempotency_key}",
+        )
     if actividad.topic_id:
         return preguntas.preguntas_de_tema(db, actividad.topic_id)
     return []
@@ -509,6 +516,82 @@ def iniciar_repaso(
         activity_type=StudyActivityType.REVIEW,
         status=AttemptStatus.IN_PROGRESS,
         topic_id=topic_id,
+        module_id=contexto.module.id,
+        learning_path_id=contexto.path.id,
+        knowledge_area_id=contexto.knowledge_area_id,
+        started_at=instante,
+        questions_total=len(seleccion),
+        local_date=user_local_date(instante, usuario.timezone),
+        idempotency_key=idempotency_key,
+    )
+    db.add(actividad)
+    db.flush()
+    return ActividadAbierta(
+        activity=actividad,
+        questions=[preguntas.vista_publica(q, position=i) for i, q in enumerate(seleccion, start=1)],
+        expires_at=instante + _ttl(cfg),
+    )
+
+
+def iniciar_desafio(
+    db: Session,
+    cfg: ServicioConfig,
+    usuario,
+    module_id: uuid.UUID,
+    *,
+    idempotency_key: str,
+    device: str | None = None,
+    momento: datetime | None = None,
+) -> ActividadAbierta:
+    """Abre el reto opcional del módulo: unas pocas preguntas de todos sus temas.
+
+    Se abre **una sola vez por módulo** (`content.challenges_per_module_max`, §7.6) y
+    solo tras completarlo — es un ejercicio extra, no otro camino para avanzarlo.
+    """
+    instante = ensure_utc(momento) if momento else utcnow()
+    existente = _actividad_por_clave(db, cfg, usuario.id, idempotency_key, momento=instante)
+    if existente is not None:
+        pool = _preguntas_de_actividad(db, cfg, existente)
+        return ActividadAbierta(
+            activity=existente,
+            questions=[preguntas.vista_publica(q, position=i) for i, q in enumerate(pool, start=1)],
+            expires_at=ensure_utc(existente.started_at) + _ttl(cfg),
+            creada=False,
+        )
+
+    contexto = modulos.contexto_de_modulo(db, usuario.id, module_id)
+    modulos.asegurar_modulo_completado(db, usuario.id, contexto)
+
+    ya_usados = db.execute(
+        sa.select(sa.func.count(StudyActivity.id)).where(
+            StudyActivity.user_id == usuario.id,
+            StudyActivity.module_id == module_id,
+            StudyActivity.activity_type == StudyActivityType.CHALLENGE,
+            StudyActivity.status == AttemptStatus.SUBMITTED,
+        )
+    ).scalar_one()
+    if ya_usados >= cfg.obtener_int("content.challenges_per_module_max"):
+        raise AteneaError(
+            code="CHALLENGE_ALREADY_USED",
+            details={"module_id": str(module_id), "used": ya_usados},
+        )
+
+    seleccion = preguntas.muestrear_desafio(
+        db, cfg, module_id, semilla=f"{usuario.id}:{module_id}:{idempotency_key}"
+    )
+    if not seleccion:
+        raise AteneaError(
+            code="CONTENT_NOT_READY",
+            details={"module_id": str(module_id), "reason": "empty_question_pool"},
+        )
+
+    sesiones = ServicioSesiones(db)
+    sesion = sesiones.abrir_sesion(usuario.id, usuario.timezone, device=device, ahora=instante)
+    actividad = StudyActivity(
+        user_id=usuario.id,
+        session_id=sesion.id,
+        activity_type=StudyActivityType.CHALLENGE,
+        status=AttemptStatus.IN_PROGRESS,
         module_id=contexto.module.id,
         learning_path_id=contexto.path.id,
         knowledge_area_id=contexto.knowledge_area_id,
@@ -841,6 +924,8 @@ def completar(
 
     if actividad.activity_type == StudyActivityType.REVIEW:
         return _completar_repaso(db, cfg, usuario, actividad, instante)
+    if actividad.activity_type == StudyActivityType.CHALLENGE:
+        return _completar_desafio(db, cfg, usuario, actividad, instante)
     return _completar_leccion(db, cfg, usuario, actividad, instante)
 
 
@@ -854,6 +939,8 @@ def _recibo_ya_emitido(
     """
     if actividad.activity_type == StudyActivityType.REVIEW:
         clave = f"review-complete:{actividad.user_id}:{actividad.id}:1"
+    elif actividad.activity_type == StudyActivityType.CHALLENGE:
+        clave = f"challenge-complete:{actividad.user_id}:{actividad.id}:1"
     else:
         veces = db.execute(
             sa.select(UserLessonProgress.completion_count).where(
@@ -1036,6 +1123,59 @@ def _completar_repaso(
         module_id=actividad.module_id,
         knowledge_area_id=actividad.knowledge_area_id,
         clave_base=f"review:{actividad.id}",
+        momento=momento,
+    )
+    return recibo.finalizar()
+
+
+def _completar_desafio(
+    db: Session,
+    cfg: ServicioConfig,
+    usuario,
+    actividad: StudyActivity,
+    momento: datetime,
+) -> ReciboRecompensas:
+    """Emite `CHALLENGE_COMPLETED` (§7.6). Cuenta para el logro «Retador/a».
+
+    El reto reúne preguntas de varios temas del módulo, así que el dominio se
+    recalcula a nivel de módulo y Conocimiento, igual que hace la evaluación
+    (`evaluaciones.py`) — no hay un único tema al que anclar el recálculo.
+    """
+    total = max(1, int(actividad.questions_total))
+    aciertos = int(actividad.questions_correct)
+    puntaje = round(100.0 * aciertos / total, 2)
+
+    recibo = registrar_evento(
+        db,
+        usuario_id=usuario.id,
+        tipo=EventType.CHALLENGE_COMPLETED,
+        payload={
+            "study_activity_id": str(actividad.id),
+            "path_id": str(actividad.learning_path_id) if actividad.learning_path_id else None,
+            "knowledge_area_id": (
+                str(actividad.knowledge_area_id) if actividad.knowledge_area_id else None
+            ),
+            "accuracy_pct": puntaje,
+            "duration_s": int(actividad.elapsed_seconds or 0),
+        },
+        idempotency_key=f"challenge-complete:{usuario.id}:{actividad.id}:1",
+        occurred_at=momento,
+        timezone=usuario.timezone,
+        cfg=cfg,
+    )
+    actividad.xp_awarded = int(recibo.xp.amount) if recibo.xp else 0
+    actividad.gold_awarded = int(recibo.gold.amount) if recibo.gold else 0
+    db.flush()
+
+    aplicar_dominio(
+        db,
+        cfg,
+        usuario,
+        recibo,
+        topic_id=None,
+        module_id=actividad.module_id,
+        knowledge_area_id=actividad.knowledge_area_id,
+        clave_base=f"challenge:{actividad.id}",
         momento=momento,
     )
     return recibo.finalizar()

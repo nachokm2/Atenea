@@ -3,7 +3,7 @@
 Lo que se comprueba aquí:
 
 - Sembrar dos veces deja **el mismo número de filas** y no crea ni actualiza nada.
-- `game_configs` tiene los 177 parámetros de §5, con su tipo y su `is_public`.
+- `game_configs` tiene los 178 parámetros de §5, con su tipo y su `is_public`.
 - `level_definitions` reproduce **exactamente** los valores de control de §6.1.
 - Los catálogos tienen el tamaño que fija §9: 46 ítems, 32 logros, 23 misiones.
 """
@@ -25,7 +25,7 @@ pytestmark = pytest.mark.db
 
 #: Tablas que llena la siembra, con el número de filas que debe dejar.
 TOTALES_ESPERADOS: dict[str, int] = {
-    "game_configs": 177,
+    "game_configs": 178,
     "level_definitions": 100,
     "knowledge_areas": 7,
     "territories": 7,
@@ -76,10 +76,10 @@ def test_sembrar_dos_veces_no_duplica_ninguna_fila(db: Session) -> None:
     assert sum(segunda.actualizadas.values()) == 0
 
 
-def test_game_configs_tiene_los_177_parametros(db: Session) -> None:
-    """Los 177 parámetros de §5 están sembrados, vigentes y con su tipo."""
-    assert len(PARAMETROS) == 177
-    assert len({parametro.key for parametro in PARAMETROS}) == 177
+def test_game_configs_tiene_los_178_parametros(db: Session) -> None:
+    """Los 178 parámetros de §5 están sembrados, vigentes y con su tipo."""
+    assert len(PARAMETROS) == 178
+    assert len({parametro.key for parametro in PARAMETROS}) == 178
 
     vigentes = db.execute(
         sa.select(GameConfig.key, GameConfig.value, GameConfig.value_type, GameConfig.is_public).where(

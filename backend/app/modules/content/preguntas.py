@@ -23,7 +23,7 @@ from typing import Any
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
-from app.models.content import Assessment, AssessmentQuestion, Question
+from app.models.content import Assessment, AssessmentQuestion, Question, Topic
 from app.models.enums import ContentStatus
 from app.modules.gamification.servicio_config import ServicioConfig
 
@@ -90,6 +90,39 @@ def preguntas_de_tema(db: Session, topic_id: uuid.UUID) -> list[Question]:
             .order_by(Question.created_at, Question.id)
         ).scalars()
     )
+
+
+def banco_de_modulo(db: Session, module_id: uuid.UUID) -> list[Question]:
+    """Pool completo del módulo: las preguntas de todos sus temas (§7.6 desafío).
+
+    A diferencia del banco de la evaluación (`assessment_questions`, una tabla
+    propia con posiciones fijas), el desafío no tiene banco dedicado: reutiliza
+    el mismo pool de preguntas por tema que ya alimenta lección y repaso.
+    """
+    return list(
+        db.execute(
+            sa.select(Question)
+            .join(Topic, Topic.id == Question.topic_id)
+            .where(
+                Topic.module_id == module_id,
+                Question.content_status != ContentStatus.FLAGGED,
+                Question.is_flagged.is_(False),
+            )
+            .order_by(Topic.position, Question.created_at, Question.id)
+        ).scalars()
+    )
+
+
+def muestrear_desafio(
+    db: Session, cfg: ServicioConfig, module_id: uuid.UUID, *, semilla: str
+) -> list[Question]:
+    """Selecciona las preguntas del desafío del módulo (§7.6, `content.challenge_questions`)."""
+    banco = banco_de_modulo(db, module_id)
+    cantidad = min(len(banco), cfg.obtener_int("content.challenge_questions"))
+    if cantidad >= len(banco):
+        return banco
+    azar = random.Random(semilla)
+    return azar.sample(banco, cantidad)
 
 
 def banco_de_evaluacion(db: Session, assessment_id: uuid.UUID) -> list[Question]:
@@ -216,9 +249,11 @@ def solapamiento(seleccion: list[uuid.UUID], previas: list[uuid.UUID]) -> float:
 __all__ = [
     "CLAVES_SENSIBLES_DEL_CUERPO",
     "banco_de_evaluacion",
+    "banco_de_modulo",
     "cuerpo_publico",
     "maximo_repetidas",
     "muestrear_banco",
+    "muestrear_desafio",
     "muestrear_evaluacion",
     "muestrear_repaso",
     "por_id",
