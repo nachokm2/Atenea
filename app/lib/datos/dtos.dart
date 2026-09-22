@@ -3836,6 +3836,7 @@ class InfoEvaluacion {
     this.reglas = const <String>[],
     this.mejorPuntaje,
     this.temas = const <String>[],
+    this.intentosDePorVida = 0,
   });
 
   /// Lee `{assessment, attempts_used, cooldown_until, can_start, reward_preview}`.
@@ -3857,6 +3858,7 @@ class InfoEvaluacion {
       reglas: _textos(json['rules']),
       mejorPuntaje: _decN(_alguna(json, <String>['best_score', 'best_score_pct'])),
       temas: _textos(_alguna(json, <String>['topic_titles', 'topics'])),
+      intentosDePorVida: _ent(json['assessment_attempts']),
     );
   }
 
@@ -3895,6 +3897,10 @@ class InfoEvaluacion {
 
   /// Temas que entran en el desafío.
   final List<String> temas;
+
+  /// Veces que se ha rendido esta prueba en total, no solo hoy
+  /// (`UserModuleProgress.assessment_attempts`).
+  final int intentosDePorVida;
 
   /// Intentos que aún quedan hoy.
   int get intentosRestantes {

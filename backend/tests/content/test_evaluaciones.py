@@ -71,6 +71,25 @@ def test_info_evaluacion_muestra_reglas_intentos_y_recompensa(db, cfg, usuario, 
     assert info.pass_score == 70.0
     assert info.reward_preview["xp"] == cfg.obtener_int("xp.assessment_passed")
     assert info.reward_preview["gold"] == cfg.obtener_int("gold.assessment_passed")
+    assert info.assessment_attempts == 0
+
+
+def test_info_evaluacion_trae_el_historico_de_intentos_de_por_vida(db, cfg, usuario, contenido):
+    """`assessment_attempts` es el contador real de `UserModuleProgress`, no
+    `attempts_used` (el de hoy): sin esto P11 nunca podía mostrar cuántas veces
+    se ha rendido la prueba de este módulo en total."""
+    intento = evaluaciones.iniciar_intento(
+        db, cfg, usuario, contenido.evaluacion.id, idempotency_key=_clave()
+    )
+    _responder(db, cfg, usuario, intento, aciertos=len(intento.questions))
+    evaluaciones.enviar_intento(db, cfg, usuario, intento.attempt.id, idempotency_key=_clave())
+
+    info = evaluaciones.info_evaluacion(db, cfg, usuario, contenido.modulo1.id)
+
+    assert info.assessment_attempts == 1
+    # Distinto de `attempts_used`, que es solo el de hoy y coincide aquí por
+    # casualidad: no deben confundirse ni fusionarse en el mismo campo.
+    assert info.attempts_used == info.assessment_attempts == 1
 
 
 def test_info_evaluacion_trae_los_temas_del_modulo_en_orden(db, cfg, usuario, contenido):

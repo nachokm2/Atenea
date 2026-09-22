@@ -214,6 +214,12 @@ class _PantallaEvaluacionState extends State<PantallaEvaluacion> {
                     etiqueta: 'Tu mejor marca',
                     valor: '${info.mejorPuntaje!.round()} %',
                   ),
+                if (info.intentosDePorVida > 0)
+                  FilaDato(
+                    icono: Icons.history_rounded,
+                    etiqueta: 'Intentos en total',
+                    valor: '${info.intentosDePorVida}',
+                  ),
                 for (final String regla in info.reglas)
                   Padding(
                     padding: const EdgeInsets.only(top: Espacio.xs),

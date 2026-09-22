@@ -81,6 +81,10 @@ class InfoEvaluacion:
     # nunca se pintaba: nada en el sobre le daba con qué. Se entra a una
     # prueba puntuada, con tope de intentos por día, sin saber de qué trata.
     topic_titles: list[str] = field(default_factory=list)
+    # Histórico real de `UserModuleProgress.assessment_attempts`: sobrevive a
+    # que el banco se regenere (a diferencia de `attempts_total`, contado
+    # sobre los intentos de la evaluación *vigente*). Nadie lo exponía.
+    assessment_attempts: int = 0
 
 
 @dataclass(slots=True)
@@ -258,6 +262,7 @@ def info_evaluacion(
             "gold": cfg.obtener_int("gold.assessment_passed"),
         },
         topic_titles=temas,
+        assessment_attempts=int(avance.assessment_attempts),
     )
 
 

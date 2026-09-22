@@ -1044,6 +1044,7 @@ def obtener_info_evaluacion(
         passed_at=info.passed_at,
         reward_preview=info.reward_preview,
         topic_titles=info.topic_titles,
+        assessment_attempts=info.assessment_attempts,
     )
 
 

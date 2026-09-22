@@ -919,6 +919,9 @@ def test_entrada_de_la_prueba_por_http(cliente, contenido):
     assert cuerpo["can_start"] is True
     assert cuerpo["assessment"]["title"] == "Prueba del módulo"
     assert cuerpo["reward_preview"]["xp"] > 0
+    # Histórico de por vida (`UserModuleProgress.assessment_attempts`): viajaba
+    # entero por el servicio y se perdía en el sobre HTTP.
+    assert cuerpo["assessment_attempts"] == 0
 
 
 def test_el_recibo_de_la_evaluacion_es_json_serializable(cliente, contenido):
@@ -942,6 +945,32 @@ def test_el_recibo_de_la_evaluacion_es_json_serializable(cliente, contenido):
     assert recibo["assessment_result"]["passed"] is True
     assert recibo["assessment_result"]["per_topic"]
     assert recibo["presentation_order"]
+
+
+def test_el_historico_de_intentos_sube_tras_enviar_por_http(cliente, contenido):
+    """Tras un envío real, `GET /modules/{id}/assessment` ya cuenta ese intento.
+
+    Antes de esta corrección `assessment_attempts` no viajaba nunca —el sobre
+    HTTP se quedaba en su default `0`—, así que esta prueba no distinguía nada:
+    tanto con y sin el campo cableado el primer `assessment_attempts` de la
+    otra prueba salía en `0`. Aquí, tras enviar un intento real, solo pasa si
+    el campo de verdad refleja el histórico.
+    """
+    intento = cliente.post(
+        f"/api/v1/assessments/{contenido.evaluacion.id}/start", headers=_cabeceras()
+    )
+    attempt_id = intento.json()["attempt_id"]
+    for pregunta in intento.json()["questions"]:
+        cliente.post(
+            f"/api/v1/assessment-attempts/{attempt_id}/answers",
+            json={"question_id": pregunta["question_id"], "response": {"option_id": "a"}},
+            headers=_cabeceras(),
+        )
+    cliente.post(f"/api/v1/assessment-attempts/{attempt_id}/submit", headers=_cabeceras())
+
+    respuesta = cliente.get(f"/api/v1/modules/{contenido.modulo1.id}/assessment")
+
+    assert respuesta.json()["assessment_attempts"] == 1
 
 
 def test_adoptar_la_ruta_del_reino_emite_su_evento(cliente, db, contenido):

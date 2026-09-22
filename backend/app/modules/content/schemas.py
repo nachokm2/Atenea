@@ -604,6 +604,10 @@ class AssessmentInfoOut(EsquemaBase):
     # `info.temas` llegaba siempre vacía y esa sección de la pantalla no se
     # pintaba nunca.
     topic_titles: list[str] = Field(default_factory=list)
+    # Histórico real de `UserModuleProgress.assessment_attempts` (de por
+    # vida, sobrevive a que el banco se regenere). Distinto de
+    # `attempts_used`/`attempts_total`, que cuentan la evaluación vigente.
+    assessment_attempts: int = 0
 
 
 class AssessmentAttemptOut(EsquemaBase):
