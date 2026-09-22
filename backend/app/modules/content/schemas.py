@@ -540,6 +540,14 @@ class CitationOut(EsquemaBase):
     chunk_id: uuid.UUID | None = None
     document_id: uuid.UUID | None = None
     quote: str | None = None
+    # `adaptativo._citas()` ya los resolvía y los mandaba en el dict; sin
+    # declararlos aquí, `ExplanationOut.model_validate` los tiraba en silencio.
+    # El chip de fuente de la re-explicación (`Procedencia.etiqueta`) los lee
+    # directo del payload, no del chunk: sin esto decía «Tu material», sin
+    # título ni páginas, para toda cita de toda re-explicación.
+    document_title: str | None = None
+    page_start: int | None = None
+    page_end: int | None = None
 
 
 class ExplanationOut(EsquemaBase):

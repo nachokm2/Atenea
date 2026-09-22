@@ -26,6 +26,7 @@ from app.models.enums import (
 from app.models.ingestion import ContentProvenance, GenerationJob
 from app.models.progress import AssessmentAttempt, QuestionAttempt
 from app.modules.ai import adaptativo, arquitecto_ruta as fase_a
+from app.modules.content.schemas import ExplanationOut
 
 
 @pytest.fixture
@@ -285,6 +286,33 @@ def test_reexplicar_genera_texto_con_citas(db, cfg, proveedor, usuario, tema) ->
     )
     assert procedencia
     assert all(fila.block_key.startswith("contrast:") for fila in procedencia)
+
+
+def test_las_citas_de_la_reexplicacion_llegan_con_titulo_y_paginas(
+    db, cfg, proveedor, usuario, tema
+) -> None:
+    """`CitationOut` tiraba `document_title`/`page_start`/`page_end` en silencio.
+
+    `adaptativo._citas()` ya los resolvía y `explicacion.citations` los trae —eso
+    no estaba roto—; el chip de fuente de la re-explicación (`Procedencia.etiqueta`
+    en el cliente) los lee directo del sobre de `/topics/{id}/explain`, no de un
+    fetch aparte del chunk. Sin ellos declarados en el esquema de salida,
+    `ExplanationOut.model_validate` los descartaba y el chip mostraba «Tu
+    material», sin título ni páginas, para toda cita de toda re-explicación.
+    """
+    explicacion = adaptativo.reexplicar(
+        db, cfg, proveedor, topic_id=tema.id, usuario_id=usuario.id
+    )
+    cita_original = explicacion.citations[0]
+    assert cita_original["document_title"]
+    assert cita_original["page_start"] is not None
+
+    salida = ExplanationOut.model_validate(explicacion.como_dict())
+
+    cita_salida = salida.citations[0]
+    assert cita_salida.document_title == cita_original["document_title"]
+    assert cita_salida.page_start == cita_original["page_start"]
+    assert cita_salida.page_end == cita_original["page_end"]
 
 
 def test_la_segunda_reexplicacion_cambia_de_enfoque(db, cfg, proveedor, usuario, tema) -> None:

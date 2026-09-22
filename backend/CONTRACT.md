@@ -3099,7 +3099,7 @@ Convenciones de la columna "Respuesta": los nombres en `PascalCase` son esquemas
 | POST | `/api/v1/activities/{activity_id}/abandon` | Sí | Marca la actividad como abandonada (sin recompensa). | `204` |
 | GET | `/api/v1/reviews/recommended` | Sí | Repasos recomendados (temas en riesgo o débiles) con duración estimada. | `Page<ReviewSuggestionOut>` |
 | POST | `/api/v1/reviews/start` | Sí (**Idempotency-Key**) | Abre un repaso de 4–8 preguntas sobre `{topic_id}`. | `ActivityOut` |
-| POST | `/api/v1/topics/{topic_id}/explain` | Sí | Re-explicación alternativa generada por IA (enfoque rotativo, con citas). | `ExplanationOut` `{approach, body, citations[]}` |
+| POST | `/api/v1/topics/{topic_id}/explain` | Sí | Re-explicación alternativa generada por IA (enfoque rotativo, con citas). Cada cita de `citations[]` es `{chunk_id, document_id, quote, document_title, page_start, page_end}` — `document_title`/`page_start`/`page_end` son los que arma el chip de fuente ("Guía de SQL · pp. 34–35"), sin ellos el chip solo dice "Tu material". | `ExplanationOut` `{approach, body, citations[]}` |
 | POST | `/api/v1/content/report` | Sí | Reporta un bloque o pregunta (`{content_type, content_id, reason, comment}`). | `204` |
 
 ## 7.7 Evaluación de módulo (`progress`)

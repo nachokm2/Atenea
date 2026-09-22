@@ -15,7 +15,7 @@ sobrevive a su sesión es otra cosa que promete y no cumple.
 |---|---|
 | Rama | `main`, todo subido a `origin` |
 | Pruebas del cliente | **217 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
-| Pruebas del servidor | **684 verdes**, suite completa, corrida de un tirón (22-09, ver nota en §5 sobre cómo se corrió pese a la deriva de entorno); `ruff check` limpio |
+| Pruebas del servidor | **685 verdes**, suite completa, corrida de un tirón (22-09, ver nota en §5 sobre cómo se corrió pese a la deriva de entorno); `ruff check` limpio |
 | `flutter analyze` | limpio |
 | APK de release | compilado y enviado a Rodrigo a las 02:38 del 18, **con todo lo de la sesión** |
 | Producción | desplegada, `/health` en 200 con base y worker `ok`, migración aplicada, arranque sin trazas |
@@ -590,7 +590,7 @@ hueco duplicado, no el arreglo); y que falte una prueba con dos usuarios sobre
 la misma evaluación (el código es correcto y el «fallo» solo aparece después de
 editarlo).
 
-### 4.9 Un segundo rastreo (21-09) — 13 confirmados, 7 cerrados (uno a medias), 5 abiertos
+### 4.9 Un segundo rastreo (21-09) — 13 confirmados, 8 cerrados (uno a medias), 4 abiertos
 
 Mismo patrón de §2, buscado a propósito en cinco direcciones —claves que el
 servidor no manda, repositorios y controladores sin llamar, `game_configs`
@@ -687,6 +687,17 @@ con escéptico, y los tres se confirmaron reales — de ahí los trece.
   `completion_pct`). Cuatro pruebas nuevas por HTTP, verificadas por mutación
   tres veces (una por punto de cableado: `_ruta_out`, el nivel raíz de
   `_detalle_out` y el `outerjoin` del listado).
+* **Las citas de la re-explicación perdían título y páginas** (22-09). Distinto
+  del `GET /chunks/{id}` de arriba: aquí el servidor ya resolvía `document_title`,
+  `page_start` y `page_end` en `ai/adaptativo._citas()` al pedir «otra
+  explicación», y el chip de fuente de la re-explicación
+  (`Procedencia.etiqueta`, en el cliente) los lee directo de ese sobre, no de
+  un fetch aparte del chunk. `CitationOut` (`content/schemas.py`) no los
+  declaraba, así que `ExplanationOut.model_validate` los tiraba en silencio y
+  el chip decía «Tu material», sin título ni páginas, para toda cita de toda
+  re-explicación. Ahora `CitationOut` los declara. Una prueba nueva en
+  `tests/ai/test_adaptativo.py` que compara la cita antes y después de pasar
+  por el esquema de salida, verificada por mutación.
 
 **Abiertos, por orden de daño:**
 
@@ -712,18 +723,13 @@ con escéptico, y los tres se confirmaron reales — de ahí los trece.
    desafío puntual (no del decaimiento continuo), un tema de refuerzo único
    cuando la Ruta entera ya está completa, y una píldora agregada por
    Conocimiento que al tocarla va al mapa, no a un repaso.
-3. **Las citas de la re-explicación pierden título y páginas.** Es un hallazgo
-   distinto del `GET /chunks/{id}` de arriba: aquí el servidor ya resuelve
-   `document_title`, `page_start` y `page_end` en `ai/adaptativo.py` al pedir
-   «otra explicación», y su propio esquema de salida (`CitationOut` en
-   `content/schemas.py`) los tira porque no los declara.
-4. **El ajuste de racha por viaje no se dispara nunca.** La bandera
+3. **El ajuste de racha por viaje no se dispara nunca.** La bandera
    `viaje_hacia_el_este` existe como parámetro y su único llamador
    (`motor.py:758`) nunca se lo pasa; el umbral sembrado
    (`streak.tz_change_min_delta_h`) no lo lee nadie. Quien viaja hacia el este
    y pierde un día por el salto horario gasta el día de gracia del mes en vez
    de recibir la protección que el contrato le promete por viajar.
-5. **`challenges_per_module_max` no genera ni un desafío**, y el logro
+4. **`challenges_per_module_max` no genera ni un desafío**, y el logro
    «Retador/a» queda visible, en la cuadrícula de Logros, con progreso clavado
    en 0/5 · 0/25 · 0/100, inalcanzable para siempre: no existe una sola
    actividad de tipo `challenge` en el juego.
