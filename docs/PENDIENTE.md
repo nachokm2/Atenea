@@ -14,8 +14,8 @@ sobrevive a su sesión es otra cosa que promete y no cumple.
 | | |
 |---|---|
 | Rama | `main`, todo subido a `origin` |
-| Pruebas del cliente | **212 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
-| Pruebas del servidor | **667 verdes**, `ruff check` limpio |
+| Pruebas del cliente | **217 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
+| Pruebas del servidor | **667 verdes** en la última corrida completa (21-09, antes de la deriva de entorno de más abajo), `ruff check` limpio |
 | `flutter analyze` | limpio |
 | APK de release | compilado y enviado a Rodrigo a las 02:38 del 18, **con todo lo de la sesión** |
 | Producción | desplegada, `/health` en 200 con base y worker `ok`, migración aplicada, arranque sin trazas |
@@ -46,8 +46,13 @@ Cerrados hasta ahora: la vibración, «Sonido», «Idioma del contenido», el re
 de push, los ocho peinados de la creación del héroe, el cobro de las misiones
 autorreclamadas, el `content_status` que impedía abrir lecciones y el del
 módulo, el objeto `assessment`, la pista de conocimiento que hacía imposible
-crear una ruta, y el `deep_link` de las misiones —por el que el botón «Ir a
-cumplirla» no se pintó nunca, para ninguna misión—.
+crear una ruta, el `deep_link` de las misiones —por el que el botón «Ir a
+cumplirla» no se pintó nunca, para ninguna misión—, el `coverage` del tema y
+las `coverage_notes` de la ruta —por los que «Saber del Reino» no se pintó
+jamás y se acusaba de no traer material a quien no había subido nada—, y el
+`chunk_id` de las citas —por el que «Ver fuente» abría una ficha vacía en toda
+lección de toda Ruta: el endpoint `GET /chunks/{id}` estaba entero, montado y
+sin que nadie lo llamara—.
 
 **Cómo buscar el siguiente**: coger un campo que la interfaz ofrezca, hacer
 `grep` de su nombre, y mirar si aparece en algún sitio que no sea el DTO, el
@@ -585,6 +590,68 @@ hueco duplicado, no el arreglo); y que falte una prueba con dos usuarios sobre
 la misma evaluación (el código es correcto y el «fallo» solo aparece después de
 editarlo).
 
+### 4.9 Un segundo rastreo (21-09) — 10 confirmados, 5 cerrados, 5 abiertos
+
+Mismo patrón de §2, buscado a propósito en cinco direcciones —claves que el
+servidor no manda, repositorios y controladores sin llamar, `game_configs`
+sembrado y sin leer, lo que el servidor calcula y ninguna pantalla pide, y
+frases de la interfaz que afirman algo sin respaldo—, con un escéptico por
+hallazgo que intentaba refutarlo ejecutando código. Diecinueve propuestos,
+diez confirmados.
+
+**Cerrados:**
+
+* **`coverage` del tema y `coverage_notes` de la ruta** (commit `ce37106`).
+  Eran tres hallazgos con la misma raíz: sin `coverage` en el nodo de tema, la
+  etiqueta «Saber del Reino» no se pintó jamás, en ningún tema de ninguna
+  Ruta —la promesa que el producto repite más veces era la única que no se
+  podía comprobar—; y sin `coverage_notes` en `PathDetailOut`, la pantalla de
+  generación acusaba a **todo el mundo** de que su material no cubre el
+  objetivo, incluido quien no subió un solo documento, sin decir nunca qué
+  temas son.
+* **`GET /chunks/{id}` sin llamar** (esta sesión). El endpoint estaba entero,
+  montado y probado del lado servidor; el cliente tenía el repositorio, el DTO
+  `Fragmento` y hasta el diseño para pedirlo bajo demanda —y a propósito bajo
+  demanda: mandar título, páginas y texto de cada cita en toda respuesta de
+  lección multiplicaría el peso por el número de citas, casi ninguna de las
+  cuales se abre—. Faltaba la llamada. `_HojaFuente` la hace ahora al abrirse,
+  con esqueleto mientras llega y sin que el fallo de una cita arrastre a las
+  demás. Cinco pruebas nuevas.
+
+**Abiertos, por orden de daño:**
+
+1. **La recomendación adaptativa del objetivo diario no la calcula nadie.**
+   Tres claves sembradas (`goal.adapt.*`), §6.11 la promete con su fórmula
+   exacta, y no hay tarea semanal que la escriba. Quien revienta su objetivo
+   todos los días nunca recibe la invitación a subirlo; quien lleva dos
+   semanas sin llegar nunca recibe la de bajarlo, que es justo el momento en
+   que abandona.
+2. **«Qué entra» no aparece antes del Desafío.** `topic_titles` y `rules` no
+   viajan en `AssessmentInfoOut`: se entra a una prueba puntuada, con tope de
+   intentos por día, sin que la pantalla diga de qué trata ni cuáles son las
+   reglas.
+3. **Las citas de la re-explicación pierden título y páginas.** Es un hallazgo
+   distinto del `GET /chunks/{id}` de arriba: aquí el servidor ya resuelve
+   `document_title`, `page_start` y `page_end` en `ai/adaptativo.py` al pedir
+   «otra explicación», y su propio esquema de salida (`CitationOut` en
+   `content/schemas.py`) los tira porque no los declara.
+4. **El ajuste de racha por viaje no se dispara nunca.** La bandera
+   `viaje_hacia_el_este` existe como parámetro y su único llamador
+   (`motor.py:758`) nunca se lo pasa; el umbral sembrado
+   (`streak.tz_change_min_delta_h`) no lo lee nadie. Quien viaja hacia el este
+   y pierde un día por el salto horario gasta el día de gracia del mes en vez
+   de recibir la protección que el contrato le promete por viajar.
+5. **`challenges_per_module_max` no genera ni un desafío**, y el logro
+   «Retador/a» queda visible, en la cuadrícula de Logros, con progreso clavado
+   en 0/5 · 0/25 · 0/100, inalcanzable para siempre: no existe una sola
+   actividad de tipo `challenge` en el juego.
+
+**Sin verificar, no confirmados ni descartados:** cuatro candidatos no
+llegaron a pasar por el escéptico —se agotó el límite semanal de la cuenta a
+mitad del rastreo—. Entre ellos, uno que suena grave: «Dominio del territorio:
+0 % en la cabecera de toda ruta y en toda tarjeta de ruta, para siempre».
+No se cuentan como hallazgos hasta comprobarlos.
+
 ---
 
 ## 5. Lo que depende de Rodrigo, no del código
@@ -602,10 +669,29 @@ editarlo).
   servicio `api` → Variables → `ALERT_EMAIL` = un correo. No hay código que
   tocar.
 - **Instalar el APK** para probar el apartado 3.2. El del 18 a las 02:38 está
-  enviado y lleva todo. Para recompilar en el futuro basta
-  `flutter build apk --release`: desde `c49ec5a` ya no hace falta
-  `--dart-define=ATENEA_API`, porque la URL de producción por defecto es la
-  correcta.
+  enviado y lleva todo lo de ese día; los arreglos del 21 —`coverage`,
+  `coverage_notes`, «Ver fuente»— todavía no están en ningún APK enviado.
+  Para recompilar basta `flutter build apk --release`: desde `c49ec5a` ya no
+  hace falta `--dart-define=ATENEA_API`, porque la URL de producción por
+  defecto es la correcta.
+
+- **El Python del sistema se salió del `requirements.txt` fijado, y no hay
+  venv que lo aísle.** `starlette` está pinneado en `0.41.3` y el sistema
+  tiene `1.6.0`; `fastapi` en `0.115.6` y el sistema tiene `0.136.0`. Con eso,
+  `starlette.testclient` exige un paquete `httpx2` que no está instalado y
+  **toda la suite de backend deja de poder recolectarse** —no es un fallo de
+  ningún test, es que `pytest` no llega a arrancar—. No pasaba hace unas horas
+  en esta misma sesión (667 pruebas verdes), así que algo lo instaló encima
+  entretanto: probablemente otro de tus proyectos, ya que este Python no tiene
+  venv y lo comparten todos.
+
+  No lo toqué: bajar las versiones del sistema a las que este proyecto fija
+  arreglaría Atenea, pero es un Python que usan otros proyectos tuyos y no sé
+  qué necesitan ellos de la versión nueva. Dos salidas, y la decisión es tuya:
+  reinstalar aquí las versiones fijadas (`pip install -r requirements-dev.txt`)
+  sabiendo que puede afectar a lo otro que corra en este mismo Python, o crear
+  por fin un entorno virtual propio para Atenea, que es lo que evita que esto
+  vuelva a pasar.
 
 ---
 
