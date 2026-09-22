@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import timedelta
+from decimal import Decimal
 
 import pytest
 import sqlalchemy as sa
@@ -26,6 +27,7 @@ from app.models.enums import (
 from app.models.progress import (
     AssessmentAttempt,
     StudyActivity,
+    UserAreaProgress,
     UserModuleProgress,
 )
 from app.modules.progress.progreso import ServicioProgreso
@@ -439,6 +441,43 @@ def test_el_mapa_de_la_ruta_trae_modulos_temas_y_lecciones(cliente, contenido):
     primer_modulo = cuerpo["modules"][0]
     assert primer_modulo["topics"][0]["title"] == "JOINs"
     assert len(primer_modulo["topics"][0]["lessons"]) == 2
+
+
+def test_el_dominio_del_territorio_viaja_en_la_cabecera_y_en_la_tarjeta(
+    db, cliente, usuario, contenido
+):
+    """«Dominio del territorio» se quedaba en 0 % siempre: nadie mandaba el dato.
+
+    `PathSummaryOut`/`PathDetailOut` no declaraban `mastery`, y `_ruta_out`/
+    `_detalle_out` no lo asignaban —aunque sí propagan `mastery` para cada
+    módulo y cada tema dentro del mismo sobre—. El dato ni siquiera es de la
+    Ruta: es `UserAreaProgress.mastery`, del Conocimiento del que cuelga.
+    """
+    db.add(
+        UserAreaProgress(
+            user_id=usuario.id,
+            knowledge_area_id=contenido.area.id,
+            mastery=Decimal("62.50"),
+        )
+    )
+    db.flush()
+
+    mapa = cliente.get(f"/api/v1/paths/{contenido.ruta.id}").json()
+    assert mapa["mastery"] == 62.5
+    assert mapa["path"]["mastery"] == 62.5
+
+    listado = cliente.get("/api/v1/paths", params={"scope": "seed"}).json()
+    tarjeta = next(r for r in listado["items"] if r["path_id"] == str(contenido.ruta.id))
+    assert tarjeta["mastery"] == 62.5
+
+
+def test_sin_evidencia_en_el_conocimiento_el_dominio_es_cero(cliente, contenido):
+    """Sin fila de `UserAreaProgress` (nadie ha estudiado ese Conocimiento aún),
+    el dominio no debe fallar ni inventar un número: es 0 %, de verdad.
+    """
+    mapa = cliente.get(f"/api/v1/paths/{contenido.ruta.id}").json()
+    assert mapa["mastery"] == 0.0
+    assert mapa["path"]["mastery"] == 0.0
 
 
 def test_cada_leccion_del_mapa_dice_si_esta_lista(cliente, contenido):

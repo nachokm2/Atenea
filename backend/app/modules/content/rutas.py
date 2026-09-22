@@ -42,7 +42,7 @@ from app.models.enums import (
     ProgressState,
 )
 from app.models.gamification import UserMission
-from app.models.progress import UserPathProgress
+from app.models.progress import UserAreaProgress, UserPathProgress
 from app.modules.gamification.eventos import buscar_por_clave, registrar_evento
 from app.modules.progress.progreso import MapaRuta, ServicioProgreso
 
@@ -62,6 +62,10 @@ class FilaRuta:
     path: LearningPath
     knowledge_area: KnowledgeArea | None = None
     progress: UserPathProgress | None = None
+    #: Dominio del Conocimiento del que cuelga la Ruta —«dominio del territorio»,
+    #: no de la Ruta: el modelo no tiene esa columna. Es la misma fila que pinta
+    #: el territorio del mapa (`UserAreaProgress`, ligada a `knowledge_area_id`).
+    area_progress: UserAreaProgress | None = None
 
 
 @dataclass(slots=True)
@@ -90,6 +94,7 @@ class DetalleRuta:
     knowledge_area: KnowledgeArea | None
     mapa: MapaRuta
     weak_topic_ids: list[uuid.UUID] = field(default_factory=list)
+    area_progress: UserAreaProgress | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -140,7 +145,7 @@ def listar_rutas(db: Session, usuario_id: uuid.UUID, *, scope: str = "all") -> l
         )
 
     filas = db.execute(
-        sa.select(LearningPath, KnowledgeArea, UserPathProgress)
+        sa.select(LearningPath, KnowledgeArea, UserPathProgress, UserAreaProgress)
         .join(KnowledgeArea, KnowledgeArea.id == LearningPath.knowledge_area_id)
         .outerjoin(
             UserPathProgress,
@@ -149,10 +154,20 @@ def listar_rutas(db: Session, usuario_id: uuid.UUID, *, scope: str = "all") -> l
                 UserPathProgress.user_id == usuario_id,
             ),
         )
+        .outerjoin(
+            UserAreaProgress,
+            sa.and_(
+                UserAreaProgress.knowledge_area_id == LearningPath.knowledge_area_id,
+                UserAreaProgress.user_id == usuario_id,
+            ),
+        )
         .where(sa.or_(*condiciones), LearningPath.archived_at.is_(None))
         .order_by(LearningPath.created_at.desc(), LearningPath.id)
     ).all()
-    return [FilaRuta(path=ruta, knowledge_area=area, progress=avance) for ruta, area, avance in filas]
+    return [
+        FilaRuta(path=ruta, knowledge_area=area, progress=avance, area_progress=dominio)
+        for ruta, area, avance, dominio in filas
+    ]
 
 
 def detalle_ruta(db: Session, usuario_id: uuid.UUID, path_id: uuid.UUID) -> DetalleRuta:
@@ -168,7 +183,15 @@ def detalle_ruta(db: Session, usuario_id: uuid.UUID, path_id: uuid.UUID) -> Deta
         for tema in modulo.temas
         if tema.is_weak
     ]
-    return DetalleRuta(path=ruta, knowledge_area=area, mapa=mapa, weak_topic_ids=debiles)
+    dominio = db.execute(
+        sa.select(UserAreaProgress).where(
+            UserAreaProgress.user_id == usuario_id,
+            UserAreaProgress.knowledge_area_id == ruta.knowledge_area_id,
+        )
+    ).scalar_one_or_none()
+    return DetalleRuta(
+        path=ruta, knowledge_area=area, mapa=mapa, weak_topic_ids=debiles, area_progress=dominio
+    )
 
 
 # ---------------------------------------------------------------------------

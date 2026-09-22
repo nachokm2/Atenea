@@ -269,6 +269,7 @@ def _ruta_out(fila: servicio_rutas.FilaRuta) -> PathSummaryOut:
         estimated_minutes=ruta.estimated_minutes,
         is_seed=ruta.user_id is None,
         is_adopted=avance is not None,
+        mastery=a_float(fila.area_progress.mastery) if fila.area_progress else 0.0,
         completion_pct=a_float(avance.completion_pct) if avance else 0.0,
         modules_completed=int(avance.modules_completed) if avance else 0,
         lessons_completed=int(avance.lessons_completed) if avance else 0,
@@ -286,7 +287,10 @@ def _detalle_out(detalle: servicio_rutas.DetalleRuta) -> PathDetailOut:
     return PathDetailOut(
         path=_ruta_out(
             servicio_rutas.FilaRuta(
-                path=detalle.path, knowledge_area=detalle.knowledge_area, progress=None
+                path=detalle.path,
+                knowledge_area=detalle.knowledge_area,
+                progress=None,
+                area_progress=detalle.area_progress,
             )
         ),
         status=mapa.status,
@@ -295,6 +299,7 @@ def _detalle_out(detalle: servicio_rutas.DetalleRuta) -> PathDetailOut:
         lessons_total=mapa.lessons_total,
         lessons_completed=mapa.lessons_completed,
         completion_pct=mapa.completion_pct,
+        mastery=a_float(detalle.area_progress.mastery) if detalle.area_progress else 0.0,
         current_module_id=mapa.current_module_id,
         current_lesson_id=mapa.current_lesson_id,
         coverage_notes=[str(n) for n in (detalle.path.coverage_notes or [])],

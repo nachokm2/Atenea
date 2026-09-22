@@ -15,7 +15,7 @@ sobrevive a su sesión es otra cosa que promete y no cumple.
 |---|---|
 | Rama | `main`, todo subido a `origin` |
 | Pruebas del cliente | **217 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
-| Pruebas del servidor | **682 verdes**, suite completa, corrida de un tirón (22-09, ver nota en §5 sobre cómo se corrió pese a la deriva de entorno); `ruff check` limpio |
+| Pruebas del servidor | **684 verdes**, suite completa, corrida de un tirón (22-09, ver nota en §5 sobre cómo se corrió pese a la deriva de entorno); `ruff check` limpio |
 | `flutter analyze` | limpio |
 | APK de release | compilado y enviado a Rodrigo a las 02:38 del 18, **con todo lo de la sesión** |
 | Producción | desplegada, `/health` en 200 con base y worker `ok`, migración aplicada, arranque sin trazas |
@@ -590,7 +590,7 @@ hueco duplicado, no el arreglo); y que falte una prueba con dos usuarios sobre
 la misma evaluación (el código es correcto y el «fallo» solo aparece después de
 editarlo).
 
-### 4.9 Un segundo rastreo (21-09) — 13 confirmados, 6 cerrados (uno a medias), 6 abiertos
+### 4.9 Un segundo rastreo (21-09) — 13 confirmados, 7 cerrados (uno a medias), 5 abiertos
 
 Mismo patrón de §2, buscado a propósito en cinco direcciones —claves que el
 servidor no manda, repositorios y controladores sin llamar, `game_configs`
@@ -674,6 +674,20 @@ con escéptico, y los tres se confirmaron reales — de ahí los trece.
   cuando lleguen documentos nuevos?) habría sido diseñar producto a mi
   criterio. Queda como abierto #1, ya reducido a esa mitad.
 
+* **«Dominio del territorio»: 0 % en la cabecera de toda Ruta y en toda
+  tarjeta de Ruta, siempre** (22-09). `ResumenRuta.dominio` (`dtos.dart:1802,1847`)
+  busca `mastery`/`mastery_pct` en el sobre de `GET /paths` y `GET /paths/{id}`,
+  pero ni `PathSummaryOut` ni `PathDetailOut` declaraban ese campo. El dato ni
+  siquiera existe a nivel de Ruta en el modelo: el dominio del territorio es
+  `UserAreaProgress.mastery`, ligado al `KnowledgeArea`, no a la `LearningPath`.
+  `listar_rutas` y `detalle_ruta` (`content/rutas.py`) ahora hacen ese lookup
+  —`outerjoin` en el listado, consulta directa en el mapa, las dos de solo
+  lectura, sin crear la fila si no existe— y `PathSummaryOut`/`PathDetailOut`
+  llevan `mastery` (en la raíz de ambas, espejando el mismo patrón que
+  `completion_pct`). Cuatro pruebas nuevas por HTTP, verificadas por mutación
+  tres veces (una por punto de cableado: `_ruta_out`, el nivel raíz de
+  `_detalle_out` y el `outerjoin` del listado).
+
 **Abiertos, por orden de daño:**
 
 1. **«Pedirme más material» no bloquea ni difiere nada.** Sigue el hueco de
@@ -686,18 +700,7 @@ con escéptico, y los tres se confirmaron reales — de ahí los trece.
    después. Necesita una decisión de producto antes que código: qué debe
    pasar exactamente con esos temas y con el avance de la ruta mientras se
    espera.
-2. **«Dominio del territorio»: 0 % en la cabecera de toda Ruta y en toda
-   tarjeta de Ruta, siempre.** `ResumenRuta.dominio` (`dtos.dart:1802,1847`)
-   busca `mastery`/`mastery_pct` en el sobre de `GET /paths` y
-   `GET /paths/{id}`, pero ni `PathSummaryOut` ni `PathDetailOut` declaran ese
-   campo, y `_ruta_out`/`_detalle_out` nunca lo asignan —aunque sí propagan
-   `mastery` para cada módulo y cada tema dentro del mismo sobre—. El dato ni
-   siquiera existe a nivel de Ruta en el modelo: el dominio del territorio es
-   `UserAreaProgress.mastery`, ligado al `KnowledgeArea`, no a la
-   `LearningPath`; nadie hace ese join. Todo aprendiz ve «0 %» en el medallón
-   de dominio de cada Ruta que abre, incluso con módulos completados y dominio
-   real visible en otras pantallas.
-3. **El servidor calcula qué temas se le están olvidando al aprendiz y
+2. **El servidor calcula qué temas se le están olvidando al aprendiz y
    ninguna pantalla se lo enseña.** `dominio.py` calcula de verdad la curva de
    decaimiento y persiste `mastery`/`is_weak` por tema; `GET /reviews/recommended`
    y el `weak_topics` de `GET /knowledge-areas/{id}` están terminados y
@@ -709,18 +712,18 @@ con escéptico, y los tres se confirmaron reales — de ahí los trece.
    desafío puntual (no del decaimiento continuo), un tema de refuerzo único
    cuando la Ruta entera ya está completa, y una píldora agregada por
    Conocimiento que al tocarla va al mapa, no a un repaso.
-4. **Las citas de la re-explicación pierden título y páginas.** Es un hallazgo
+3. **Las citas de la re-explicación pierden título y páginas.** Es un hallazgo
    distinto del `GET /chunks/{id}` de arriba: aquí el servidor ya resuelve
    `document_title`, `page_start` y `page_end` en `ai/adaptativo.py` al pedir
    «otra explicación», y su propio esquema de salida (`CitationOut` en
    `content/schemas.py`) los tira porque no los declara.
-5. **El ajuste de racha por viaje no se dispara nunca.** La bandera
+4. **El ajuste de racha por viaje no se dispara nunca.** La bandera
    `viaje_hacia_el_este` existe como parámetro y su único llamador
    (`motor.py:758`) nunca se lo pasa; el umbral sembrado
    (`streak.tz_change_min_delta_h`) no lo lee nadie. Quien viaja hacia el este
    y pierde un día por el salto horario gasta el día de gracia del mes en vez
    de recibir la protección que el contrato le promete por viajar.
-6. **`challenges_per_module_max` no genera ni un desafío**, y el logro
+5. **`challenges_per_module_max` no genera ni un desafío**, y el logro
    «Retador/a» queda visible, en la cuadrícula de Logros, con progreso clavado
    en 0/5 · 0/25 · 0/100, inalcanzable para siempre: no existe una sola
    actividad de tipo `challenge` en el juego.

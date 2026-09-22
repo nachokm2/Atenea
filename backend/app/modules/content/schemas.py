@@ -199,6 +199,11 @@ class PathSummaryOut(EsquemaBase):
     estimated_minutes: int | None = None
     is_seed: bool = False
     is_adopted: bool = False
+    # Dominio del Conocimiento del que cuelga la Ruta («dominio del territorio»,
+    # UserAreaProgress.mastery) — la Ruta misma no tiene ese dato en el modelo.
+    # Sin esto el medallón de dominio de toda Ruta, en el mapa y en cada tarjeta
+    # del listado, se quedaba fijo en 0 %.
+    mastery: float = 0.0
     completion_pct: float = 0.0
     modules_completed: int = 0
     lessons_completed: int = 0
@@ -344,6 +349,9 @@ class PathDetailOut(EsquemaBase):
     lessons_total: int = 0
     lessons_completed: int = 0
     completion_pct: float = 0.0
+    # Espejo de `path.mastery` a nivel raíz, igual que `completion_pct`: la
+    # cabecera del mapa (P07) lo busca aquí, no dentro de `path`.
+    mastery: float = 0.0
     current_module_id: uuid.UUID | None = None
     current_lesson_id: uuid.UUID | None = None
     # Los temas del objetivo que el material no cubre, tal y como los dejó la
