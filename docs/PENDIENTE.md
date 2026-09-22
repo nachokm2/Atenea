@@ -834,6 +834,106 @@ con escéptico, y los tres se confirmaron reales — de ahí los trece.
   Con esto se cierra el rastreo del 21-09 completo: los 13 confirmados,
   cerrados.
 
+### 4.10 Un tercer rastreo (22-09) — 10 confirmados, 9 hallazgos distintos
+
+Misma enfermedad, buscada en direcciones nuevas: endpoints con controlador y DTO
+listos que ninguna pantalla llama (`dtos-sin-pantalla`), columnas de progreso que
+un servicio escribe y ningún endpoint de salida expone
+(`columnas-de-progreso-sin-salida`), y eventos y recompensas desalineados entre
+lo que el servidor calcula y lo que el payload de su propio evento manda. Diez
+candidatos, diez confirmados, cero refutados — pero dos son el mismo hallazgo
+visto por dos direcciones distintas (`GET /me/knowledge`, huérfano y con el DTO
+desalineado), así que son **nueve** desconexiones reales:
+
+1. `PATCH /characters/me` huérfano (renombrar/reordenar personaje, entero del
+   lado servidor, cero wiring en el cliente).
+2. `GET /me/knowledge` huérfano **y** con el DTO cliente desalineado del
+   `UserKnowledgeOut` real.
+3. «Semana Perfecta» (`ACH_PERFECT_WEEK`) sin emisor: no existe cálculo de
+   «lunes local» en el servidor (`docs/planes/misiones-semanales.md:61` ya lo
+   marca como una necesidad futura no construida).
+4. `local_hour` ausente del payload real de `DAILY_GOAL_MET`: afecta al logro
+   «Madrugador/a» **y** a la misión activa D13 — imposible de cumplir para
+   cualquier usuario, siempre.
+5. «Maestro/a del Reino» (`ACH_REALM_MASTER`) sin `areas_mastered` en el
+   payload de `MASTERY_UPDATED` — mismo molde que Retador/a.
+6. El cambio de rango (con su propio bono de oro) nunca se distingue de subir
+   de nivel en el modal de P13.
+7. `GET /wallet` sin pantalla: saldo, oro de por vida y movimientos, con
+   controlador y DTO listos.
+8. `UserModuleProgress.assessment_attempts`: histórico real de intentos de
+   evaluación que ningún endpoint exponía.
+9. `Streak.previous_length`: la racha rota se guarda de verdad y no llegaba a
+   `GET /streak` ni al panel — el cliente ya tenía el parseo (y una advertencia
+   entera, «Tu racha se reinició») esperando un campo que nunca llegaba.
+
+**Cerrados:**
+
+* **`Streak.previous_length` y el motivo del último cambio** (22-09). Al
+  investigar el hallazgo #9 aparecieron dos siblings del mismo tipo en el
+  mismo bloque: `Streak.last_change` y `Streak.started_on` tampoco viajaban
+  nunca por `StreakOut` ni por el bloque `streak` del panel, aunque el cliente
+  ya los parseaba (`Racha.desdeJson` lee `last_change`/`change` y
+  `started_on`) — y de los tres, `last_change` es el que de verdad importaba:
+  la advertencia «Tu racha se reinició» de `racha.dart` solo se pinta cuando
+  `racha.ultimoCambio == CambioRacha.rota`, y como ese campo nunca llegaba, la
+  advertencia estaba muerta desde que se escribió, para cualquier usuario que
+  rompiera una racha. Ahora `StreakOut` (`GET /streak`) y `DashboardStreakOut`
+  (bloque `streak` del panel) llevan los tres campos, leídos directo de la
+  fila `Streak` que ya se consultaba entera. Cinco pruebas nuevas (dos en
+  `tests/gamification/test_router_racha.py`, nuevo; tres en
+  `tests/progress/test_panel.py`, una de ellas comprobando la forma que de
+  verdad viaja por HTTP con `DashboardOut.model_validate`), verificadas por
+  mutación dos veces.
+* **`assessment_attempts`: el histórico de intentos de evaluación, expuesto
+  en P11** (22-09). `UserModuleProgress.assessment_attempts` se actualiza en
+  dos sitios reales (`content/evaluaciones.py` al cerrar un intento,
+  `progress/dominio.py` al recomputar dominio) y no lo leía ningún endpoint;
+  `attempts_used`/`attempts_total` de `AssessmentInfoOut` cuentan la
+  evaluación **vigente**, no el histórico — si el banco se regenera, ese
+  contador se reinicia, pero `assessment_attempts` no. El cliente incluso
+  tenía un *fallback* de clave muerto esperándolo (`dtos.dart`, `_alguna(json,
+  ['attempts_used', 'assessment_attempts'])`), que nunca disparaba porque el
+  servidor jamás mandaba esa clave. Ahora `AssessmentInfoOut` lleva
+  `assessment_attempts` y P11 suma una fila «Intentos en total» junto a la de
+  «Intentos de hoy» (mismo patrón `FilaDato` que ya usan las otras). Seis
+  pruebas nuevas (dos en `test_evaluaciones.py`, una HTTP en
+  `test_content_router.py`, tres de DTO puras en
+  `info_evaluacion_dto_test.dart`, nuevo), verificadas por mutación tres
+  veces.
+* **«Maestro/a del Reino» sin `areas_mastered`** (22-09). Mismo molde que
+  Retador/a: el logro compara `areas_mastered` del payload de
+  `MASTERY_UPDATED` contra sus tres niveles (1/3/5), pero `ResultadoRecalculo`
+  no tenía ese campo — la condición no podía cumplirse nunca, sin importar
+  cuántos territorios dominara nadie. `areas_mastered` ya existía en otro
+  sitio (`progress/estadisticas.py`, para `ProfileOut.stats` y para el
+  requisito de tienda `AREAS_MASTERED_GTE`, evaluado directo contra la base),
+  pero nunca viajaba por el pipeline de eventos. Ahora `recalcular_cascada`
+  cuenta las áreas con `status = MASTERED` de toda la cuenta (no solo la
+  recién recalculada) y los dos emisores reales
+  (`progress/dominio._emitir_eventos_dominio`, `content/lecciones.py`, que
+  arma su propio payload aparte) lo incluyen. CONTRACT.md no necesitó
+  tocarse: su ejemplo de `MASTERY_UPDATED` ya documentaba `areas_mastered`
+  desde antes — el código era lo que estaba desalineado del contrato, no al
+  revés. Cuatro pruebas nuevas (dos en `test_debilidad_avisa.py` con un área
+  de más ya dominada de antes, para probar que el conteo es de toda la cuenta
+  y no solo la tocada; una en `test_lecciones.py`, el otro emisor),
+  verificadas por mutación dos veces.
+
+**Abiertos:**
+
+* `PATCH /characters/me` huérfano.
+* `GET /me/knowledge` huérfano y desalineado (arreglo recomendado: extender
+  `AreaConocimiento.desdeJson` para leer los campos de `ProfileOut.knowledge`,
+  que ya viaja en `/profile`, en vez de cablear el endpoint aparte).
+* «Semana Perfecta» sin emisor — necesita decisión de diseño (el cálculo de
+  «lunes local» que `misiones-semanales.md` ya marca como pendiente).
+* `local_hour` ausente de `DAILY_GOAL_MET` — necesita decisión de diseño
+  (cómo calcular la hora local en el motor de eventos).
+* El cambio de rango, indistinguible de subir de nivel — necesita decisión de
+  diseño (qué mostrar).
+* `GET /wallet` sin pantalla.
+
 ---
 
 ## 5. Lo que depende de Rodrigo, no del código
