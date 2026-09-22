@@ -582,6 +582,10 @@ class ResultadoRecalculo:
     module_status: ModuleStatus | None = None
     area_status: KnowledgeAreaStatus | None = None
     topics_mastered: int = 0
+    #: Áreas de conocimiento dominadas, de toda la cuenta (no solo la de este
+    #: recálculo). Alimenta `ACH_REALM_MASTER`, que compara este número contra
+    #: sus tres niveles — sin esto la condición nunca podía cumplirse.
+    areas_mastered: int = 0
     #: El tema acaba de cruzar el umbral de debilidad en **este** recálculo. Es la
     #: transición, no el estado: un tema que ya estaba débil no la vuelve a
     #: levantar, o el aprendiz recibiría el mismo aviso de repaso en cada
@@ -913,6 +917,14 @@ class ServicioDominio:
             resultado.area_after = despues
             resultado.area_status = fila_area.status
             resultado.topics_mastered = int(fila_area.topics_mastered)
+            resultado.areas_mastered = int(
+                self.db.execute(
+                    sa.select(sa.func.count(UserAreaProgress.id)).where(
+                        UserAreaProgress.user_id == user_id,
+                        UserAreaProgress.status == KnowledgeAreaStatus.MASTERED,
+                    )
+                ).scalar_one()
+            )
 
         if emitir_eventos:
             self._emitir_eventos_dominio(
@@ -1034,6 +1046,7 @@ class ServicioDominio:
             "area_before": resultado.area_before,
             "area_after": resultado.area_after,
             "topics_mastered": resultado.topics_mastered,
+            "areas_mastered": resultado.areas_mastered,
         }
         self._insertar_evento(
             EventType.MASTERY_UPDATED,

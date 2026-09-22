@@ -1230,6 +1230,7 @@ def aplicar_dominio(
                 "area_before": recalculo.area_before,
                 "area_after": recalculo.area_after,
                 "topics_mastered": recalculo.topics_mastered,
+                "areas_mastered": recalculo.areas_mastered,
             },
             idempotency_key=f"mastery-updated:{usuario.id}:{clave_base}:1",
             occurred_at=momento,

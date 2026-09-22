@@ -7,15 +7,27 @@ from __future__ import annotations
 
 import uuid
 from datetime import timedelta
+from decimal import Decimal
 
 import pytest
 import sqlalchemy as sa
 
 from app.core.errors import AteneaError
 from app.core.time import utcnow
-from app.models.enums import AttemptResult, AttemptStatus, ModuleStatus, ProgressState
+from app.models.content import KnowledgeArea
+from app.models.enums import (
+    AttemptResult,
+    AttemptStatus,
+    EventType,
+    KnowledgeAreaStatus,
+    KnowledgeCategory,
+    ModuleStatus,
+    ProgressState,
+)
+from app.models.gamification import DomainEvent
 from app.models.progress import (
     QuestionAttempt,
+    UserAreaProgress,
     UserLessonProgress,
     UserModuleProgress,
 )
@@ -314,6 +326,44 @@ def test_completar_la_leccion_devuelve_recibo_con_xp_y_oro(db, cfg, usuario, con
     ).scalar_one()
     assert avance.status == ProgressState.COMPLETED
     assert avance.completion_count == 1
+
+
+def test_completar_la_leccion_manda_areas_mastered_en_mastery_updated(
+    db, cfg, usuario, contenido
+):
+    """El otro emisor de `MASTERY_UPDATED` (§4.2): terminar una lección arma su
+    propio payload en `lecciones.py`, sin pasar por `_emitir_eventos_dominio`.
+    `ACH_REALM_MASTER` no podía cumplirse desde este camino tampoco."""
+    otra_area = KnowledgeArea(
+        slug="otra-area-leccion",
+        name="Otra área",
+        short_name="Otra",
+        category=KnowledgeCategory.DATA,
+    )
+    db.add(otra_area)
+    db.flush()
+    db.add(
+        UserAreaProgress(
+            user_id=usuario.id,
+            knowledge_area_id=otra_area.id,
+            mastery=Decimal("90.00"),
+            status=KnowledgeAreaStatus.MASTERED,
+        )
+    )
+    db.flush()
+
+    inicio = utcnow() - timedelta(seconds=200)
+    abierta = lecciones.iniciar_leccion(
+        db, cfg, usuario, contenido.leccion1.id, idempotency_key=_clave(), momento=inicio
+    )
+    _responder_todo(db, cfg, usuario, abierta.activity.id, contenido.preguntas_l1)
+
+    lecciones.completar(db, cfg, usuario, abierta.activity.id, idempotency_key=_clave())
+
+    evento = db.execute(
+        sa.select(DomainEvent).where(DomainEvent.event_type == EventType.MASTERY_UPDATED)
+    ).scalar_one()
+    assert evento.payload["areas_mastered"] == 1
 
 
 def test_completar_dos_veces_con_la_misma_clave_no_duplica_el_recibo(db, cfg, usuario, contenido):

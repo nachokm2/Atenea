@@ -11,15 +11,17 @@ ver ese tema nunca.
 from __future__ import annotations
 
 from datetime import timedelta
+from decimal import Decimal
 
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
 from app.core.time import utcnow
-from app.models.enums import EventType, NotificationType
+from app.models.content import KnowledgeArea
+from app.models.enums import EventType, KnowledgeAreaStatus, KnowledgeCategory, NotificationType
 from app.models.gamification import DomainEvent, Notification
 from app.models.identity import User
-from app.models.progress import UserTopicProgress
+from app.models.progress import UserAreaProgress, UserTopicProgress
 from app.modules.progress.dominio import ServicioDominio
 
 from .conftest import registrar_respuesta
@@ -177,3 +179,61 @@ def test_intentarlo_y_fallar_tambien_descubre_el_territorio(
 
     assert resultado.area_after > 0
     assert EventType.TERRITORY_UNLOCKED in resultado.eventos
+
+
+# ---------------------------------------------------------------------------
+# Áreas dominadas, de toda la cuenta
+# ---------------------------------------------------------------------------
+#
+# `ACH_REALM_MASTER` compara `areas_mastered` del payload de `MASTERY_UPDATED`
+# contra sus tres niveles (1/3/5), pero `ResultadoRecalculo` no tenía ese campo:
+# el logro no podía cumplirse nunca, sin importar cuántas áreas dominara nadie.
+
+
+def _area_dominada(db: Session, usuario: User, *, sufijo: str) -> UserAreaProgress:
+    """Otra área, ya dominada, para probar que el conteo es de toda la cuenta."""
+    area = KnowledgeArea(
+        slug=f"otra-{sufijo}",
+        name=f"Área {sufijo}",
+        short_name=sufijo,
+        category=KnowledgeCategory.DATA,
+    )
+    db.add(area)
+    db.flush()
+    fila = UserAreaProgress(
+        user_id=usuario.id,
+        knowledge_area_id=area.id,
+        mastery=Decimal("90.00"),
+        status=KnowledgeAreaStatus.MASTERED,
+    )
+    db.add(fila)
+    db.flush()
+    return fila
+
+
+def test_areas_mastered_cuenta_toda_la_cuenta_no_solo_la_que_se_recalculo(
+    db: Session, config_sembrada: None, usuario: User, contenido
+) -> None:
+    """El área que se acaba de recalcular no está dominada; otras dos sí lo
+    estaban de antes. El conteo tiene que ver las tres, no solo la tocada."""
+    _area_dominada(db, usuario, sufijo="a")
+    _area_dominada(db, usuario, sufijo="b")
+
+    resultado = ServicioDominio(db).recalcular_cascada(usuario.id, topic_id=contenido.tema.id)
+
+    assert resultado.area_status != KnowledgeAreaStatus.MASTERED
+    assert resultado.areas_mastered == 2
+
+
+def test_areas_mastered_viaja_en_el_payload_de_mastery_updated(
+    db: Session, config_sembrada: None, usuario: User, contenido
+) -> None:
+    """`ACH_REALM_MASTER` lee este campo del evento, no del `ResultadoRecalculo`
+    en memoria: sin esto en el payload, la condición nunca se evalúa."""
+    _area_dominada(db, usuario, sufijo="c")
+
+    ServicioDominio(db).recalcular_cascada(usuario.id, topic_id=contenido.tema.id)
+
+    eventos = _eventos(db, EventType.MASTERY_UPDATED)
+    assert len(eventos) == 1
+    assert eventos[0].payload["areas_mastered"] == 1
