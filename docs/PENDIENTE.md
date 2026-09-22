@@ -15,7 +15,7 @@ sobrevive a su sesión es otra cosa que promete y no cumple.
 |---|---|
 | Rama | `main`, todo subido a `origin` |
 | Pruebas del cliente | **217 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
-| Pruebas del servidor | **688 verdes**, suite completa, corrida de un tirón (22-09, ver nota en §5 sobre cómo se corrió pese a la deriva de entorno); `ruff check` limpio |
+| Pruebas del servidor | **690 verdes**, suite completa, corrida de un tirón (22-09, ver nota en §5 sobre cómo se corrió pese a la deriva de entorno); `ruff check` limpio |
 | `flutter analyze` | limpio |
 | APK de release | compilado y enviado a Rodrigo a las 02:38 del 18, **con todo lo de la sesión** |
 | Producción | desplegada, `/health` en 200 con base y worker `ok`, migración aplicada, arranque sin trazas |
@@ -590,7 +590,7 @@ hueco duplicado, no el arreglo); y que falte una prueba con dos usuarios sobre
 la misma evaluación (el código es correcto y el «fallo» solo aparece después de
 editarlo).
 
-### 4.9 Un segundo rastreo (21-09) — 13 confirmados, 9 cerrados (uno a medias), 3 abiertos
+### 4.9 Un segundo rastreo (21-09) — 13 confirmados, 10 cerrados, 2 abiertos
 
 Mismo patrón de §2, buscado a propósito en cinco direcciones —claves que el
 servidor no manda, repositorios y controladores sin llamar, `game_configs`
@@ -715,20 +715,27 @@ con escéptico, y los tres se confirmaron reales — de ahí los trece.
   tenía ninguna—, verificadas por mutación tres veces: el umbral, la
   dirección (un viaje al oeste no protege) y la ventana (un cambio de zona de
   hace dos semanas no protege el día de ayer).
+* **«Pedirme más material» no bloqueaba ni difería nada** (22-09, decisión de
+  Rodrigo: bloquear el confirm). Con `request_more` el Módulo 1 se generaba
+  igual, de inmediato, con la Fase B completando esos temas con saber del
+  modelo —lo mismo que con «Completar con el saber del Reino»—. Ahora
+  `confirmar_ruta` responde `409 MATERIAL_PENDING` mientras quede algún
+  `Topic` `insufficient` con esa política: no avanza a `GENERATING`, no
+  encola el módulo 1, pero sí deja guardada la elección de política y
+  cualquier edición de `cambios` ya enviada —`db.commit()` explícito antes de
+  lanzar, porque la excepción revierte toda la transacción si no—. El
+  cliente no necesitó tocarse: `ErrorAtenea.desdeDio` ya es genérico y
+  muestra el `message` del servidor tal cual. **Límite explícito, no
+  resuelto**: no existe hoy una forma de reevaluar un tema puntual tras subir
+  material nuevo —la Fase A no se puede volver a invocar sobre un tema
+  suelto—, así que el aprendiz tiene que editar esos temas a mano por
+  `cambios` o cambiar de política; regenerar solo no basta con subir un
+  documento y reintentar. Dos pruebas HTTP nuevas, verificadas por mutación
+  dos veces (el bloqueo y que no es un freno general).
 
 **Abiertos, por orden de daño:**
 
-1. **«Pedirme más material» no bloquea ni difiere nada.** Sigue el hueco de
-   arriba: quien toca «Pedirme más material» esperando que el Reino espere a
-   que suba documentos ve el Módulo 1 generarse igual, de inmediato, con la
-   Fase B completando esos temas con saber del modelo —exactamente lo mismo
-   que si hubiera tocado «Completar con el saber del Reino»—, porque
-   `autor_leccion.py` no importa `CoveragePolicy` en ningún punto del archivo
-   y no existe una forma de dejar un tema pendiente de material y retomarlo
-   después. Necesita una decisión de producto antes que código: qué debe
-   pasar exactamente con esos temas y con el avance de la ruta mientras se
-   espera.
-2. **El servidor calcula qué temas se le están olvidando al aprendiz y
+1. **El servidor calcula qué temas se le están olvidando al aprendiz y
    ninguna pantalla se lo enseña.** `dominio.py` calcula de verdad la curva de
    decaimiento y persiste `mastery`/`is_weak` por tema; `GET /reviews/recommended`
    y el `weak_topics` de `GET /knowledge-areas/{id}` están terminados y
@@ -740,10 +747,26 @@ con escéptico, y los tres se confirmaron reales — de ahí los trece.
    desafío puntual (no del decaimiento continuo), un tema de refuerzo único
    cuando la Ruta entera ya está completa, y una píldora agregada por
    Conocimiento que al tocarla va al mapa, no a un repaso.
-3. **`challenges_per_module_max` no genera ni un desafío**, y el logro
+2. **`challenges_per_module_max` no genera ni un desafío**, y el logro
    «Retador/a» queda visible, en la cuadrícula de Logros, con progreso clavado
    en 0/5 · 0/25 · 0/100, inalcanzable para siempre: no existe una sola
-   actividad de tipo `challenge` en el juego.
+   actividad de tipo `challenge` en el juego. `StudyActivityType.CHALLENGE`,
+   `EventType.CHALLENGE_COMPLETED`, el logro, la misión y la regla de
+   recompensa existen enteros; nada los crea jamás —ni generador de
+   contenido, ni endpoint, ni pantalla—. Con un agravante que el hallazgo
+   original no traía: la palabra «Desafío» que CONTRACT.md usa para esto en
+   la regla A4 (`Desafío: máx(90 s, 0,25 × est.)`) ya la ocupa, en el
+   cliente, la pantalla de la evaluación de módulo (decisión D12,
+   `nodos_mapa.dart:429`) — dos conceptos con el mismo nombre en dos sitios
+   distintos. Decisión de Rodrigo (22-09): es un ejercicio extra **opcional**
+   por módulo —más corto y más difícil que una lección, unas pocas preguntas
+   del banco del módulo ya existente, sin lección nueva, disponible tras
+   completar el módulo—, y en el cliente se llama distinto a «Desafío» (p.
+   ej. «Reto») para no chocar con la evaluación. Pendiente de construir:
+   Fase A/B que genere/marque el reto por módulo, un endpoint que abra y
+   cierre la actividad (`StudyActivityType.CHALLENGE`, ya mapeado en
+   `lecciones.py` a `EventType.CHALLENGE_COMPLETED` — solo falta quien la
+   cree), y una pantalla o tarjeta en el cliente.
 
 ---
 

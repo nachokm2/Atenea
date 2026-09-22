@@ -23,6 +23,7 @@ from app.models.enums import (
     CoverageLevel,
     CoveragePolicy,
     ModuleStatus,
+    PathStatus,
 )
 from app.models.progress import (
     AssessmentAttempt,
@@ -1086,6 +1087,86 @@ def test_confirmar_con_source_only_quita_los_temas_sin_respaldo(cliente, db, usu
     notas = " ".join(ruta_db.coverage_notes)
     assert "No tiene material" in notas
     assert "Sin respaldo" in notas
+
+
+def test_confirmar_con_request_more_y_temas_sin_respaldo_no_avanza(cliente, db, usuario, contenido):
+    """«Pedirme más material» dejaba el Módulo 1 generarse igual, de inmediato.
+
+    Con `request_more` y algún tema todavía `insufficient`, el confirm no puede
+    avanzar a `GENERATING` ni encolar el módulo 1 —eso generaría ese tema con
+    saber del modelo, exactamente lo que el aprendiz pidió esperar—. Responde
+    `409 MATERIAL_PENDING`, pero la elección de política sí queda guardada: no
+    hace falta que el aprendiz la repita al reintentar.
+    """
+    ruta = LearningPath(
+        user_id=usuario.id,
+        knowledge_area_id=contenido.area.id,
+        title="Ruta que espera material",
+    )
+    db.add(ruta)
+    db.flush()
+
+    modulo = PathModule(learning_path_id=ruta.id, position=1, title="Módulo único")
+    db.add(modulo)
+    db.flush()
+
+    db.add_all(
+        [
+            Topic(module_id=modulo.id, position=1, title="Con material", coverage=CoverageLevel.FULL),
+            Topic(
+                module_id=modulo.id,
+                position=2,
+                title="Sin material todavía",
+                coverage=CoverageLevel.INSUFFICIENT,
+            ),
+        ]
+    )
+    db.flush()
+
+    respuesta = cliente.post(
+        f"/api/v1/paths/{ruta.id}/confirm",
+        json={"coverage_policy": "request_more"},
+    )
+
+    assert respuesta.status_code == 409
+    assert respuesta.json()["error"]["code"] == "MATERIAL_PENDING"
+
+    db.expire_all()
+    ruta_db = db.get(LearningPath, ruta.id)
+    assert ruta_db.coverage_policy is CoveragePolicy.REQUEST_MORE
+    assert ruta_db.status is not PathStatus.GENERATING
+    assert ruta_db.confirmed_at is None
+
+    temas = db.execute(sa.select(Topic).where(Topic.module_id == modulo.id)).scalars().all()
+    assert len(temas) == 2, "request_more no debe borrar ni un tema"
+
+
+def test_confirmar_con_request_more_y_todo_cubierto_avanza_normal(cliente, db, usuario, contenido):
+    """`request_more` no es un freno general: sin temas `insufficient`, confirma igual."""
+    ruta = LearningPath(
+        user_id=usuario.id,
+        knowledge_area_id=contenido.area.id,
+        title="Ruta ya totalmente cubierta",
+    )
+    db.add(ruta)
+    db.flush()
+
+    modulo = PathModule(learning_path_id=ruta.id, position=1, title="Módulo único")
+    db.add(modulo)
+    db.flush()
+
+    db.add(Topic(module_id=modulo.id, position=1, title="Con material", coverage=CoverageLevel.FULL))
+    db.flush()
+
+    respuesta = cliente.post(
+        f"/api/v1/paths/{ruta.id}/confirm",
+        json={"coverage_policy": "request_more"},
+    )
+
+    assert respuesta.status_code == 200
+    db.expire_all()
+    ruta_db = db.get(LearningPath, ruta.id)
+    assert ruta_db.status is PathStatus.GENERATING
 
 
 def test_todas_las_entradas_de_content_rechazan_lo_que_no_declaran():

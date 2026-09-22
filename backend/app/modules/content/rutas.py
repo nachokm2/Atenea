@@ -427,6 +427,19 @@ def _quitar_temas_sin_respaldo(db: Session, ruta: LearningPath) -> None:
     ruta.coverage_notes = list(dict.fromkeys(notas))
 
 
+def _hay_temas_sin_respaldo(db: Session, ruta: LearningPath) -> bool:
+    """¿Queda algún `Topic` `insufficient` en el esquema ya persistido?"""
+    total = db.execute(
+        sa.select(sa.func.count(Topic.id))
+        .join(PathModule, PathModule.id == Topic.module_id)
+        .where(
+            PathModule.learning_path_id == ruta.id,
+            Topic.coverage == CoverageLevel.INSUFFICIENT,
+        )
+    ).scalar_one()
+    return total > 0
+
+
 def confirmar_ruta(
     db: Session,
     usuario_id: uuid.UUID,
@@ -463,6 +476,22 @@ def confirmar_ruta(
     if coverage_policy is not None:
         ruta.coverage_policy = coverage_policy
     _quitar_temas_sin_respaldo(db, ruta)
+
+    if ruta.coverage_policy is CoveragePolicy.REQUEST_MORE and _hay_temas_sin_respaldo(db, ruta):
+        # «Pedirme más material» promete esperar: no hay hoy una Fase A que
+        # regenere un tema puntual, así que lo único correcto es no dejar
+        # avanzar el confirm todavía —ni tocar `status`, ni encolar el módulo
+        # 1— en vez de generar con saber del modelo lo mismo que si hubiera
+        # elegido esa política. Se comitea la elección y las ediciones de
+        # `cambios` ya hechas: la excepción revierte la transacción entera si
+        # no se hace explícito aquí.
+        db.commit()
+        raise AteneaError(
+            "Sube más material antes de confirmar: hay temas sin respaldo en tu ruta.",
+            code="MATERIAL_PENDING",
+            details={"path_id": str(ruta.id)},
+        )
+
     ruta.confirmed_at = instante
     ruta.status = PathStatus.GENERATING
     ruta.module_count = int(
