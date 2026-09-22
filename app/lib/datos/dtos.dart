@@ -1521,6 +1521,10 @@ class AreaConocimiento {
     this.segundosEstudio = 0,
     this.estado = EstadoDominio.sinEvidencia,
     this.ultimaActividadEn,
+    this.modulosTotales = 0,
+    this.modulosDominados = 0,
+    this.temasDominados = 0,
+    this.rutasCompletadas = 0,
   });
 
   /// Lee `KnowledgeAreaOut`; el progreso puede venir plano o dentro de
@@ -1546,6 +1550,10 @@ class AreaConocimiento {
       segundosEstudio: _ent(avance['study_seconds']),
       estado: EstadoDominio.desdeApi(avance['status']),
       ultimaActividadEn: fechaHora(avance['last_activity_at']),
+      modulosTotales: _ent(avance['modules_total']),
+      modulosDominados: _ent(avance['modules_mastered']),
+      temasDominados: _ent(avance['topics_mastered']),
+      rutasCompletadas: _ent(avance['paths_completed']),
     );
   }
 
@@ -1596,6 +1604,18 @@ class AreaConocimiento {
 
   /// Última actividad del área.
   final DateTime? ultimaActividadEn;
+
+  /// Módulos totales de las Rutas de este conocimiento.
+  final int modulosTotales;
+
+  /// Módulos ya dominados (no solo completados).
+  final int modulosDominados;
+
+  /// Temas dominados en este conocimiento.
+  final int temasDominados;
+
+  /// Rutas de este conocimiento ya completadas de punta a punta.
+  final int rutasCompletadas;
 
   /// ¿El usuario ya tiene progreso aquí?
   bool get tieneProgreso => xp > 0 || segundosEstudio > 0 || dominio > 0;
@@ -5147,108 +5167,6 @@ class Panel {
   /// ¿El usuario todavía no tiene ninguna Ruta?
   bool get sinRutas =>
       accionContinuar.tipo == TipoAccionContinuar.crearRuta && conocimientos.isEmpty;
-}
-
-// ---------------------------------------------------------------------------
-// §7.4 (bis) Perfil de conocimiento del usuario
-// ---------------------------------------------------------------------------
-
-/// Fila del perfil de conocimiento del usuario (`UserKnowledgeOut`).
-class ConocimientoUsuario {
-  const ConocimientoUsuario({
-    required this.area,
-    this.temasDominados = 0,
-    this.temasTotales = 0,
-    this.modulosCompletados = 0,
-    this.rutasActivas = 0,
-    this.primeraActividadEn,
-    this.decaimientoAplicado = 0,
-  });
-
-  /// Lee `UserKnowledgeOut`: el área más los contadores de progreso.
-  factory ConocimientoUsuario.desdeJson(Map<String, dynamic> json) {
-    final Map<String, dynamic> area = json['knowledge_area'] is Map
-        ? _mapa(json['knowledge_area'])
-        : (json['area'] is Map ? _mapa(json['area']) : json);
-    return ConocimientoUsuario(
-      area: AreaConocimiento.desdeJson(<String, dynamic>{...area, ...json}),
-      temasDominados: _ent(json['topics_mastered']),
-      temasTotales: _ent(json['topics_total']),
-      modulosCompletados: _ent(json['modules_completed']),
-      rutasActivas: _ent(_alguna(json, <String>['active_paths', 'paths_active'])),
-      primeraActividadEn: fechaHora(json['first_activity_at']),
-      decaimientoAplicado: _dec(json['decay_applied']),
-    );
-  }
-
-  /// Conocimiento con su nivel, XP, dominio y tiempo.
-  final AreaConocimiento area;
-
-  /// Temas dominados dentro del conocimiento.
-  final int temasDominados;
-
-  /// Temas totales conocidos.
-  final int temasTotales;
-
-  /// Módulos completados.
-  final int modulosCompletados;
-
-  /// Rutas activas que aportan a este conocimiento.
-  final int rutasActivas;
-
-  /// Primera vez que estudió este conocimiento.
-  final DateTime? primeraActividadEn;
-
-  /// Decaimiento aplicado por el servidor (curva de olvido).
-  final double decaimientoAplicado;
-
-  /// Identificador del conocimiento.
-  String get id => area.id;
-
-  /// Identificador estable en texto (`sql`).
-  String get slug => area.slug;
-
-  /// Nombre visible.
-  String get nombre => area.nombre;
-
-  /// Nombre corto para chips y medallones.
-  String get nombreCorto => area.nombreCorto;
-
-  /// Categoría del conocimiento.
-  CategoriaConocimiento get categoria => area.categoria;
-
-  /// Descripción del conocimiento.
-  String? get descripcion => area.descripcion;
-
-  /// Icono del conocimiento.
-  String? get iconoKey => area.iconoKey;
-
-  /// Color de acento propuesto por el servidor.
-  String? get colorAcento => area.colorAcento;
-
-  /// Nivel del usuario dentro del conocimiento.
-  int get nivel => area.nivel;
-
-  /// XP acumulado en el conocimiento.
-  int get xp => area.xp;
-
-  /// Título de rango del conocimiento ("Competente en").
-  String? get tituloRango => area.tituloRango;
-
-  /// Dominio actual (0–100), calculado por el servidor.
-  double get dominio => area.dominio;
-
-  /// Tiempo de estudio acumulado en segundos.
-  int get segundosEstudio => area.segundosEstudio;
-
-  /// Estado de dominio.
-  EstadoDominio get estado => area.estado;
-
-  /// Última vez que estudió este conocimiento.
-  DateTime? get ultimaActividadEn => area.ultimaActividadEn;
-
-  /// ¿Hay algo que mostrar en la ficha?
-  bool get tieneProgreso => area.tieneProgreso;
 }
 
 // ---------------------------------------------------------------------------

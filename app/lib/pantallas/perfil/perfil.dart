@@ -580,12 +580,39 @@ class _FilaConocimiento extends StatelessWidget {
             textoDerecha: '${area.dominio.round()} %',
           ),
           const SizedBox(height: Espacio.xs),
-          Pildora(
-            texto: area.estado.etiqueta,
-            icono: area.estado.pideRepaso
-                ? Icons.history_rounded
-                : Icons.psychology_rounded,
-            color: color,
+          Wrap(
+            spacing: Espacio.xs,
+            runSpacing: Espacio.xxs,
+            children: <Widget>[
+              Pildora(
+                texto: area.estado.etiqueta,
+                icono: area.estado.pideRepaso
+                    ? Icons.history_rounded
+                    : Icons.psychology_rounded,
+                color: color,
+              ),
+              if (area.modulosTotales > 0)
+                Pildora(
+                  texto:
+                      '${area.modulosDominados}/${area.modulosTotales} módulos',
+                  icono: Icons.castle_rounded,
+                  color: p.arcano,
+                ),
+              if (area.temasDominados > 0)
+                Pildora(
+                  texto: '${area.temasDominados} temas dominados',
+                  icono: Icons.check_circle_outline_rounded,
+                  color: p.exito,
+                ),
+              if (area.rutasCompletadas > 0)
+                Pildora(
+                  texto: area.rutasCompletadas == 1
+                      ? '1 ruta completada'
+                      : '${area.rutasCompletadas} rutas completadas',
+                  icono: Icons.emoji_events_outlined,
+                  color: p.oro,
+                ),
+            ],
           ),
         ],
       ),

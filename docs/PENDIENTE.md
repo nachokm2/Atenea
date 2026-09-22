@@ -933,12 +933,26 @@ desalineado), así que son **nueve** desconexiones reales:
   `actualizar_ficha_test.dart` (contra el estado, con un adaptador de Dio
   falso: qué manda, que un campo sin cambiar no viaja, y que un 422 no
   revienta), verificadas por mutación.
+* **`GET /me/knowledge` huérfano y con el DTO cliente desalineado** (22-09,
+  arreglo barato). `ConocimientoUsuario` leía `topics_total`/
+  `modules_completed`/`active_paths`/`first_activity_at`/`decay_applied` —
+  ninguno existe en el `UserKnowledgeOut` real (que manda `topics_mastered`/
+  `modules_total`/`modules_mastered`/`paths_completed`/`last_activity_at`) — y
+  nadie lo iba a notar porque ninguna pantalla llamaba al endpoint. En vez de
+  cablear `/me/knowledge` aparte, se extendió `AreaConocimiento.desdeJson`
+  —la clase que P17 sí usa, alimentada por `GET /profile` → `knowledge[]`,
+  que ya viaja con la forma exacta de `UserKnowledgeOut`— con los cuatro
+  campos que le faltaban. La fila de conocimiento de P17 ahora suma hasta
+  tres píldoras más («N/M módulos», «N temas dominados», «N rutas
+  completadas», cada una solo si hay algo que contar). `ConocimientoUsuario`
+  y `RepoConocimiento.miConocimiento()` se borraron: cero llamadores y
+  desincronizados del contrato — dejarlos habría sido la misma trampa
+  esperando a quien los usara primero. No se tocó nada del lado servidor.
+  Tres pruebas nuevas en `area_conocimiento_dto_test.dart`, verificadas por
+  mutación.
 
 **Abiertos:**
 
-* `GET /me/knowledge` huérfano y desalineado (arreglo recomendado: extender
-  `AreaConocimiento.desdeJson` para leer los campos de `ProfileOut.knowledge`,
-  que ya viaja en `/profile`, en vez de cablear el endpoint aparte).
 * «Semana Perfecta» sin emisor — necesita decisión de diseño (el cálculo de
   «lunes local» que `misiones-semanales.md` ya marca como pendiente).
 * `local_hour` ausente de `DAILY_GOAL_MET` — necesita decisión de diseño

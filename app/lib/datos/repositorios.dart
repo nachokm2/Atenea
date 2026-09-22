@@ -666,18 +666,6 @@ class RepoConocimiento {
         await cliente.obtener('/knowledge-areas/$areaId'),
       );
 
-  /// Perfil de conocimiento del usuario (P17, sección Conocimientos).
-  Future<Pagina<ConocimientoUsuario>> miConocimiento({
-    int limite = 30,
-    String? cursor,
-  }) async {
-    final Map<String, dynamic> r = await cliente.obtener(
-      '/me/knowledge',
-      consulta: _consulta(<String, Object?>{'limit': limite, 'cursor': cursor}),
-    );
-    return Pagina<ConocimientoUsuario>.desdeJson(r, ConocimientoUsuario.desdeJson);
-  }
-
   /// Mapa simplificado del Reino (P22): territorios y zonas desbloqueadas.
   Future<Pagina<Territorio>> territorios({
     int limite = 50,
