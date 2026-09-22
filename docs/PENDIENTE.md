@@ -15,7 +15,7 @@ sobrevive a su sesión es otra cosa que promete y no cumple.
 |---|---|
 | Rama | `main`, todo subido a `origin` |
 | Pruebas del cliente | **217 verdes** sin contar las dos de contrato vivo, cero saltadas (eran 83 al empezar el 16) |
-| Pruebas del servidor | **680 verdes**, suite completa, corrida de un tirón (22-09, ver nota en §5 sobre cómo se corrió pese a la deriva de entorno); `ruff check` limpio |
+| Pruebas del servidor | **682 verdes**, suite completa, corrida de un tirón (22-09, ver nota en §5 sobre cómo se corrió pese a la deriva de entorno); `ruff check` limpio |
 | `flutter analyze` | limpio |
 | APK de release | compilado y enviado a Rodrigo a las 02:38 del 18, **con todo lo de la sesión** |
 | Producción | desplegada, `/health` en 200 con base y worker `ok`, migración aplicada, arranque sin trazas |
@@ -590,7 +590,7 @@ hueco duplicado, no el arreglo); y que falte una prueba con dos usuarios sobre
 la misma evaluación (el código es correcto y el «fallo» solo aparece después de
 editarlo).
 
-### 4.9 Un segundo rastreo (21-09) — 13 confirmados, 6 cerrados, 6 abiertos
+### 4.9 Un segundo rastreo (21-09) — 13 confirmados, 6 cerrados (uno a medias), 6 abiertos
 
 Mismo patrón de §2, buscado a propósito en cinco direcciones —claves que el
 servidor no manda, repositorios y controladores sin llamar, `game_configs`
@@ -652,24 +652,40 @@ con escéptico, y los tres se confirmaron reales — de ahí los trece.
   un origen para eso habría sido fabricar dato, no arreglar una desconexión.
   Una prueba nueva, verificada por mutación (rompí el cableado, la prueba
   falló, lo repuse).
+* **«Solo con mi material» se guardaba y no cambiaba ni un tema** (22-09,
+  parcial — ver abierto #1). La Fase A (`arquitecto_ruta._aplicar_politica`)
+  resolvía los temas insuficientes con la política **por defecto**
+  (`MODEL_KNOWLEDGE`), *antes* de que el aprendiz eligiera nada; confirmar
+  solo sobreescribía la columna `coverage_policy` y avanzaba a `GENERATING`
+  sin volver a tocar los temas ya persistidos. Ahora `confirmar_ruta` (nueva
+  `_quitar_temas_sin_respaldo` en `content/rutas.py`) reaplica la política
+  real sobre el esquema persistido: si termina en `source_only`, quita los
+  `Topic` que sigan `insufficient` (y el módulo entero si se queda sin
+  ninguno), y dice en `coverage_notes` qué se quitó y por qué. No renumera
+  posiciones al hacerlo —ni falta hace: nada las lee como índice contiguo, y
+  reasignarlas bajo `UNIQUE(module_id, position)` sin cuidado de orden es
+  donde se rompen estas cosas—. Dos pruebas nuevas por HTTP, verificadas por
+  mutación dos veces (una por rama: quitar el tema y quitar el módulo entero).
+  **`request_more` se queda sin arreglar a propósito**: no hay hoy ningún
+  estado de «esperando material» ni forma de que la Fase B difiera un tema y
+  lo retome después, y no es una desconexión de cableado sino una capacidad
+  que no existe — inventarla sin que Rodrigo decida la forma (¿bloquear el
+  confirm? ¿generar el resto y dejar ese tema pendiente? ¿repoblarlo solo
+  cuando lleguen documentos nuevos?) habría sido diseñar producto a mi
+  criterio. Queda como abierto #1, ya reducido a esa mitad.
 
 **Abiertos, por orden de daño:**
 
-1. **La política de cobertura elegida por el aprendiz se guarda y no se
-   aplica jamás.** En «Tu material no cubre todo», el aprendiz elige entre
-   «Completar con el saber del Reino», «Solo con mi material» (más corta,
-   toda con fuente) o «Pedirme más material». La Fase A (`arquitecto_ruta.py`,
-   `_aplicar_politica`) ya resolvió los temas insuficientes con la política
-   **por defecto** (`MODEL_KNOWLEDGE`) al crear la ruta, *antes* de que el
-   aprendiz eligiera nada; `POST /paths/{id}/confirm` (`rutas.py:398-401`)
-   solo sobreescribe la columna `coverage_policy` y avanza a `GENERATING` sin
-   condición — no vuelve a tocar los temas ya persistidos, y `autor_leccion.py`
-   (Fase B, quien redacta cada lección) no importa `CoveragePolicy` en ningún
-   punto del archivo. Quien toca «Solo con mi material» recibe exactamente la
-   misma ruta que si hubiera tocado «Completar con el saber del Reino» —ningún
-   tema se elimina, la Fase B sigue inventando contenido para los temas sin
-   respaldo—; quien toca «Pedirme más material» ve el Módulo 1 generarse
-   igual, de inmediato, sin esperar nada.
+1. **«Pedirme más material» no bloquea ni difiere nada.** Sigue el hueco de
+   arriba: quien toca «Pedirme más material» esperando que el Reino espere a
+   que suba documentos ve el Módulo 1 generarse igual, de inmediato, con la
+   Fase B completando esos temas con saber del modelo —exactamente lo mismo
+   que si hubiera tocado «Completar con el saber del Reino»—, porque
+   `autor_leccion.py` no importa `CoveragePolicy` en ningún punto del archivo
+   y no existe una forma de dejar un tema pendiente de material y retomarlo
+   después. Necesita una decisión de producto antes que código: qué debe
+   pasar exactamente con esos temas y con el avance de la ruta mientras se
+   espera.
 2. **«Dominio del territorio»: 0 % en la cabecera de toda Ruta y en toda
    tarjeta de Ruta, siempre.** `ResumenRuta.dominio` (`dtos.dart:1802,1847`)
    busca `mastery`/`mastery_pct` en el sobre de `GET /paths` y

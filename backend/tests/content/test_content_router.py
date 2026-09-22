@@ -15,8 +15,14 @@ import pytest
 import sqlalchemy as sa
 
 from app.core.time import user_local_date, utcnow
-from app.models.content import Assessment, KnowledgeArea, LearningPath, Topic
-from app.models.enums import AttemptStatus, ContentStatus, CoverageLevel, ModuleStatus
+from app.models.content import Assessment, KnowledgeArea, LearningPath, PathModule, Topic
+from app.models.enums import (
+    AttemptStatus,
+    ContentStatus,
+    CoverageLevel,
+    CoveragePolicy,
+    ModuleStatus,
+)
 from app.models.progress import (
     AssessmentAttempt,
     StudyActivity,
@@ -976,6 +982,71 @@ def test_un_campo_desconocido_en_una_entrada_falla_y_dice_cual(cliente, contenid
     assert respuesta.status_code == 422
     campos = [f["field"] for f in respuesta.json()["error"]["field_errors"]]
     assert any("removed" in c for c in campos), campos
+
+
+def test_confirmar_con_source_only_quita_los_temas_sin_respaldo(cliente, db, usuario, contenido):
+    """«Solo con mi material» se guardaba en `coverage_policy` y no cambiaba nada.
+
+    La Fase A resuelve la política por defecto (`MODEL_KNOWLEDGE`) antes de que el
+    aprendiz elija; si al confirmar elige `source_only`, los temas que se quedaron
+    `INSUFFICIENT` tienen que desaparecer del esquema —si no, la promesa de «será
+    más corta, pero toda con fuente» no cambia ni un tema de lo que se genera—.
+    """
+    ruta = LearningPath(
+        user_id=usuario.id,
+        knowledge_area_id=contenido.area.id,
+        title="Ruta propia para confirmar",
+    )
+    db.add(ruta)
+    db.flush()
+
+    modulo_con_respaldo = PathModule(learning_path_id=ruta.id, position=1, title="Con respaldo")
+    modulo_sin_respaldo = PathModule(learning_path_id=ruta.id, position=2, title="Sin respaldo")
+    db.add_all([modulo_con_respaldo, modulo_sin_respaldo])
+    db.flush()
+
+    tema_con_fuente = Topic(
+        module_id=modulo_con_respaldo.id,
+        position=1,
+        title="Tiene material",
+        coverage=CoverageLevel.FULL,
+    )
+    tema_sin_fuente = Topic(
+        module_id=modulo_con_respaldo.id,
+        position=2,
+        title="No tiene material",
+        coverage=CoverageLevel.INSUFFICIENT,
+    )
+    tema_huerfano = Topic(
+        module_id=modulo_sin_respaldo.id,
+        position=1,
+        title="Único tema, sin material",
+        coverage=CoverageLevel.INSUFFICIENT,
+    )
+    db.add_all([tema_con_fuente, tema_sin_fuente, tema_huerfano])
+    db.flush()
+
+    respuesta = cliente.post(
+        f"/api/v1/paths/{ruta.id}/confirm",
+        json={"coverage_policy": "source_only"},
+    )
+    assert respuesta.status_code == 200
+
+    db.expire_all()
+    ruta_db = db.get(LearningPath, ruta.id)
+    assert ruta_db.coverage_policy is CoveragePolicy.SOURCE_ONLY
+    assert ruta_db.module_count == 1
+
+    temas_restantes = db.execute(
+        sa.select(Topic.title).where(Topic.module_id == modulo_con_respaldo.id)
+    ).scalars().all()
+    assert temas_restantes == ["Tiene material"]
+
+    assert db.get(PathModule, modulo_sin_respaldo.id) is None
+
+    notas = " ".join(ruta_db.coverage_notes)
+    assert "No tiene material" in notas
+    assert "Sin respaldo" in notas
 
 
 def test_todas_las_entradas_de_content_rechazan_lo_que_no_declaran():

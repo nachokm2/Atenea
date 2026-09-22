@@ -31,6 +31,7 @@ from app.core.errors import AteneaError, NotFound
 from app.core.time import utcnow
 from app.models.content import KnowledgeArea, LearningPath, PathModule, Topic
 from app.models.enums import (
+    CoverageLevel,
     CoveragePolicy,
     DeclaredLevel,
     EventType,
@@ -362,6 +363,47 @@ def crear_ruta(
     return ResultadoCreacion(path=ruta, creada=True)
 
 
+def _quitar_temas_sin_respaldo(db: Session, ruta: LearningPath) -> None:
+    """Reaplica `SOURCE_ONLY` sobre el esquema ya persistido.
+
+    La Fase A (`ai.arquitecto_ruta._aplicar_politica`) resuelve la política con el
+    valor por defecto (`MODEL_KNOWLEDGE`), antes de que el aprendiz elija nada: esa
+    elección real solo llega aquí, al confirmar. Si terminó en `SOURCE_ONLY`, hay
+    que quitar ahora los temas que se quedaron `INSUFFICIENT` — si no, «Solo con mi
+    material» guarda la preferencia y no cambia ni un tema de lo que se genera.
+    No toca `PARTIAL` ni `FULL`: mismo criterio que la Fase A.
+
+    No renumera las posiciones de lo que queda: igual que la eliminación manual de
+    `cambios` (arriba), que tampoco lo hace. Nada lee `position` como índice
+    contiguo — siempre se ordena por él (`ORDER BY position`) —, así que dejar
+    huecos es seguro y evita reasignar posiciones ya persistidas bajo la
+    restricción `UNIQUE(module_id, position)`.
+    """
+    if ruta.coverage_policy is not CoveragePolicy.SOURCE_ONLY:
+        return
+
+    modulos = list(
+        db.execute(
+            sa.select(PathModule).where(PathModule.learning_path_id == ruta.id)
+        ).scalars()
+    )
+    notas = list(ruta.coverage_notes or [])
+    for modulo in modulos:
+        temas = list(
+            db.execute(sa.select(Topic).where(Topic.module_id == modulo.id)).scalars()
+        )
+        quitados = [t for t in temas if t.coverage is CoverageLevel.INSUFFICIENT]
+        for tema in quitados:
+            notas.append(f"«{tema.title}» se quitó de la ruta: tu material no lo cubre.")
+            db.delete(tema)
+        if quitados and len(quitados) == len(temas):
+            notas.append(f"El módulo «{modulo.title}» se quitó: ningún tema tenía respaldo.")
+            db.delete(modulo)
+    db.flush()
+
+    ruta.coverage_notes = list(dict.fromkeys(notas))
+
+
 def confirmar_ruta(
     db: Session,
     usuario_id: uuid.UUID,
@@ -397,6 +439,7 @@ def confirmar_ruta(
 
     if coverage_policy is not None:
         ruta.coverage_policy = coverage_policy
+    _quitar_temas_sin_respaldo(db, ruta)
     ruta.confirmed_at = instante
     ruta.status = PathStatus.GENERATING
     ruta.module_count = int(
