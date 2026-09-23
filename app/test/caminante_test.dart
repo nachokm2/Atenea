@@ -143,6 +143,25 @@ void main() {
       final Image imagen = tester.widget<Image>(find.byType(Image));
       expect((imagen.image as AssetImage).assetName, ciclo.rutaDeMarcha(fotograma));
     });
+
+    testWidgets('Acero/masculino en reposo también pinta la imagen real',
+        (WidgetTester tester) async {
+      final CicloDeMarcha ciclo = CicloDeMarcha(_figuraConArteReal);
+
+      await tester.pumpWidget(
+        MaterialApp(home: Caminante(ciclo: ciclo)),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        find.byWidgetPredicate((Widget w) => w is CustomPaint && w.painter is PintorDeCaminanteDeMentira),
+        findsNothing,
+      );
+      final Image imagen = tester.widget<Image>(find.byType(Image));
+      expect((imagen.image as AssetImage).assetName, ciclo.rutaDeReposo(0));
+    });
   });
 
   group('CaminanteEnSenda', () {

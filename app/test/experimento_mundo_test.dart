@@ -12,18 +12,20 @@ library;
 
 import 'package:atenea/design/theme.dart';
 import 'package:atenea/design/tokens.dart';
-import 'package:atenea/pantallas/aventura/mundo/caminante.dart';
 import 'package:atenea/pantallas/aventura/mundo/experimento_mundo.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'ayudas.dart';
 
-PintorDeCaminanteDeMentira _pintorDelCaminante(WidgetTester tester) {
-  final Finder buscado = find.byWidgetPredicate(
-    (Widget w) => w is CustomPaint && w.painter is PintorDeCaminanteDeMentira,
-  );
-  return tester.widget<CustomPaint>(buscado).painter! as PintorDeCaminanteDeMentira;
+// La figura de ejemplo es Acero/masculino, que desde la Fase D ya tiene arte
+// real de marcha Y de reposo (`assets/arte/mundo/masculino/acero/`): ni
+// reposo ni marcha caen nunca al pintor de mentira para esta combinación, así
+// que "¿está en marcha o en reposo?" se lee de qué fotograma pidió la
+// `Image` real, no de `PintorDeCaminanteDeMentira`.
+String _rutaDeLaImagen(WidgetTester tester) {
+  final Image imagen = tester.widget<Image>(find.byType(Image).first);
+  return (imagen.image as AssetImage).assetName;
 }
 
 Future<void> _montar(WidgetTester tester) async {
@@ -90,28 +92,23 @@ void main() {
       'al llegar, el caminante vuelve a reposo — no queda congelado en marcha',
       (WidgetTester tester) async {
     await _montar(tester);
-    expect(_pintorDelCaminante(tester).enMarcha, isFalse,
+    expect(_rutaDeLaImagen(tester), contains('reposo_'),
         reason: 'antes de tocar nada, ya tiene que estar en reposo');
 
     await tester.tap(find.bySemanticsLabel('Módulo 3'));
     await tester.pump();
-    // La figura de ejemplo es Acero/masculino, que desde la Fase D ya tiene
-    // arte real de marcha (`assets/arte/mundo/masculino/acero/`): a mitad de
-    // camino se pinta la imagen real, no el pintor de mentira — por eso se
-    // comprueba con `Image`, no con `_pintorDelCaminante`.
     expect(tester.takeException(), isNull);
-    expect(find.byType(Image), findsWidgets,
+    expect(_rutaDeLaImagen(tester), contains('marcha_'),
         reason: 'a mitad de camino tiene que estar en marcha, o no se prueba nada');
 
     // Un poco más que `Movimiento.corta`, no justo — a la duración exacta el
     // controlador puede seguir en `forward` hasta el próximo tick.
     await tester.pump(Movimiento.corta + const Duration(milliseconds: 50));
-    // Un pump más: recién acá `Caminante` vuelve a pedir `rutaDeReposo` (sin
-    // arte real todavía), y el fallo de `Image.asset` que activa el pintor de
-    // mentira se resuelve async — no dentro del mismo pump que completa la
-    // animación.
+    // Un pump más: recién acá `Caminante` vuelve a pedir `rutaDeReposo`, y la
+    // `Image` real se resuelve async — no dentro del mismo pump que completa
+    // la animación.
     await tester.pump();
-    expect(_pintorDelCaminante(tester).enMarcha, isFalse,
+    expect(_rutaDeLaImagen(tester), contains('reposo_'),
         reason: 'llegado el destino, tiene que volver a reposo');
   });
 

@@ -203,16 +203,45 @@ atlas), `cacheWidth` obligatorio, `RepaintBoundary`, `gaplessPlayback`.
    intenta `Image.asset` primero y cae sola al pintor de mentira vía
    `errorBuilder` — el mismo mecanismo que ya usa `AvatarCapas`, así que las
    Órdenes sin arte real conviven con Acero/masculino sin una sola rama de
-   código a mano. Reposo **no** se generó esta ronda — sigue en placeholder,
-   a propósito. `caminante_test.dart` ganó un grupo dedicado ("con arte
+   código a mano. `caminante_test.dart` ganó un grupo dedicado ("con arte
    real") que verifica que Acero/masculino en marcha pinta la `Image` real y
    no el pintor de mentira (verificado por mutación: una ruta rota
    reenrojece la prueba); `experimento_mundo_test.dart` se ajustó para
-   comprobar el mismo hecho sin depender del pintor, que ya no aparece en
-   marcha para esa combinación. **Pendiente: el APK a Rodrigo y su
-   veredicto** — pregunta única: ¿2 fotogramas ya se leen como caminar? Si
-   no, ni 6 ni 48 lo arreglan — se para acá, antes de generar la lámina
-   completa (Fase E).
+   comprobar el mismo hecho sin depender del pintor, que ya no aparece para
+   esa combinación.
+
+   **Primer veredicto real, en el teléfono: "se ve raro, aun veo un
+   cuadrado."** Diagnosticado con capturas de pantalla reales (no
+   suposición): en marcha el arte real se pintaba bien (una figura
+   encapuchada, con jubón de cuero, se ve bien — confirmado con captura), pero
+   reposo —el estado antes de tocar y al llegar a cada parada, la mayor parte
+   del tiempo en pantalla— no se había generado esta ronda y seguía cayendo
+   al cuadrado de mentira. Rodrigo eligió generar también reposo antes de dar
+   veredicto, mismo costo (~US$0,50 más).
+
+   **Reposo generado y arreglado dos veces sobre la marcha:** (1) la primera
+   pasada normalizó cada casilla de la lámina de reposo a la misma altura
+   fija (`ALTO_FIGURA`), lo que borró la única diferencia entre las dos
+   poses —el "bob" de exhalar más bajo— dejándolas casi idénticas; se
+   corrigió midiendo la escala en la primera casilla y aplicándola por igual
+   a la segunda, así la diferencia de alto entre poses (la pose en sí) se
+   conserva. (2) El recorte también se comía el marco negro de ~6px que el
+   modelo dibuja alrededor de la lámina entera —`solo_fondo` en modo magenta
+   no lo reconoce como fondo, así que contaba como "figura" y la silueta
+   salía del tamaño de la casilla completa—; se corrigió recortando ese
+   margen antes de buscar la silueta. `scripts/experimento_figura_mundo.py`
+   ahora soporta `--pose {marcha,reposo}`, con las dos convenciones de
+   escalado documentadas en el propio código.
+
+   `caminante_test.dart` ganó una prueba más ("Acero/masculino en reposo
+   también pinta la imagen real"); `experimento_mundo_test.dart` se reescribió
+   para leer marcha/reposo de la ruta real de la `Image` (`contains('marcha_')`
+   / `contains('reposo_')`) en vez de depender del pintor de mentira, que ya
+   no aparece nunca para esta combinación. **Pendiente: el segundo APK a
+   Rodrigo y su veredicto** — pregunta única: ¿2 fotogramas de marcha + 2 de
+   reposo ya se leen como un personaje que camina y descansa? Si no, ni 6 ni
+   48 lo arreglan — se para acá, antes de generar la lámina completa (Fase
+   E).
 6. **Fase E — la lámina completa** de esa combinación + `scripts/laminar.py`.
 7. **Fase F — los props** + anclas de mano medidas en Python.
 8. **Fase G — las 7 láminas restantes**, editadas sobre la primera aprobada.
@@ -233,12 +262,13 @@ atlas), `cacheWidth` obligatorio, `RepaintBoundary`, `gaplessPlayback`.
   resolvió el servidor), nunca de una tabla de código de ítem en el cliente
   (verificado por mutación: una capa de otra ranura no debe contar como
   arma).
-- **`caminante.dart` (widget):** hecho — `caminante_test.dart`, 10 pruebas.
+- **`caminante.dart` (widget):** hecho — `caminante_test.dart`, 11 pruebas.
   Verificado por mutación que el fotograma en marcha sale de la distancia
   recorrida y no de la fase del reloj; ancla en los pies y espejo por
   dirección, ambos probados montando el widget de verdad. Desde la Fase D,
-  un grupo aparte prueba que Acero/masculino (con arte real) pinta la
-  `Image` real y no el pintor de mentira — verificado por mutación (una ruta
+  un grupo aparte prueba que Acero/masculino (con arte real, marcha y
+  reposo) pinta la `Image` real y no el pintor de mentira — verificado por
+  mutación (una ruta
   rota reenrojece la prueba).
 - **Manual, en dispositivo real — el único juez que importa en cada parada de
   gasto:** Fase C (resuelta: el arte crudo no dejaba juzgar, no el sendero),
