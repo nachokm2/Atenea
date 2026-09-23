@@ -46,6 +46,7 @@ from app.models.enums import (
     ItemVisibility,
     RequirementType,
     StreakKind,
+    WorldWeaponClass,
 )
 from app.modules.gamification.servicio_config import ServicioConfig
 
@@ -85,8 +86,16 @@ def manifiesto(
     oculta: tuple[str, ...] = (),
     dos_manos: bool = False,
     tinte: dict[str, str] | None = None,
+    clase_mundo: WorldWeaponClass | None = None,
 ) -> dict[str, Any]:
-    """Construye el manifiesto de render de un ítem con la forma de 06c §2.7."""
+    """Construye el manifiesto de render de un ítem con la forma de 06c §2.7.
+
+    `clase_mundo` es ajeno a 06c: alimenta la figura simplificada del mundo
+    caminable (`docs/planes/mundo-caminable.md`), no el avatar detallado. Solo
+    lo llevan los 16 ítems `WEAPON`/`OFFHAND`/empuñados de hoy con una clase
+    real asignada — ver `WorldWeaponClass` para por qué no hay valor por
+    defecto.
+    """
     return {
         "item_id": code,
         "asset_version": 1,
@@ -113,6 +122,7 @@ def manifiesto(
         "two_handed": dos_manos,
         "tint": tinte,
         "icon": f"items/{code}/icon.v1.webp",
+        "world_class": clase_mundo.value if clase_mundo else None,
     }
 
 
@@ -199,7 +209,11 @@ _INICIALES: tuple[ItemSemilla, ...] = (
         slot=ItemSlot.WEAPON,
         rarity=ItemRarity.COMMON,
         origin=ItemOrigin.STARTER,
-        render_manifest=manifiesto("espada_entrenamiento", CAPAS_POR_RANURA[ItemSlot.WEAPON]),
+        render_manifest=manifiesto(
+            "espada_entrenamiento",
+            CAPAS_POR_RANURA[ItemSlot.WEAPON],
+            clase_mundo=WorldWeaponClass.BLADE,
+        ),
         icon_key="espada_entrenamiento",
     ),
     ItemSemilla(
@@ -219,7 +233,11 @@ _INICIALES: tuple[ItemSemilla, ...] = (
         slot=ItemSlot.WEAPON,
         rarity=ItemRarity.COMMON,
         origin=ItemOrigin.STARTER,
-        render_manifest=manifiesto("baston_aprendiz", CAPAS_POR_RANURA[ItemSlot.WEAPON]),
+        render_manifest=manifiesto(
+            "baston_aprendiz",
+            CAPAS_POR_RANURA[ItemSlot.WEAPON],
+            clase_mundo=WorldWeaponClass.STAFF,
+        ),
         icon_key="baston_aprendiz",
     ),
     ItemSemilla(
@@ -239,7 +257,11 @@ _INICIALES: tuple[ItemSemilla, ...] = (
         slot=ItemSlot.WEAPON,
         rarity=ItemRarity.COMMON,
         origin=ItemOrigin.STARTER,
-        render_manifest=manifiesto("arco_fresno", CAPAS_POR_RANURA[ItemSlot.WEAPON]),
+        render_manifest=manifiesto(
+            "arco_fresno",
+            CAPAS_POR_RANURA[ItemSlot.WEAPON],
+            clase_mundo=WorldWeaponClass.BOW,
+        ),
         icon_key="arco_fresno",
     ),
     ItemSemilla(
@@ -259,7 +281,11 @@ _INICIALES: tuple[ItemSemilla, ...] = (
         slot=ItemSlot.OFFHAND,
         rarity=ItemRarity.COMMON,
         origin=ItemOrigin.STARTER,
-        render_manifest=manifiesto("escudo_madera", CAPAS_POR_RANURA[ItemSlot.OFFHAND]),
+        render_manifest=manifiesto(
+            "escudo_madera",
+            CAPAS_POR_RANURA[ItemSlot.OFFHAND],
+            clase_mundo=WorldWeaponClass.SHIELD,
+        ),
         icon_key="escudo_madera",
     ),
     ItemSemilla(
@@ -430,7 +456,11 @@ _TIENDA: tuple[ItemSemilla, ...] = (
         slot=ItemSlot.WEAPON,
         rarity=ItemRarity.UNCOMMON,
         origin=ItemOrigin.SHOP,
-        render_manifest=manifiesto("espada_corta_acero", CAPAS_POR_RANURA[ItemSlot.WEAPON]),
+        render_manifest=manifiesto(
+            "espada_corta_acero",
+            CAPAS_POR_RANURA[ItemSlot.WEAPON],
+            clase_mundo=WorldWeaponClass.BLADE,
+        ),
         icon_key="espada_corta_acero",
         en_tienda=True,
     ),
@@ -441,7 +471,11 @@ _TIENDA: tuple[ItemSemilla, ...] = (
         slot=ItemSlot.OFFHAND,
         rarity=ItemRarity.UNCOMMON,
         origin=ItemOrigin.SHOP,
-        render_manifest=manifiesto("escudo_roble", CAPAS_POR_RANURA[ItemSlot.OFFHAND]),
+        render_manifest=manifiesto(
+            "escudo_roble",
+            CAPAS_POR_RANURA[ItemSlot.OFFHAND],
+            clase_mundo=WorldWeaponClass.SHIELD,
+        ),
         icon_key="escudo_roble",
         en_tienda=True,
     ),
@@ -497,7 +531,11 @@ _TIENDA: tuple[ItemSemilla, ...] = (
         slot=ItemSlot.WEAPON,
         rarity=ItemRarity.RARE,
         origin=ItemOrigin.SHOP,
-        render_manifest=manifiesto("arco_bosque_antiguo", CAPAS_POR_RANURA[ItemSlot.WEAPON]),
+        render_manifest=manifiesto(
+            "arco_bosque_antiguo",
+            CAPAS_POR_RANURA[ItemSlot.WEAPON],
+            clase_mundo=WorldWeaponClass.BOW,
+        ),
         icon_key="arco_bosque_antiguo",
         en_tienda=True,
     ),
@@ -508,7 +546,11 @@ _TIENDA: tuple[ItemSemilla, ...] = (
         slot=ItemSlot.OFFHAND,
         rarity=ItemRarity.RARE,
         origin=ItemOrigin.SHOP,
-        render_manifest=manifiesto("escudo_blason_reino", CAPAS_POR_RANURA[ItemSlot.OFFHAND]),
+        render_manifest=manifiesto(
+            "escudo_blason_reino",
+            CAPAS_POR_RANURA[ItemSlot.OFFHAND],
+            clase_mundo=WorldWeaponClass.SHIELD,
+        ),
         icon_key="escudo_blason_reino",
         en_tienda=True,
     ),
@@ -542,7 +584,11 @@ _TIENDA: tuple[ItemSemilla, ...] = (
         slot=ItemSlot.WEAPON,
         rarity=ItemRarity.EPIC,
         origin=ItemOrigin.SHOP,
-        render_manifest=manifiesto("espada_obsidiana", CAPAS_POR_RANURA[ItemSlot.WEAPON]),
+        render_manifest=manifiesto(
+            "espada_obsidiana",
+            CAPAS_POR_RANURA[ItemSlot.WEAPON],
+            clase_mundo=WorldWeaponClass.BLADE,
+        ),
         icon_key="espada_obsidiana",
         en_tienda=True,
     ),
@@ -564,7 +610,11 @@ _CONOCIMIENTO: tuple[ItemSemilla, ...] = (
         requirements=_condicion("path_completed", area=_area("sql")),
         requirement_facts=("path",),
         auto_grant=True,
-        render_manifest=manifiesto("espada_del_sql", CAPAS_POR_RANURA[ItemSlot.WEAPON]),
+        render_manifest=manifiesto(
+            "espada_del_sql",
+            CAPAS_POR_RANURA[ItemSlot.WEAPON],
+            clase_mundo=WorldWeaponClass.BLADE,
+        ),
         icon_key="espada_del_sql",
         requisitos=(
             RequisitoSemilla(
@@ -585,7 +635,11 @@ _CONOCIMIENTO: tuple[ItemSemilla, ...] = (
         requirements=_condicion("mastery_gte", area=_area("bigquery"), value=80),
         requirement_facts=("mastery",),
         auto_grant=True,
-        render_manifest=manifiesto("cetro_bigquery", CAPAS_POR_RANURA[ItemSlot.WEAPON]),
+        render_manifest=manifiesto(
+            "cetro_bigquery",
+            CAPAS_POR_RANURA[ItemSlot.WEAPON],
+            clase_mundo=WorldWeaponClass.STAFF,
+        ),
         icon_key="cetro_bigquery",
         requisitos=(
             RequisitoSemilla(
@@ -606,7 +660,11 @@ _CONOCIMIENTO: tuple[ItemSemilla, ...] = (
         requirements=_condicion("path_completed", area=_area("data_engineering")),
         requirement_facts=("path",),
         auto_grant=True,
-        render_manifest=manifiesto("escudo_data_engineer", CAPAS_POR_RANURA[ItemSlot.OFFHAND]),
+        render_manifest=manifiesto(
+            "escudo_data_engineer",
+            CAPAS_POR_RANURA[ItemSlot.OFFHAND],
+            clase_mundo=WorldWeaponClass.SHIELD,
+        ),
         icon_key="escudo_data_engineer",
         requisitos=(
             RequisitoSemilla(
@@ -632,7 +690,11 @@ _CONOCIMIENTO: tuple[ItemSemilla, ...] = (
         },
         requirement_facts=("path", "mastery"),
         auto_grant=True,
-        render_manifest=manifiesto("baculo_maestria_ia", CAPAS_POR_RANURA[ItemSlot.WEAPON]),
+        render_manifest=manifiesto(
+            "baculo_maestria_ia",
+            CAPAS_POR_RANURA[ItemSlot.WEAPON],
+            clase_mundo=WorldWeaponClass.STAFF,
+        ),
         icon_key="baculo_maestria_ia",
         requisitos=(
             RequisitoSemilla(
@@ -661,7 +723,11 @@ _CONOCIMIENTO: tuple[ItemSemilla, ...] = (
         requirements=_condicion("areas_mastered_gte", count=3),
         requirement_facts=("mastery",),
         auto_grant=True,
-        render_manifest=manifiesto("tomo_erudito", CAPAS_POR_RANURA[ItemSlot.OFFHAND]),
+        render_manifest=manifiesto(
+            "tomo_erudito",
+            CAPAS_POR_RANURA[ItemSlot.OFFHAND],
+            clase_mundo=WorldWeaponClass.TOME,
+        ),
         icon_key="tomo_erudito",
         requisitos=(
             RequisitoSemilla(
@@ -805,7 +871,11 @@ _RACHA: tuple[ItemSemilla, ...] = (
         requirements=_condicion("streak_gte", days=7, kind="best"),
         requirement_facts=("streak",),
         auto_grant=True,
-        render_manifest=manifiesto("antorcha_constancia", ("accessory_body",)),
+        render_manifest=manifiesto(
+            "antorcha_constancia",
+            ("accessory_body",),
+            clase_mundo=WorldWeaponClass.TORCH,
+        ),
         icon_key="antorcha_constancia",
         requisitos=(
             RequisitoSemilla(
@@ -917,7 +987,11 @@ _LOGRO: tuple[ItemSemilla, ...] = (
         requirements=_condicion("achievement_unlocked", achievement_id="ACH_PASSED"),
         requirement_facts=("achievement",),
         auto_grant=True,
-        render_manifest=manifiesto("escudo_primer_desafio", CAPAS_POR_RANURA[ItemSlot.OFFHAND]),
+        render_manifest=manifiesto(
+            "escudo_primer_desafio",
+            CAPAS_POR_RANURA[ItemSlot.OFFHAND],
+            clase_mundo=WorldWeaponClass.SHIELD,
+        ),
         icon_key="escudo_primer_desafio",
         requisitos=(
             RequisitoSemilla(

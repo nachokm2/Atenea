@@ -998,7 +998,7 @@ class NotificationStatus(StrEnum):
     DISMISSED = "dismissed"
 ```
 
-## 2.1 Resumen: 65 enums
+## 2.1 Resumen: 66 enums
 
 | Enum | Nº valores | Usado en |
 |---|---|---|
@@ -1062,6 +1062,7 @@ class NotificationStatus(StrEnum):
 | `ItemRarity` | 6 | `items.rarity` |
 | `ItemOrigin` | 7 | `items.origin`, `user_items.origin` |
 | `ItemVisibility` | 3 | `items.visibility` |
+| `WorldWeaponClass` | 6 | `items.render_manifest["world_class"]` (JSONB, no columna propia) |
 | `RequirementType` | 9 | `item_requirements.requirement_type` |
 | `PurchaseStatus` | 2 | `purchases.status` |
 | `NotificationType` | 11 | `notifications.notification_type` |
@@ -2141,7 +2142,7 @@ Catálogo de ítems (globales, plantillas y derivados por usuario/área). **No e
 | `requirements` | `JSONB` | No | `'{}'::jsonb` | Árbol DSL `all`/`any` (profundidad máx. 2). Espejo normalizado en `item_requirements`. |
 | `requirement_facts` | `JSONB` | No | `'[]'::jsonb` | Familias que referencia: `path`, `mastery`, `assessment`, `streak`, `level`, `achievement`, `lessons`, `time`. |
 | `auto_grant` | `sa.Boolean` | No | `sa.false()` | `true`: al cumplirse los requisitos se otorga solo. `false`: solo habilita la compra. |
-| `render_manifest` | `JSONB` | No | `'{}'::jsonb` | Capas, offsets, `suppresses_layers`, `two_handed`, `tint`, `icon`. |
+| `render_manifest` | `JSONB` | No | `'{}'::jsonb` | Capas, offsets, `suppresses_layers`, `two_handed`, `tint`, `icon`, `world_class`. |
 | `icon_key` | `sa.String(120)` | Sí | — | Icono dedicado si el recorte no lee bien. |
 | `is_template` | `sa.Boolean` | No | `sa.false()` | Plantilla derivable por área (no equipable). |
 | `template_code` | `sa.String(48)` | Sí | — | Plantilla de la que deriva. |
@@ -3042,7 +3043,7 @@ Convenciones de la columna "Respuesta": los nombres en `PascalCase` son esquemas
 | POST | `/api/v1/characters` | Sí | Crea el personaje (P03): nombre, arquetipo y rasgos. Otorga la bolsa de bienvenida y el kit inicial. | `CharacterOut` + `RewardsReceipt` en `rewards` |
 | GET | `/api/v1/characters/me` | Sí | Personaje con nivel, XP, rango y contadores. | `CharacterOut` |
 | PATCH | `/api/v1/characters/me` | Sí | Renombra el personaje o cambia el arquetipo (gratis en el MVP). | `CharacterOut` |
-| GET | `/api/v1/avatar` | Sí | Rasgos, arquetipo, equipo y **manifiesto de capas ya resuelto y ordenado por z**. Cada capa: `{slot, item_code, key, z, src, x, y, w, h, tint}`, donde `key` es el nombre de la capa en la pila de dibujado (06c §2.3) —no el código del ítem—, `src` el archivo de la capa dentro del juego de piezas de una familia (`<code>_<capa>.webp`, plano y sin versión; la carpeta de la familia la antepone el cliente, que es quien sabe qué figura eligió el aprendiz) y `x/y/w/h` su rectángulo dentro del lienzo maestro de 1024×1024. | `AvatarOut` `{traits, archetype, equipment, layers[], etag}` |
+| GET | `/api/v1/avatar` | Sí | Rasgos, arquetipo, equipo y **manifiesto de capas ya resuelto y ordenado por z**. Cada capa: `{slot, item_code, key, z, src, x, y, w, h, tint}`, donde `key` es el nombre de la capa en la pila de dibujado (06c §2.3) —no el código del ítem—, `src` el archivo de la capa dentro del juego de piezas de una familia (`<code>_<capa>.webp`, plano y sin versión; la carpeta de la familia la antepone el cliente, que es quien sabe qué figura eligió el aprendiz) y `x/y/w/h` su rectángulo dentro del lienzo maestro de 1024×1024. Cada entrada de `equipment` (por ranura) suma `world_class` (`WorldWeaponClass`, o `null`): la clase visual de lo empuñado para la figura simplificada del mundo caminable (`docs/planes/mundo-caminable.md`), ajena al avatar detallado. | `AvatarOut` `{traits, archetype, equipment, layers[], etag}` |
 | PUT | `/api/v1/avatar/traits` | Sí | Cambia piel, rostro, orejas, cabello, color y forma de tratamiento. | `AvatarOut` |
 | PUT | `/api/v1/avatar/equipment` | Sí | Mapa atómico `{"weapon": "<user_item_id>", "cape": null}`; valida propiedad, slot y compatibilidad. | `AvatarOut` |
 | GET | `/api/v1/inventory` | Sí | Poseídos + bloqueados visibles, con progreso de requisitos (P16). Filtros `slot`, `rarity`, `state`, `origin`. | `Page<InventoryItemOut>` con `{item, owned, is_new, equipped, requirements[]}` |

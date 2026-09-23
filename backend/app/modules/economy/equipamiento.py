@@ -375,6 +375,7 @@ def capas_de(item: Item, slot: ItemSlot) -> list[dict[str, Any]]:
         capas = [{"layer": slot.value}]
 
     tinte_del_item = manifiesto.get("tint")
+    clase_mundo = manifiesto.get("world_class")
     normalizadas: list[dict[str, Any]] = []
     for capa in capas:
         if not isinstance(capa, dict):
@@ -401,6 +402,7 @@ def capas_de(item: Item, slot: ItemSlot) -> list[dict[str, Any]]:
                 "w": int(capa.get("w", 0)) or None,
                 "h": int(capa.get("h", 0)) or None,
                 "tint": capa.get("tint") or tinte_del_item,
+                "world_class": clase_mundo,
             }
         )
     return normalizadas
@@ -438,6 +440,7 @@ def configuracion_avatar(db: Session, usuario_id: uuid.UUID) -> dict[str, Any]:
             "name": item.name,
             "rarity": item.rarity.value,
             "icon_key": item.icon_key,
+            "world_class": manifiesto.get("world_class"),
         }
         suprimidas.update(str(c) for c in manifiesto.get("suppresses_layers", []) or [])
         if manifiesto.get("two_handed"):

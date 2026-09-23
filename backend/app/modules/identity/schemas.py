@@ -289,6 +289,11 @@ class AvatarLayerOut(EsquemaBase):
     w: int | None = None
     h: int | None = None
     tint: str | None = None
+    world_class: str | None = None
+    """Clase visual de lo empuñado (`WorldWeaponClass`) para la figura
+    simplificada del mundo caminable — ajena al avatar detallado que pinta
+    esta capa. `None` en cualquier capa que no sea de un ítem empuñado con
+    clase asignada."""
 
 
 class AvatarOut(EsquemaBase):

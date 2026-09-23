@@ -695,6 +695,25 @@ class ItemSlot(StrEnum):
     MOUNT = "mount"  # reservado
 
 
+class WorldWeaponClass(StrEnum):
+    """Clase visual de lo empuñado, para la figura simplificada del mundo
+    caminable (`docs/planes/mundo-caminable.md`, Parte B).
+
+    Ese personaje no tiene fidelidad por ítem — el arma es un prop estático
+    compuesto en la mano, no parte del fotograma — así que 46 ítems del
+    catálogo se reducen a estas seis siluetas. Un ítem `WEAPON`/`OFFHAND` sin
+    clase asignada no emite ninguna: el cliente no dibuja ningún prop en esa
+    mano en vez de inventar uno. Nunca un valor por defecto silencioso.
+    """
+
+    BLADE = "blade"      # espadas
+    BOW = "bow"          # arcos
+    STAFF = "staff"      # bastón, cetro, báculo
+    TORCH = "torch"      # antorcha
+    SHIELD = "shield"    # escudos redondos
+    TOME = "tome"        # el tomo del erudito — no es un escudo
+
+
 class ItemRarity(StrEnum):
     """Rareza. Afecta solo apariencia, exclusividad, requisitos y precio."""
 
