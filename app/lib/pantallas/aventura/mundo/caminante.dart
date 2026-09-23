@@ -132,6 +132,24 @@ class CaminanteEnSenda extends StatelessWidget {
     final bool miraDerecha = destino.dx >= origen.dx;
     final double ancho = alto * 0.6;
 
+    // Origen y destino iguales (nada que recorrer, típicamente al llegar a
+    // una parada y quedarse): `Caminante` con `avance` no nulo y longitud
+    // cero congelaría el fotograma 0 de marcha para siempre en vez de
+    // reproducir el reposo. Pasar `avance: null` es lo que de verdad activa
+    // el loop de reposo — no basta con que la distancia sea cero.
+    if (longitud < 0.5) {
+      return Positioned(
+        left: origen.dx - ancho / 2,
+        top: origen.dy - alto,
+        child: Caminante(
+          ciclo: ciclo,
+          alto: alto,
+          miraDerecha: miraDerecha,
+          semantica: semantica,
+        ),
+      );
+    }
+
     return AnimatedBuilder(
       animation: avance,
       builder: (BuildContext context, Widget? child) {

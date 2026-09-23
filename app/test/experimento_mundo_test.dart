@@ -12,11 +12,19 @@ library;
 
 import 'package:atenea/design/theme.dart';
 import 'package:atenea/design/tokens.dart';
+import 'package:atenea/pantallas/aventura/mundo/caminante.dart';
 import 'package:atenea/pantallas/aventura/mundo/experimento_mundo.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'ayudas.dart';
+
+PintorDeCaminanteDeMentira _pintorDelCaminante(WidgetTester tester) {
+  final Finder buscado = find.byWidgetPredicate(
+    (Widget w) => w is CustomPaint && w.painter is PintorDeCaminanteDeMentira,
+  );
+  return tester.widget<CustomPaint>(buscado).painter! as PintorDeCaminanteDeMentira;
+}
 
 Future<void> _montar(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(412, 915));
@@ -76,6 +84,25 @@ void main() {
       reason: 'el aviso debe repetir el `locked_reason` real, no un texto '
           'genérico inventado en el spike',
     );
+  });
+
+  testWidgets(
+      'al llegar, el caminante vuelve a reposo — no queda congelado en marcha',
+      (WidgetTester tester) async {
+    await _montar(tester);
+    expect(_pintorDelCaminante(tester).enMarcha, isFalse,
+        reason: 'antes de tocar nada, ya tiene que estar en reposo');
+
+    await tester.tap(find.bySemanticsLabel('Módulo 3'));
+    await tester.pump();
+    expect(_pintorDelCaminante(tester).enMarcha, isTrue,
+        reason: 'a mitad de camino tiene que estar en marcha, o no se prueba nada');
+
+    // Un poco más que `Movimiento.corta`, no justo — a la duración exacta el
+    // controlador puede seguir en `forward` hasta el próximo tick.
+    await tester.pump(Movimiento.corta + const Duration(milliseconds: 50));
+    expect(_pintorDelCaminante(tester).enMarcha, isFalse,
+        reason: 'llegado el destino, tiene que volver a reposo');
   });
 
   testWidgets('el slider cambia la cantidad de módulos de ejemplo',

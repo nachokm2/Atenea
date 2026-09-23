@@ -174,13 +174,20 @@ atlas), `cacheWidth` obligatorio, `RepaintBoundary`, `gaplessPlayback`.
    `caminante.dart`: `Caminante` (reposo/marcha, un solo widget) +
    `CaminanteEnSenda` (ancla en los pies, espejo por dirección) +
    `PintorDeCaminanteDeMentira` (rectángulo + "piernas" que alternan — se
-   borra en cuanto llegue el arte real). 8 pruebas bombeando el reloj,
+   borra en cuanto llegue el arte real). 9 pruebas bombeando el reloj,
    verificado por mutación que el fotograma de marcha sale de la distancia
-   recorrida y no de la fase del reloj.
+   recorrida y no de la fase del reloj, y que un tramo de longitud cero
+   activa el reposo (no congela el fotograma 0 de marcha).
 4. **Fase C — el placeholder reemplaza al disco en `experimento_mundo.dart`.
-   APK a Rodrigo. Pregunta única: ¿el sendero se siente un mundo con ALGO que
-   camina, o el problema nunca fue el disco?** US$0. Si sigue sin sentirse un
-   mundo, se para acá.
+   ✅ Hecho (23-09-2026), US$0.** `CaminanteEnSenda` sustituye al disco, con
+   un hueco real encontrado y cerrado en la integración: al llegar a una
+   parada, sin un listener de estado sobre el `AnimationController`, el
+   caminante quedaba congelado en el último fotograma de marcha en vez de
+   volver a reposo — nada más forzaba una reconstrucción de la pantalla solo
+   porque el controlador terminó de animar. Probado y verificado por
+   mutación. **Pendiente: el APK a Rodrigo y su veredicto** — pregunta
+   única: ¿el sendero se siente un mundo con ALGO que camina, o el problema
+   nunca fue el disco? Si sigue sin sentirse un mundo, se para acá.
 5. **Fase D — piloto real: 1 Orden × 1 familia × 2 fotogramas**, no los 6.
    <US$0,50. Si a 2 fotogramas no se lee "camina", ni 6 ni 48 lo arreglan.
 6. **Fase E — la lámina completa** de esa combinación + `scripts/laminar.py`.

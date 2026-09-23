@@ -112,6 +112,34 @@ void main() {
   });
 
   group('CaminanteEnSenda', () {
+    testWidgets('con origen y destino iguales, queda en reposo — no congelado en marcha',
+        (WidgetTester tester) async {
+      // El hueco real que se encontró al integrar: pasar un `avance` no nulo
+      // con longitud cero congelaba el fotograma 0 de marcha para siempre en
+      // vez de reproducir el reposo.
+      const Offset punto = Offset(150, 150);
+      final AnimationController control = AnimationController(vsync: tester, value: 1.0);
+      addTearDown(control.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Stack(
+            children: <Widget>[
+              CaminanteEnSenda(
+                ciclo: CicloDeMarcha(_figura),
+                origen: punto,
+                destino: punto,
+                avance: control,
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(_pintorDe(tester).enMarcha, isFalse);
+    });
+
     testWidgets('ancla al caminante en los pies del punto, no en su centro',
         (WidgetTester tester) async {
       const Offset destino = Offset(200, 200);

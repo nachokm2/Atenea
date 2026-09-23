@@ -1,16 +1,17 @@
-/// Fase 0a — el experimento descartable del sendero caminable.
+/// Fase 0a/C — el experimento descartable del sendero caminable.
 ///
-/// Pregunta que responde, y solo esa: ¿un serpenteante vertical con 4-10
-/// paradas se siente como un mundo, o como la misma lista de siempre con un
-/// delay? No usa datos reales del servidor —una `Senda` de ejemplo alcanza— y
-/// el caminante es un disco de color, no el avatar real: eso es la Fase 3, y
-/// depende de que este experimento primero valide que vale la pena seguir.
+/// Pregunta que responde, y solo esa (Fase C): ¿un serpenteante vertical con
+/// 4-10 paradas se siente como un mundo con ALGO que de verdad camina, o el
+/// problema nunca fue el disco de color de la Fase 0a? El caminante ya es
+/// `CaminanteEnSenda` (reposo/marcha reales, ancla en los pies), pero
+/// pintado con `PintorDeCaminanteDeMentira` — sin un solo pixel de arte
+/// generado, a propósito: eso es la Fase D, y depende de que este
+/// experimento valide primero que vale la pena seguir gastando.
 ///
-/// Vive fuera del árbol de producción a propósito, enlazado solo desde la
-/// galería de estilo (`kDebugMode`), para poder borrarlo entero sin dejar
-/// rastro si la respuesta es "no". Ver el plan en
-/// `docs/planes/mundo-caminable.md` (Fase 0) para las preguntas de salida
-/// completas.
+/// Vive fuera del árbol de producción a propósito, enlazado solo desde
+/// Ajustes → Herramientas del Reino (`kDebugMode`), para poder borrarlo
+/// entero sin dejar rastro si la respuesta es "no". Ver
+/// `docs/planes/mundo-caminable.md` para las preguntas de salida completas.
 library;
 
 import 'package:flutter/material.dart';
@@ -19,8 +20,16 @@ import '../../../datos/dtos.dart';
 import '../../../design/components.dart';
 import '../../../design/tokens.dart';
 import '../widgets/nodos_mapa.dart' show colorDeNodo, iconoDeNodo;
+import 'caminante.dart';
+import 'ciclo_marcha.dart';
+import 'figura_del_mundo.dart';
 import 'pintor_senda.dart';
 import 'senda.dart';
+
+/// Figura de ejemplo para el spike — no hay avatar real que leer aquí, igual
+/// que `_detalleDeEjemplo` fabrica una Ruta de ejemplo más abajo.
+const FiguraDelMundo _figuraDeEjemplo =
+    FiguraDelMundo(familia: 'masculino', arquetipo: Arquetipo.acero);
 
 /// Pantalla del experimento: monta un sendero de ejemplo y deja caminar.
 class PantallaExperimentoMundo extends StatefulWidget {
@@ -34,10 +43,11 @@ class PantallaExperimentoMundo extends StatefulWidget {
 class _PantallaExperimentoMundoState extends State<PantallaExperimentoMundo>
     with SingleTickerProviderStateMixin {
   late AnimationController _control;
-  // Antes del primer toque no hay adónde caminar todavía: una animación
-  // inmóvil sobre sí misma para que `_Mundo` siempre tenga una `Animation`
-  // válida que observar, sin un `late` que reviente en el primer build.
-  late Animation<Offset> _animacion = AlwaysStoppedAnimation<Offset>(Offset.zero);
+
+  // `null`: todavía no hubo ningún toque, el caminante descansa donde esté
+  // `_paradaActual` — `build()` resuelve el punto real ahí mismo.
+  Offset? _origen;
+  Offset? _destino;
 
   int _cantidadDeModulos = 6;
   int _paradaActual = 0;
@@ -47,6 +57,14 @@ class _PantallaExperimentoMundoState extends State<PantallaExperimentoMundo>
   void initState() {
     super.initState();
     _control = AnimationController(vsync: this, duration: Movimiento.corta);
+    // Sin esto, al llegar el caminante queda congelado en el último
+    // fotograma de marcha para siempre: nada más fuerza una reconstrucción
+    // de esta pantalla solo porque el controlador terminó de animar, y
+    // `origen`/`destino` sin reconstruir siguen siendo el tramo recorrido,
+    // no el punto de reposo.
+    _control.addStatusListener((AnimationStatus estado) {
+      if (estado == AnimationStatus.completed) setState(() {});
+    });
   }
 
   @override
@@ -57,10 +75,21 @@ class _PantallaExperimentoMundoState extends State<PantallaExperimentoMundo>
 
   DetalleRuta get _detalle => _detalleDeEjemplo(_cantidadDeModulos);
 
+  // La misma curva que ya usaba la animación de posición: el cuerpo frena al
+  // llegar, y por eso `CicloDeMarcha.fotogramaPorDistancia` —que lee este
+  // mismo progreso— nunca puede leer la fase lineal del reloj.
+  Animation<double> get _avance =>
+      CurvedAnimation(parent: _control, curve: Curves.easeInOutCubic);
+
   @override
   Widget build(BuildContext context) {
     final AteneaPalette p = context.paleta;
     final Senda senda = Senda.desdeDetalle(_detalle, ancho: 360);
+    final Offset enReposo = senda.centroDeParada(_paradaActual) ?? Offset.zero;
+    // Con la animación ya terminada (o sin haber arrancado nunca), el
+    // caminante descansa en el punto real de la parada — nunca se queda
+    // congelado en el último fotograma del tramo que ya recorrió.
+    final bool enMovimiento = _control.isAnimating;
 
     return PantallaAtenea(
       titulo: 'Spike · sendero caminable',
@@ -74,6 +103,8 @@ class _PantallaExperimentoMundoState extends State<PantallaExperimentoMundo>
             alCambiar: (int n) => setState(() {
               _cantidadDeModulos = n;
               _paradaActual = 0;
+              _origen = null;
+              _destino = null;
               _control.value = 0;
             }),
           ),
@@ -89,9 +120,9 @@ class _PantallaExperimentoMundoState extends State<PantallaExperimentoMundo>
                 ? const Center(child: Text('Sin módulos de ejemplo'))
                 : _Mundo(
                     senda: senda,
-                    paradaActual: _paradaActual,
-                    animacion: _animacion,
-                    animando: _control.isAnimating,
+                    origen: enMovimiento ? (_origen ?? enReposo) : enReposo,
+                    destino: enMovimiento ? (_destino ?? enReposo) : enReposo,
+                    avance: _avance,
                     alTocarParada: _tocarParada,
                   ),
           ),
@@ -125,9 +156,8 @@ class _PantallaExperimentoMundoState extends State<PantallaExperimentoMundo>
           ? null
           : (paradaDestino.modulo?.motivoBloqueo ??
               'Completa el módulo anterior para pasar por aquí.');
-      _animacion = Tween<Offset>(begin: origen, end: fin).animate(
-        CurvedAnimation(parent: _control, curve: Curves.easeInOutCubic),
-      );
+      _origen = origen;
+      _destino = fin;
       _paradaActual = alcanzable ? indice : _paradaActual;
     });
     _control
@@ -170,16 +200,16 @@ class _Controles extends StatelessWidget {
 class _Mundo extends StatefulWidget {
   const _Mundo({
     required this.senda,
-    required this.paradaActual,
-    required this.animacion,
-    required this.animando,
+    required this.origen,
+    required this.destino,
+    required this.avance,
     required this.alTocarParada,
   });
 
   final Senda senda;
-  final int paradaActual;
-  final Animation<Offset> animacion;
-  final bool animando;
+  final Offset origen;
+  final Offset destino;
+  final Animation<double> avance;
   final ValueChanged<int> alTocarParada;
 
   @override
@@ -190,24 +220,27 @@ class _MundoState extends State<_Mundo> {
   final ScrollController _camara = ScrollController();
 
   @override
-  void didUpdateWidget(covariant _Mundo oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.animando && !oldWidget.animando) {
-      widget.animacion.addListener(_seguirConLaCamara);
-    }
+  void initState() {
+    super.initState();
+    // `widget.avance` envuelve siempre el mismo `AnimationController` de la
+    // pantalla (nunca se recrea), así que escuchar esta única instancia
+    // alcanza para toda la vida del widget — no hace falta perseguir
+    // instancias nuevas en `didUpdateWidget`.
+    widget.avance.addListener(_seguirConLaCamara);
   }
 
   void _seguirConLaCamara() {
     if (!_camara.hasClients) return;
+    final Offset pos = Offset.lerp(widget.origen, widget.destino, widget.avance.value)!;
     final double objetivo =
-        (widget.animacion.value.dy - _camara.position.viewportDimension * 0.45)
+        (pos.dy - _camara.position.viewportDimension * 0.45)
             .clamp(0, _camara.position.maxScrollExtent);
     _camara.jumpTo(objetivo);
   }
 
   @override
   void dispose() {
-    widget.animacion.removeListener(_seguirConLaCamara);
+    widget.avance.removeListener(_seguirConLaCamara);
     _camara.dispose();
     super.dispose();
   }
@@ -235,19 +268,13 @@ class _MundoState extends State<_Mundo> {
                   onTap: () => widget.alTocarParada(parada.indice),
                 ),
               ),
-            AnimatedBuilder(
-              animation: widget.animacion,
-              builder: (BuildContext context, Widget? child) {
-                final Offset pos = widget.animando
-                    ? widget.animacion.value
-                    : (senda.centroDeParada(widget.paradaActual) ?? Offset.zero);
-                return Positioned(
-                  left: pos.dx - 16,
-                  top: pos.dy - 16,
-                  child: child!,
-                );
-              },
-              child: const _Caminante(key: ValueKey<String>('caminante')),
+            CaminanteEnSenda(
+              key: const ValueKey<String>('caminante'),
+              ciclo: CicloDeMarcha(_figuraDeEjemplo),
+              origen: widget.origen,
+              destino: widget.destino,
+              avance: widget.avance,
+              alto: 80,
             ),
           ],
         ),
@@ -288,24 +315,6 @@ class _ParadaSpike extends StatelessWidget {
             color: color,
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _Caminante extends StatelessWidget {
-  const _Caminante({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final AteneaPalette p = context.paleta;
-    return Container(
-      width: 32,
-      height: 32,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: p.oro,
-        border: Border.all(color: p.sobreOro, width: 2),
       ),
     );
   }
