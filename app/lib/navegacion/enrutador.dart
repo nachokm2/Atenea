@@ -34,7 +34,6 @@ import '../pantallas/aventura/aventura.dart';
 import '../pantallas/aventura/crear_ruta.dart';
 import '../pantallas/aventura/generacion.dart';
 import '../pantallas/aventura/mapa_ruta.dart';
-import '../pantallas/aventura/mundo/experimento_marcha.dart';
 import '../pantallas/aventura/mundo/experimento_mundo.dart';
 import '../pantallas/evaluacion/evaluacion.dart';
 import '../pantallas/evaluacion/resultado_evaluacion.dart';
@@ -222,12 +221,6 @@ GoRouter crearEnrutador(ControladorSesion sesion) {
           path: Rutas.experimentoMundo,
           builder: (BuildContext context, GoRouterState state) =>
               const PantallaExperimentoMundo(),
-        ),
-      if (kDebugMode)
-        GoRoute(
-          path: Rutas.experimentoMarcha,
-          builder: (BuildContext context, GoRouterState state) =>
-              const PantallaExperimentoMarcha(),
         ),
       GoRoute(
         path: Rutas.patronRuta,

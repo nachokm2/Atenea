@@ -1,17 +1,17 @@
-<!-- Plan aprobado el 23-09-2026, en curso. Los números de línea envejecen;
-     comprueba antes de ejecutar sobre ellos. Ver docs/planes/mapa-del-reino.md
-     para el frente que este plan revierte en parte (P07, no P22). -->
+<!-- Plan aprobado el 23-09-2026, revisado el mismo día tras probar la Fase 0
+     en un dispositivo real. Los números de línea envejecen; comprueba antes
+     de ejecutar sobre ellos. Ver docs/planes/mapa-del-reino.md para el frente
+     que este plan revierte en parte (P07, no P22). -->
 
-# PLAN — Un mundo caminable en P07 (Ruta), con el avatar equipado de verdad
+# PLAN — Un mundo caminable en P07 (Ruta), con una figura hecha para animarse
 
-## 1. Por qué existe
+## 1. Por qué existe, y por qué cambió
 
 Rodrigo encontró [sprite-gen](https://github.com/aldegad/sprite-gen) buscando
 mejorar el arte de personajes y, al ver sus demos animadas, pidió personajes
-**animados**. Al precisar el alcance, decidió — sabiendo el costo real — la
-opción más grande: que el mapa de **Ruta (P07)** deje de ser una lista de
-nodos y se convierta en un mundo 2D donde el avatar equipado camina de verdad
-entre módulos.
+**animados**. Decidió — sabiendo el costo real — la opción más grande: que el
+mapa de **Ruta (P07)** deje de ser una lista de nodos y se convierta en un
+mundo 2D donde el avatar equipado camina de verdad entre módulos.
 
 Esto revierte a propósito, y solo en parte, la decisión de
 `docs/planes/mapa-del-reino.md` (16-09) de no dibujar un mapa navegable — pero
@@ -19,132 +19,177 @@ esa decisión hablaba de la **grilla de Territorios (P22)**, que de verdad no
 tiene datos de posición ni adyacencia. Ruta es un caso distinto: **sí** tiene
 orden y adyacencia reales en el backend.
 
-`sprite-gen` en sí **no se usa**: es generación de fotogramas por IA (costo
-recurrente por cada ítem nuevo del catálogo, para siempre) y su propia
-documentación marca el ciclo de caminar como experimental, probado en
-mascotas compactas, no en ilustraciones detalladas como las de Atenea.
+**La Fase 0 se ejecutó de verdad y cambió la Parte B del plan.** El primer
+diseño (un rig de recortes/rotaciones sobre el arte detallado ya existente,
+"sin arte nuevo") se probó en tres variantes distintas, todas en el teléfono
+real de Rodrigo, y las tres fallaron:
 
-## 2. Lo verificado antes de decidir
+1. Recortar rectángulos del arte real y rotarlos sobre pivotes medidos
+   (`ClipRect`+`Transform.rotate`) — el hombro corta el torso al girar, porque
+   brazo y torso son una sola silueta conexa en este dibujo (medido con
+   `scipy.ndimage.label`: sin hueco real, a diferencia de la entrepierna).
+2. Regenerar el arte para darle al hombro un hueco real (edición con máscara
+   vía `gpt-image-2`/`images/edits`) — el hombro mejoró, pero **la cadera, que
+   siempre tuvo un hueco real, seguía cortándose igual**. Esto prueba que el
+   problema no era (solo) la falta de hueco: un rectángulo rígido que gira no
+   sigue la curva del cuerpo contra un vecino que no gira, tenga o no tenga
+   hueco real la silueta de abajo.
+3. Parches fijos de refuerzo en las costuras — se ven como lo que son:
+   rectángulos pegados, con su propio borde visible.
+
+Veredicto de Rodrigo, textual: *"se mueve como marioneta"* / *"para que la
+tiraran con hilos"*. Un `ClipPath` con la silueta real tendría el mismo
+problema de fondo (la silueta gira con el miembro; el vecino fijo no), así
+que no se intentó como cuarta variante.
+
+**Decisión, con toda esa evidencia encima:** invertir de verdad en una figura
+separada y simplificada, dibujada desde cero para animarse — el "Plan B" que
+este mismo documento ya contemplaba como salida de emergencia, ahora
+promovido a plan principal. Y revivir el mundo caminable con esa figura real
+en vez de un disco de color, porque la hipótesis de Rodrigo es que el disco
+—no el sendero— fue lo que se sintió vacío.
+
+`sprite-gen` en sí **sigue sin usarse**: es generación de fotogramas por IA
+(costo recurrente por cada ítem nuevo del catálogo) y su propia documentación
+marca el ciclo de caminar como experimental, probado en mascotas compactas,
+no en ilustraciones detalladas como las de Atenea.
+
+## 2. Lo verificado
 
 - **El mundo caminable de Ruta no necesita ningún cambio de backend.** El
   orden (`PathModule.position`, `prerequisite_module_id`) y el candado (la
   evaluación del módulo, regla A7, `backend/app/modules/progress/progreso.py`)
-  ya existen y ya se aplican en el servidor. `desbloquear_siguiente_modulo`
-  usa exactamente `prerequisite_module_id` o `position + 1` como el borde del
-  grafo. Un sendero dibujado sobre esto no inventa nada; dibuja un dato que el
-  servidor ya recorre.
-- **El avatar equipado puede caminar sin generar ni un pixel de arte nuevo.**
-  Medido con `numpy`/`scipy.ndimage.label` sobre
-  `app/assets/arte/capas/cuerpos/base_masculino_002_sin_manos.webp`
-  (silueta = alfa > 40, misma técnica que `scripts/medir_figuras.py`):
-  - Las **piernas** son dos componentes conexas de verdad, separadas por un
-    hueco real en la entrepierna (fila ≈560 del lienzo de 1024). Ninguna de
-    las 92 capas de equipo actuales cruza esa línea.
-  - Los **brazos**, en cambio, **no** tienen un hueco real respecto al torso
-    en este dibujo — es una sola silueta conexa entre el hombro (fila ≈328) y
-    la cadera. Recortar un rectángulo para el brazo corta, por fuerza, un poco
-    de torso con él. Es el riesgo central que la Fase 0b existe para evaluar,
-    no algo que se pueda medir hasta que desaparezca.
+  ya existen y ya se aplican en el servidor.
 - **El personaje siempre mira de frente** — no hay vista de perfil ni de
-  espalda en el arte, y no se puede generar una que combine con el estilo
-  existente. El mundo se diseña para una figura de frente que se desliza
-  marchando, no para un personaje que gira.
+  espalda en el arte, y la figura del mundo hereda la misma limitación por
+  diseño: izquierda/derecha es un espejo horizontal, nunca un giro.
 
-## 3. Parte A — El mundo caminable (reemplaza `CaminoDeLaRuta`)
+## 3. Parte A — El mundo caminable (sin cambios de diseño)
 
-**Cero cambios de backend.** La posición de cada parada es una función
-determinista `índice → Offset` calculada en el cliente — nunca normalizada
-por el total de módulos, porque estos se generan de a uno
-(`content/rutas.py._encargar_contenido`) y el total cambia en vivo mientras el
-aprendiz mira la pantalla. Ver `app/lib/pantallas/aventura/mundo/senda.dart`.
+**Ya construido y probado**, sigue en pie sin cambios:
+`app/lib/pantallas/aventura/mundo/senda.dart` (geometría pura — la posición
+de la parada `i` es función de `i` sola, nunca del total), `pintor_senda.dart`
+(el trazo y los portones) y `experimento_mundo.dart` (el spike de la Fase 0a,
+con un disco de color como caminante — sigue en el repo, gateado a
+`kDebugMode`, enlazado desde Ajustes → Herramientas del Reino).
 
-**El mundo es: paradas de módulo + portones de evaluación + el tesoro
-final.** Lecciones, la ficha de la prueba y el Reto quedan dentro de un panel
-que se abre al llegar a la parada.
+**Pendiente para producción:** reemplazar `CaminoDeLaRuta` en `mapa_ruta.dart`
+por el mundo real, con el `Caminante` de la Parte B en vez del disco.
+`_Cabecera` de `mapa_ruta.dart` (dominio, lecciones completadas, duración
+estimada) no puede desaparecer en silencio.
 
-**Movimiento: tocar para caminar, no joystick.** El dominio tiene un solo
-grado de libertad (el orden de módulos); tocar una parada abierta camina
-hasta ella, tocar una bloqueada lleva hasta el portón cerrado y explica el
-motivo (el mismo `locked_reason` que ya manda el servidor).
+## 4. Parte B — La figura del mundo: una identidad de arte separada
 
-**Técnica: Flutter a mano (`CustomPainter` + `AnimationController` +
-`ScrollController` como cámara), no Flame.** No justifica una dependencia de
-motor de juego nueva, y perdería `Semantics` y el estilo de pruebas de widget
-que ya usa el proyecto.
+### Por qué esta vez sí converge
 
-## 4. Parte B — El avatar camina: rig de huesos en Dart, sin arte nuevo
+La ilustración detallada actual tiene identidad que preservar en cada capa
+(cara, tono de piel, pelo, 92 piezas con fidelidad individual) — por eso cada
+intento de riggearla terminó recortando algo que no debía cortarse. La figura
+del mundo se diseña **sin esa identidad**: sin rasgos de cara, sin pelo
+suelto, sin tono de piel — una silueta simplificada por Orden y familia, con
+el rostro en sombra bajo capucha o yelmo. Es un diseño, no un atajo: permite
+generar un número chico de láminas que cubren a todos, y hace que el ciclo
+completo se genere **de una sola llamada**, sin tropezar con el fallo ya
+documentado del modelo ("dándole el lienzo entero dibujó otra persona").
 
-Un "muñeco de papel" articulado en tiempo de ejecución sobre el arte que ya
-existe: por cada parte del cuerpo, se recorta su rectángulo medido
-(`ClipRect`) y se rota alrededor de su pivote medido (`Transform.rotate`),
-con el ángulo como función del tiempo (`sin(fase)`).
+### Qué representa, y qué no
 
-**Por qué no las otras rutas:** generar cada fotograma con IA no converge
-(no hay una base fija que editar entre poses, y multiplica el catálogo para
-siempre); riggear en Rive/Spine exige separar arte a mano por cada ítem nuevo
-(contradice "ítems nuevos se agregan con filas y assets, sin release");
-un bob rígido de todo el conjunto (lo que `06c-inventario-equipamiento-tienda.md`
-proponía para reposo) no sirve para caminar — las piernas son el 45% de la
-altura de la figura y son dos objetos separables; moverlas como un bloque se
-lee como una estatua deslizándose. Sí es lo correcto para el reposo (Fase 4).
+**Cuerpo = Orden × familia.** Cuatro Órdenes tienen kit inicial hoy
+(`backend/app/seeds/items.py`): Acero, Arcano, Bosque, Muro (de las 8 del
+enum `Arquetipo`, `app/lib/datos/modelos.dart:120-128`). Dos familias. 4 × 2
+= **8 láminas de cuerpo**.
 
-**Costo: cero recurrente.** Un ítem nuevo del catálogo solo necesita que su
-`layer key` exista en `PILA_DE_CAPAS` (servidor) y en el mapa Dart
-`ParteDelCuerpo.de(clave)` (Fase 2) — una línea, con una prueba de cobertura
-exhaustiva contra la pila real.
+**Lo empuñado = un prop estático**, no parte de la lámina de cuerpo. Los
+fotogramas se generan con las manos cerradas en puño y vacías; el arma o
+escudo es una sola imagen por **clase**, compuesta en el ancla de mano medida
+por fotograma.
 
-## 5. Fases
+**Estado: la taxonomía y su fontanería en el servidor ya están hechas**
+(23-09-2026). Seis clases (`WorldWeaponClass`,
+`backend/app/models/enums.py`) cubren los 17 ítems empuñados reales:
 
-1. **Fase 0 — dos experimentos descartables, sin backend, sin tocar
-   `CaminoDeLaRuta`.** ✅ Construidos y probados (`flutter test`, 259
-   pruebas verdes); pendiente el juicio humano en un dispositivo real.
-   - **0a** — `app/lib/pantallas/aventura/mundo/senda.dart` (geometría pura),
-     `pintor_senda.dart` (el trazo y los portones) y
-     `experimento_mundo.dart` (la pantalla del spike: sendero + cámara que
-     sigue + un disco de color como caminante). Pregunta: ¿un serpenteante
-     vertical con paradas se siente como un mundo, o como la misma lista con
-     un delay?
-   - **0b** — `experimento_marcha.dart`: la marcha con recortes/rotaciones
-     sobre `base_masculino_002` únicamente, con cuatro sliders en vivo
-     (cadera, brazos, bob, inclinación). Pregunta: ¿se lee como caminar, o
-     como una marioneta rota? ¿se nota el corte en el hombro?
-   - Ambos viven solo en compilaciones de depuración, enlazados desde
-     Ajustes → Herramientas del Reino, y se borran enteros sin dejar rastro
-     si la respuesta es "no". Siguiente paso: un APK a Rodrigo.
-2. **Fase 1** — el mundo reemplaza la lista en P07, con el disco de la
-   Fase 0 como caminante. Sin arte nuevo, sin backend.
-3. **Fase 2** — `scripts/medir_miembros.py` (mide las seis figuras, como
-   `medir_figuras.py`, no un cuerpo suelto) + `PilaDeAvatar` compartida (con
-   una prueba dorada de que `AvatarCapas` sigue pintando igual) +
-   `AvatarCaminante` real.
-4. **Fase 3** — integrar `AvatarCaminante` en el mundo. Medir memoria y
-   rendimiento con DevTools.
-5. **Fase 4** — bob sutil + parpadeo en reposo (la deuda de
-   `06c-inventario-equipamiento-tienda.md`, nunca construida), gratis con el
-   rig ya hecho, aplicado también en Vestidor y Perfil.
-6. **Fase 5** — pulido: cámara, textura del sendero, sombra, variación
-   sembrada por ruta.
+| Mano | Clase | Ítems |
+|---|---|---|
+| diestra | `blade` | espada_entrenamiento, espada_corta_acero, espada_obsidiana, espada_del_sql |
+| diestra | `bow` | arco_fresno, arco_bosque_antiguo |
+| diestra | `staff` | baston_aprendiz, cetro_bigquery, baculo_maestria_ia |
+| diestra | `torch` | antorcha_constancia |
+| zurda | `shield` | escudo_madera, escudo_roble, escudo_blason_reino, escudo_data_engineer, escudo_primer_desafio |
+| zurda | `tome` | tomo_erudito (no es un escudo — su propia clase) |
 
-**Plan B, si la Fase 0b falla:** una figura desacoplada y simplificada solo
-para el mundo (4 arquetipos × 2 familias × 1 dirección × 6 fotogramas, una
-sola vez), con la clase de arma derivada de la `layer key` en vez de
-fidelidad por ítem. Cuesta una segunda identidad de arte que mantener en
-sync para siempre — por eso es el plan B, no el plan.
+`pluma_primer_paso` no entra en ninguna clase a propósito (a 8dp es
+invisible). El dato vive en `items.render_manifest["world_class"]` (JSONB, sin
+migración), asignado en la semilla vía `manifiesto(..., clase_mundo=...)`, y
+se emite en dos sitios reales — `equipment[slot].world_class` **y**
+`layers[].world_class` (`configuracion_avatar`/`capas_de`,
+`backend/app/modules/economy/equipamiento.py`) — para que el cliente lo pueda
+leer desde cualquiera de las dos formas del avatar resuelto. Cubierto por
+`backend/tests/economy/test_clase_de_arma_mundo.py` (cobertura exhaustiva de
+los 17 ítems + el camino completo semilla→API, verificado por mutación).
+
+**El 65% restante del catálogo (outfit, botas, guantes, capa, cabeza,
+accesorios — 30 de 46 ítems) no se refleja en la figura del mundo.** Se dice
+claro: caminando se distingue Orden, familia, arma y escudo, no el outfit
+específico. Aceptable porque el avatar detallado (`AvatarCapas`,
+Vestidor/Perfil) sigue pintando las 92 capas con fidelidad total.
+
+### Generación: una lámina por llamada
+
+Seis fotogramas por combinación (4 de marcha + 2 de reposo), pedidos de una
+sola vez como una rejilla 3×2 sobre el lienzo de 1024×1024 — un personaje, un
+contexto, sin deriva de identidad entre fotogramas. Las 7 láminas restantes se
+editan sobre la primera ya aprobada. Reusa `ESTILO`/`FONDO`/`solo_fondo()`/
+`extraer_capa()` de `scripts/vestir.py` tal cual.
+
+**Costo estimado:** ~30 llamadas, entre ~US$1,3 y ~US$5 (techo generoso
+US$15). Costo recurrente: un ítem nuevo cuesta una clase en la semilla, cero
+imágenes.
+
+### Arquitectura Flutter (pendiente, Fase A en adelante)
+
+`CicloDeMarcha` (puro, elige fotograma **por distancia recorrida**, no por
+fase libre — el mundo usa `Curves.easeInOutCubic` y una fase de tiempo lineal
+haría patinar las piernas), `figura_del_mundo.dart` (deriva
+`familia`/`arquetipo`/`ClaseDeArma` de `List<CapaAvatar>` real, leyendo
+`codigoItem`, nunca `assetKey`), `Caminante`/`CaminanteEnSenda` (un solo
+widget con dos modos —reposo y marcha—, reemplaza al disco del spike con la
+misma interfaz de posición). Memoria: archivos sueltos por fotograma (no
+atlas), `cacheWidth` obligatorio, `RepaintBoundary`, `gaplessPlayback`.
+
+## 5. Fases (de gratis a costoso; cada una es un punto de parada real)
+
+1. **Fase 0 — taxonomía de clase de arma. ✅ Hecho (23-09-2026), US$0.**
+   `WorldWeaponClass`, `clase_mundo=` en `manifiesto()`, emitido en
+   `equipment[slot]` y en `layers[]`, `AvatarLayerOut` actualizado,
+   `CONTRACT.md` al día, prueba de cobertura de los 17 ítems.
+2. **Fase A — lógica pura, US$0.** `ciclo_marcha.dart` + `figura_del_mundo.dart`
+   + pruebas (índice cíclico y monótono por distancia; cobertura exhaustiva de
+   clase de arma). Sin widgets, sin arte.
+3. **Fase B — `Caminante` con fotogramas de mentira** (rectángulos + "piernas"
+   que alternan). Juzga el *timing* real sin un pixel generado.
+4. **Fase C — el placeholder reemplaza al disco en `experimento_mundo.dart`.
+   APK a Rodrigo. Pregunta única: ¿el sendero se siente un mundo con ALGO que
+   camina, o el problema nunca fue el disco?** US$0. Si sigue sin sentirse un
+   mundo, se para acá.
+5. **Fase D — piloto real: 1 Orden × 1 familia × 2 fotogramas**, no los 6.
+   <US$0,50. Si a 2 fotogramas no se lee "camina", ni 6 ni 48 lo arreglan.
+6. **Fase E — la lámina completa** de esa combinación + `scripts/laminar.py`.
+7. **Fase F — los props** + anclas de mano medidas en Python.
+8. **Fase G — las 7 láminas restantes**, editadas sobre la primera aprobada.
+9. **Fase H — capa genérica tintada (opcional) + integración en producción**:
+   reemplazar `CaminoDeLaRuta` en `mapa_ruta.dart`/P07. DevTools antes de
+   cerrar.
 
 ## 6. Verificación
 
-- **Backend:** ninguna prueba nueva — no se toca.
-- **`senda.dart`:** N módulos → N+1 paradas en orden; estabilidad ante
-  crecimiento (una senda de 4 y una de 6 módulos ubican las paradas 0-3 en el
-  mismo lugar); `ultimaAlcanzable` coincide con el primer bloqueado;
-  determinismo. Ver `app/test/senda_test.dart`.
-- **`experimento_mundo.dart`:** tocar una parada abierta no avisa; tocar una
-  bloqueada detiene al caminante en el portón y explica el motivo real (no
-  uno inventado en el spike). Ver `app/test/experimento_mundo_test.dart`.
-- **`experimento_marcha.dart`:** la animación corre varios ciclos completos
-  sin lanzar excepción; los cuatro sliders existen y responden. No hay, ni
-  puede haber, una prueba de "se ve como caminar" — es la pregunta que el
-  spike existe para responder, y solo un humano mirando el dispositivo real
-  puede contestarla. Ver `app/test/experimento_marcha_test.dart`.
-- **Manual, en dispositivo real:** las dos preguntas de la Fase 0. Ningún
-  test las reemplaza.
+- **Backend:** hecho — `test_clase_de_arma_mundo.py`, 5 pruebas, 2 verificadas
+  por mutación. `progreso.py` no se toca.
+- **`senda.dart`/`pintor_senda.dart`:** ya probado, sin cambios
+  (`senda_test.dart` en verde).
+- **`ciclo_marcha.dart`/`figura_del_mundo.dart` (puro, pendiente):** fotograma
+  por distancia monótono y cíclico; `ClaseDeArma.deCodigo` cubre cada código
+  real del seed.
+- **Manual, en dispositivo real — el único juez que importa en cada parada de
+  gasto:** Fase C, D, E, F. Ya quedó demostrado en este mismo plan que el
+  veredicto en el teléfono real puede contradecir la teoría de diseño previa;
+  ningún test automático lo reemplaza.
