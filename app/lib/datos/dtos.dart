@@ -635,6 +635,7 @@ class CapaAvatar {
     this.itemId,
     this.itemUsuarioId,
     this.suprime = const <String>[],
+    this.claseArma,
   });
 
   /// Lee un elemento de `layers[]`.
@@ -656,6 +657,7 @@ class CapaAvatar {
         itemId: _txtN(json['item_id']),
         itemUsuarioId: _txtN(json['user_item_id']),
         suprime: _textos(json['suppresses_layers']),
+        claseArma: ClaseDeArma.desdeApi(json['world_class']),
       );
 
   /// Clave estable de la capa.
@@ -697,6 +699,11 @@ class CapaAvatar {
 
   /// Capas que esta oculta (por ejemplo, un yelmo que tapa el cabello).
   final List<String> suprime;
+
+  /// Clase visual de lo empuñado (`WorldWeaponClass`), para la figura
+  /// simplificada del mundo caminable — `null` si esta capa no es de un
+  /// ítem empuñado con clase asignada. Ver [ClaseDeArma].
+  final ClaseDeArma? claseArma;
 }
 
 /// Avatar resuelto: rasgos, equipo y manifiesto de capas (`AvatarOut`).

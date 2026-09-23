@@ -162,9 +162,14 @@ atlas), `cacheWidth` obligatorio, `RepaintBoundary`, `gaplessPlayback`.
    `WorldWeaponClass`, `clase_mundo=` en `manifiesto()`, emitido en
    `equipment[slot]` y en `layers[]`, `AvatarLayerOut` actualizado,
    `CONTRACT.md` al día, prueba de cobertura de los 17 ítems.
-2. **Fase A — lógica pura, US$0.** `ciclo_marcha.dart` + `figura_del_mundo.dart`
-   + pruebas (índice cíclico y monótono por distancia; cobertura exhaustiva de
-   clase de arma). Sin widgets, sin arte.
+2. **Fase A — lógica pura. ✅ Hecho (23-09-2026), US$0.**
+   `ClaseDeArma` (`app/lib/datos/modelos.dart`, parsea `world_class` — nunca
+   una tabla de código de ítem, ese diseño se descartó a favor del dato ya
+   resuelto por el servidor), `figura_del_mundo.dart` (deriva
+   familia/arquetipo/clase de `List<CapaAvatar>` + `RasgosAvatar` reales),
+   `ciclo_marcha.dart` (fotograma por distancia recorrida, nunca por fase de
+   reloj). 23 pruebas, dos invariantes verificadas por mutación. Sin
+   widgets, sin arte.
 3. **Fase B — `Caminante` con fotogramas de mentira** (rectángulos + "piernas"
    que alternan). Juzga el *timing* real sin un pixel generado.
 4. **Fase C — el placeholder reemplaza al disco en `experimento_mundo.dart`.
@@ -186,9 +191,13 @@ atlas), `cacheWidth` obligatorio, `RepaintBoundary`, `gaplessPlayback`.
   por mutación. `progreso.py` no se toca.
 - **`senda.dart`/`pintor_senda.dart`:** ya probado, sin cambios
   (`senda_test.dart` en verde).
-- **`ciclo_marcha.dart`/`figura_del_mundo.dart` (puro, pendiente):** fotograma
-  por distancia monótono y cíclico; `ClaseDeArma.deCodigo` cubre cada código
-  real del seed.
+- **`ciclo_marcha.dart`/`figura_del_mundo.dart` (puro):** hecho —
+  `ciclo_marcha_test.dart` + `figura_del_mundo_test.dart`, 23 pruebas.
+  Fotograma por distancia monótono y cíclico (verificado por mutación); la
+  clase de arma se deriva de `CapaAvatar.claseArma` (el `world_class` que ya
+  resolvió el servidor), nunca de una tabla de código de ítem en el cliente
+  (verificado por mutación: una capa de otra ranura no debe contar como
+  arma).
 - **Manual, en dispositivo real — el único juez que importa en cada parada de
   gasto:** Fase C, D, E, F. Ya quedó demostrado en este mismo plan que el
   veredicto en el teléfono real puede contradecir la teoría de diseño previa;

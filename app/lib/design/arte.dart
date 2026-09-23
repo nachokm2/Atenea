@@ -201,6 +201,13 @@ abstract final class Arte {
   static String _familia(String figura) =>
       figura.contains('femenino') ? 'femenino' : 'masculino';
 
+  /// Familia (`masculino`/`femenino`) de una clave de figura.
+  ///
+  /// Pública para quien necesite la familia sola —la figura del mundo
+  /// caminable, que no pinta capas del catálogo pero sí necesita saber qué
+  /// carpeta de arte le corresponde— sin duplicar la regla de `_familia`.
+  static String familiaDe(String figura) => _familia(figura);
+
   /// Piezas cuyo arte trae su propia mano, ya sacada a capa aparte y teñible.
   ///
   /// Cada pieza empuñada del catálogo venía con un puño dibujado dentro: el

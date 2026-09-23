@@ -910,6 +910,34 @@ enum RanuraItem with ClaveApi {
   static RanuraItem desdeApi(Object? v) => desdeClaveApi(values, v, accesorio);
 }
 
+/// Clase visual de lo empuñado (`WorldWeaponClass`), para la figura
+/// simplificada del mundo caminable — no para el avatar detallado.
+///
+/// El servidor es quien decide qué clase le corresponde a cada ítem
+/// (`items.render_manifest["world_class"]`, `backend/app/models/enums.py`):
+/// el cliente nunca mantiene su propia tabla de código de ítem a clase,
+/// porque eso exigiría un release de la app por cada arma nueva del
+/// catálogo. Un ítem sin clase asignada (o una capa que no es arma/escudo)
+/// no cae en ninguna de estas seis: [desdeApi] devuelve `null`, nunca un
+/// valor por defecto inventado.
+enum ClaseDeArma with ClaveApi {
+  hoja('blade', 'Hoja'),
+  arco('bow', 'Arco'),
+  vara('staff', 'Vara'),
+  antorcha('torch', 'Antorcha'),
+  escudo('shield', 'Escudo'),
+  libro('tome', 'Libro');
+
+  const ClaseDeArma(this.api, this.etiqueta);
+  @override
+  final String api;
+
+  /// Nombre visible, por si algún día hace falta mostrarlo (depuración).
+  final String etiqueta;
+
+  static ClaseDeArma? desdeApi(Object? v) => desdeClaveApiOpcional(values, v);
+}
+
 /// Rareza de un ítem (`ItemRarity`). El color sale de `Rareza` en los tokens.
 enum RarezaItem with ClaveApi {
   comun('common', 'Común', 0),
