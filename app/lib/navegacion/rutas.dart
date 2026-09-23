@@ -68,6 +68,11 @@ abstract final class Rutas {
   /// depuración; Ajustes la enlaza bajo "Herramientas del Reino".
   static const String galeriaEstilo = '/galeria-estilo';
 
+  /// Spike descartable de la Fase 0 (mundo caminable de P07). Solo existe en
+  /// compilaciones de depuración; se borra entero si el experimento no
+  /// convence. Ver `docs/planes` (Fase 0).
+  static const String experimentoMundo = '/experimento-mundo';
+
   // --- Flujos inmersivos y detalles (sin barra inferior) -------------------
 
   /// P05 · Crear ruta.

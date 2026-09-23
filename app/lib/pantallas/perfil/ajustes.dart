@@ -624,6 +624,12 @@ class _PantallaAjustesState extends State<PantallaAjustes> {
                   detalle: 'Tokens, tipografía, componentes y estados',
                   alTocar: () => context.push(Rutas.galeriaEstilo),
                 ),
+                _FilaAccion(
+                  icono: Icons.map_rounded,
+                  titulo: 'Spike · sendero caminable',
+                  detalle: 'Experimento descartable de la Fase 0 (mundo de P07)',
+                  alTocar: () => context.push(Rutas.experimentoMundo),
+                ),
               ],
             ),
           const SizedBox(height: Espacio.md),

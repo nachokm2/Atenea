@@ -34,6 +34,7 @@ import '../pantallas/aventura/aventura.dart';
 import '../pantallas/aventura/crear_ruta.dart';
 import '../pantallas/aventura/generacion.dart';
 import '../pantallas/aventura/mapa_ruta.dart';
+import '../pantallas/aventura/mundo/experimento_mundo.dart';
 import '../pantallas/evaluacion/evaluacion.dart';
 import '../pantallas/evaluacion/resultado_evaluacion.dart';
 import '../pantallas/leccion/fin_leccion.dart';
@@ -211,6 +212,15 @@ GoRouter crearEnrutador(ControladorSesion sesion) {
           path: Rutas.galeriaEstilo,
           builder: (BuildContext context, GoRouterState state) =>
               const PantallaGaleriaEstilo(),
+        ),
+
+      // Spike descartable de la Fase 0 (mundo caminable de P07): solo en
+      // depuración, se borra entero si el experimento no convence.
+      if (kDebugMode)
+        GoRoute(
+          path: Rutas.experimentoMundo,
+          builder: (BuildContext context, GoRouterState state) =>
+              const PantallaExperimentoMundo(),
         ),
       GoRoute(
         path: Rutas.patronRuta,
