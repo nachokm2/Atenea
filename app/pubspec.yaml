@@ -124,6 +124,11 @@ flutter:
     - assets/arte/capas/cuerpos/
     - assets/arte/capas/masculino/
     - assets/arte/capas/femenino/
+    # La figura simplificada del mundo caminable (docs/planes/mundo-caminable.md,
+    # Fase D): piloto real de 1 Orden × 1 familia, 2 poses (el resto de cada
+    # ciclo repite las mismas dos). Una carpeta por Orden, misma razón que
+    # arriba: las entradas de directorio no son recursivas.
+    - assets/arte/mundo/masculino/acero/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

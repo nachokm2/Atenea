@@ -185,11 +185,34 @@ atlas), `cacheWidth` obligatorio, `RepaintBoundary`, `gaplessPlayback`.
    caminante quedaba congelado en el último fotograma de marcha en vez de
    volver a reposo — nada más forzaba una reconstrucción de la pantalla solo
    porque el controlador terminó de animar. Probado y verificado por
-   mutación. **Pendiente: el APK a Rodrigo y su veredicto** — pregunta
-   única: ¿el sendero se siente un mundo con ALGO que camina, o el problema
-   nunca fue el disco? Si sigue sin sentirse un mundo, se para acá.
-5. **Fase D — piloto real: 1 Orden × 1 familia × 2 fotogramas**, no los 6.
-   <US$0,50. Si a 2 fotogramas no se lee "camina", ni 6 ni 48 lo arreglan.
+   mutación. **Veredicto de Rodrigo, en el teléfono: "se ve super mal... no
+   se ve el personaje, parecen cuadros."** Aclarado con `AskUserQuestion`: es
+   el arte crudo del placeholder lo que no deja juzgar nada más, no el
+   sendero ni el mecanismo de caminar — desbloquea la Fase D en vez de
+   cerrar el intento.
+5. **Fase D — piloto real: 1 Orden (Acero) × 1 familia (masculina) × 2
+   fotogramas (contacto + paso), no los 6. ✅ Arte y código hechos
+   (23-09-2026), ~US$0,50.** `scripts/experimento_figura_mundo.py` genera
+   una sola lámina de 2 casillas vía `images/generations` (no
+   `images/edits`: no hay imagen de partida que preservar, la figura
+   simplificada no tiene identidad — sin cara, sin pelo suelto). Recortada y
+   normalizada con la misma convención de `vestir.py`
+   (`ALTO_FIGURA`/`BASE_Y`/`LIENZO`), guardada en
+   `app/assets/arte/mundo/masculino/acero/marcha_00..03.webp` (solo 2 poses
+   reales; `02`/`03` duplican `00`/`01` hasta la Fase E). `Caminante` ahora
+   intenta `Image.asset` primero y cae sola al pintor de mentira vía
+   `errorBuilder` — el mismo mecanismo que ya usa `AvatarCapas`, así que las
+   Órdenes sin arte real conviven con Acero/masculino sin una sola rama de
+   código a mano. Reposo **no** se generó esta ronda — sigue en placeholder,
+   a propósito. `caminante_test.dart` ganó un grupo dedicado ("con arte
+   real") que verifica que Acero/masculino en marcha pinta la `Image` real y
+   no el pintor de mentira (verificado por mutación: una ruta rota
+   reenrojece la prueba); `experimento_mundo_test.dart` se ajustó para
+   comprobar el mismo hecho sin depender del pintor, que ya no aparece en
+   marcha para esa combinación. **Pendiente: el APK a Rodrigo y su
+   veredicto** — pregunta única: ¿2 fotogramas ya se leen como caminar? Si
+   no, ni 6 ni 48 lo arreglan — se para acá, antes de generar la lámina
+   completa (Fase E).
 6. **Fase E — la lámina completa** de esa combinación + `scripts/laminar.py`.
 7. **Fase F — los props** + anclas de mano medidas en Python.
 8. **Fase G — las 7 láminas restantes**, editadas sobre la primera aprobada.
@@ -210,11 +233,15 @@ atlas), `cacheWidth` obligatorio, `RepaintBoundary`, `gaplessPlayback`.
   resolvió el servidor), nunca de una tabla de código de ítem en el cliente
   (verificado por mutación: una capa de otra ranura no debe contar como
   arma).
-- **`caminante.dart` (widget):** hecho — `caminante_test.dart`, 8 pruebas.
+- **`caminante.dart` (widget):** hecho — `caminante_test.dart`, 10 pruebas.
   Verificado por mutación que el fotograma en marcha sale de la distancia
   recorrida y no de la fase del reloj; ancla en los pies y espejo por
-  dirección, ambos probados montando el widget de verdad.
+  dirección, ambos probados montando el widget de verdad. Desde la Fase D,
+  un grupo aparte prueba que Acero/masculino (con arte real) pinta la
+  `Image` real y no el pintor de mentira — verificado por mutación (una ruta
+  rota reenrojece la prueba).
 - **Manual, en dispositivo real — el único juez que importa en cada parada de
-  gasto:** Fase C, D, E, F. Ya quedó demostrado en este mismo plan que el
-  veredicto en el teléfono real puede contradecir la teoría de diseño previa;
-  ningún test automático lo reemplaza.
+  gasto:** Fase C (resuelta: el arte crudo no dejaba juzgar, no el sendero),
+  Fase D (pendiente el APK), E, F. Ya quedó demostrado en este mismo plan que
+  el veredicto en el teléfono real puede contradecir la teoría de diseño
+  previa; ningún test automático lo reemplaza.

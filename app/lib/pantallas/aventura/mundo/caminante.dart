@@ -1,12 +1,13 @@
 /// El caminante del mundo: reposo o marcha, un solo widget para los dos.
 ///
-/// Fase B (`docs/planes/mundo-caminable.md`): todavía no hay arte real, así
-/// que [Caminante] se pinta con un rectángulo y dos "piernas" que alternan
-/// (`PintorDeCaminanteDeMentira`) — lo único que hace falta para juzgar el *timing*
-/// real (¿patina al frenar?, ¿la cadencia se lee como caminar?) sin gastar
-/// un centavo en arte. Cuando llegue el arte real (Fase D), este pintor se
-/// reemplaza por `Image.asset(ciclo.rutaDeMarcha(fotograma))`; la posición,
-/// el anclaje en los pies y el espejo de [CaminanteEnSenda] no cambian.
+/// [Caminante] pinta el arte real (`Image.asset(ciclo.rutaDeMarcha(...))`)
+/// en cuanto existe, y cae sola a `PintorDeCaminanteDeMentira` —un
+/// rectángulo con dos "piernas" que alternan— cuando todavía no hay archivo
+/// para esa combinación de familia/Orden/fotograma. No es una rama de
+/// código a mano: es el `errorBuilder` de `Image.asset`, el mismo mecanismo
+/// que ya usa `AvatarCapas` para caer a su pintor vectorial cuando falta una
+/// capa. Así conviven, sin ningún `if`, las Órdenes que ya tienen piloto
+/// real (Fase D) con las que todavía no (`docs/planes/mundo-caminable.md`).
 ///
 /// Reposo y marcha comparten el mismo widget a propósito: son el mismo
 /// problema (elegir un fotograma de un mismo ciclo y pintarlo), y separarlos
@@ -76,6 +77,7 @@ class _CaminanteState extends State<Caminante> with SingleTickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     final Animation<double>? avance = widget.avance;
+    final Size medida = Size(widget.alto * 0.6, widget.alto);
     return Semantics(
       label: widget.semantica,
       child: Transform.flip(
@@ -87,9 +89,23 @@ class _CaminanteState extends State<Caminante> with SingleTickerProviderStateMix
             final int fotograma = enMarcha
                 ? widget.ciclo.fotogramaPorDistancia(avance.value * widget.longitudDelTramo)
                 : widget.ciclo.fotogramaDeReposoPorFase(_reposo.value);
-            return CustomPaint(
-              size: Size(widget.alto * 0.6, widget.alto),
-              painter: PintorDeCaminanteDeMentira(enMarcha: enMarcha, fotograma: fotograma),
+            final String ruta = enMarcha
+                ? widget.ciclo.rutaDeMarcha(fotograma)
+                : widget.ciclo.rutaDeReposo(fotograma);
+            return SizedBox(
+              width: medida.width,
+              height: medida.height,
+              child: Image.asset(
+                ruta,
+                height: medida.height,
+                fit: BoxFit.contain,
+                errorBuilder: (BuildContext context, Object error, StackTrace? pila) {
+                  return CustomPaint(
+                    size: medida,
+                    painter: PintorDeCaminanteDeMentira(enMarcha: enMarcha, fotograma: fotograma),
+                  );
+                },
+              ),
             );
           },
         ),

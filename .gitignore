@@ -72,3 +72,10 @@ arte/capas/
 # tocarlo. Son de usar y tirar: se regeneran componiendo las capas, y ninguna
 # decision deberia depender de que sigan ahi.
 arte/diagnostico/
+
+# Los pilotos de la figura del mundo caminable (mundo-caminable.md, Fase D en
+# adelante): laminas crudas y recortes intermedios de
+# `scripts/experimento_figura_mundo.py`/`scripts/laminar.py`. Misma razon que
+# `arte/capas/`: lo que ship es el WebP en `app/assets/arte/mundo/`, y de ahi
+# se puede volver a recortar si hiciera falta.
+arte/experimentos_mundo/

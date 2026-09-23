@@ -15,7 +15,14 @@ import 'package:atenea/datos/dtos.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-const FiguraDelMundo _figura = FiguraDelMundo(familia: 'masculino', arquetipo: Arquetipo.acero);
+// Arcano, no Acero: Acero/masculino ya tiene arte real de la Fase D
+// (`assets/arte/mundo/masculino/acero/`), y estas pruebas necesitan que
+// `Image.asset` falle de verdad para ejercitar `PintorDeCaminanteDeMentira`
+// — el arte real se prueba aparte, en el grupo "con arte real (Fase D)".
+const FiguraDelMundo _figura = FiguraDelMundo(familia: 'masculino', arquetipo: Arquetipo.arcano);
+
+const FiguraDelMundo _figuraConArteReal =
+    FiguraDelMundo(familia: 'masculino', arquetipo: Arquetipo.acero);
 
 PintorDeCaminanteDeMentira _pintorDe(WidgetTester tester) {
   final Finder buscado = find.byWidgetPredicate(
@@ -108,6 +115,33 @@ void main() {
       await tester.pump();
 
       expect(_pintorDe(tester).fotograma, ciclo.fotogramaPorDistancia(longitud * 0.5));
+    });
+  });
+
+  group('con arte real (Fase D)', () {
+    testWidgets('Acero/masculino en marcha pinta la imagen real, no el pintor de mentira',
+        (WidgetTester tester) async {
+      const double longitud = dpPorFotogramaDeMarcha * 3.2;
+      final CicloDeMarcha ciclo = CicloDeMarcha(_figuraConArteReal);
+      final AnimationController control = AnimationController(vsync: tester, value: 1.0);
+      addTearDown(control.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Caminante(ciclo: ciclo, avance: control, longitudDelTramo: longitud),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        find.byWidgetPredicate((Widget w) => w is CustomPaint && w.painter is PintorDeCaminanteDeMentira),
+        findsNothing,
+      );
+      final int fotograma = ciclo.fotogramaPorDistancia(longitud);
+      final Image imagen = tester.widget<Image>(find.byType(Image));
+      expect((imagen.image as AssetImage).assetName, ciclo.rutaDeMarcha(fotograma));
     });
   });
 

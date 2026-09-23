@@ -95,12 +95,22 @@ void main() {
 
     await tester.tap(find.bySemanticsLabel('Módulo 3'));
     await tester.pump();
-    expect(_pintorDelCaminante(tester).enMarcha, isTrue,
+    // La figura de ejemplo es Acero/masculino, que desde la Fase D ya tiene
+    // arte real de marcha (`assets/arte/mundo/masculino/acero/`): a mitad de
+    // camino se pinta la imagen real, no el pintor de mentira — por eso se
+    // comprueba con `Image`, no con `_pintorDelCaminante`.
+    expect(tester.takeException(), isNull);
+    expect(find.byType(Image), findsWidgets,
         reason: 'a mitad de camino tiene que estar en marcha, o no se prueba nada');
 
     // Un poco más que `Movimiento.corta`, no justo — a la duración exacta el
     // controlador puede seguir en `forward` hasta el próximo tick.
     await tester.pump(Movimiento.corta + const Duration(milliseconds: 50));
+    // Un pump más: recién acá `Caminante` vuelve a pedir `rutaDeReposo` (sin
+    // arte real todavía), y el fallo de `Image.asset` que activa el pintor de
+    // mentira se resuelve async — no dentro del mismo pump que completa la
+    // animación.
+    await tester.pump();
     expect(_pintorDelCaminante(tester).enMarcha, isFalse,
         reason: 'llegado el destino, tiene que volver a reposo');
   });
