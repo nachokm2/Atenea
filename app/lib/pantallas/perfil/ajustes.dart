@@ -630,6 +630,12 @@ class _PantallaAjustesState extends State<PantallaAjustes> {
                   detalle: 'Experimento descartable de la Fase 0 (mundo de P07)',
                   alTocar: () => context.push(Rutas.experimentoMundo),
                 ),
+                _FilaAccion(
+                  icono: Icons.directions_walk_rounded,
+                  titulo: 'Spike · marcha',
+                  detalle: 'Experimento descartable de la Fase 0b (rig del avatar)',
+                  alTocar: () => context.push(Rutas.experimentoMarcha),
+                ),
               ],
             ),
           const SizedBox(height: Espacio.md),

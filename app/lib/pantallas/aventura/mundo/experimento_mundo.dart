@@ -9,7 +9,8 @@
 /// Vive fuera del árbol de producción a propósito, enlazado solo desde la
 /// galería de estilo (`kDebugMode`), para poder borrarlo entero sin dejar
 /// rastro si la respuesta es "no". Ver el plan en
-/// `docs/planes` (Fase 0) para las preguntas de salida completas.
+/// `docs/planes/mundo-caminable.md` (Fase 0) para las preguntas de salida
+/// completas.
 library;
 
 import 'package:flutter/material.dart';

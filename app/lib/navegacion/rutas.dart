@@ -73,6 +73,10 @@ abstract final class Rutas {
   /// convence. Ver `docs/planes` (Fase 0).
   static const String experimentoMundo = '/experimento-mundo';
 
+  /// Spike descartable de la Fase 0b (muñeco de papel que camina). Igual de
+  /// desechable que [experimentoMundo], y por la misma razón.
+  static const String experimentoMarcha = '/experimento-marcha';
+
   // --- Flujos inmersivos y detalles (sin barra inferior) -------------------
 
   /// P05 · Crear ruta.
