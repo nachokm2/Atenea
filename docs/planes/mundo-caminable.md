@@ -170,8 +170,13 @@ atlas), `cacheWidth` obligatorio, `RepaintBoundary`, `gaplessPlayback`.
    `ciclo_marcha.dart` (fotograma por distancia recorrida, nunca por fase de
    reloj). 23 pruebas, dos invariantes verificadas por mutación. Sin
    widgets, sin arte.
-3. **Fase B — `Caminante` con fotogramas de mentira** (rectángulos + "piernas"
-   que alternan). Juzga el *timing* real sin un pixel generado.
+3. **Fase B — `Caminante` con fotogramas de mentira. ✅ Hecho (23-09-2026), US$0.**
+   `caminante.dart`: `Caminante` (reposo/marcha, un solo widget) +
+   `CaminanteEnSenda` (ancla en los pies, espejo por dirección) +
+   `PintorDeCaminanteDeMentira` (rectángulo + "piernas" que alternan — se
+   borra en cuanto llegue el arte real). 8 pruebas bombeando el reloj,
+   verificado por mutación que el fotograma de marcha sale de la distancia
+   recorrida y no de la fase del reloj.
 4. **Fase C — el placeholder reemplaza al disco en `experimento_mundo.dart`.
    APK a Rodrigo. Pregunta única: ¿el sendero se siente un mundo con ALGO que
    camina, o el problema nunca fue el disco?** US$0. Si sigue sin sentirse un
@@ -198,6 +203,10 @@ atlas), `cacheWidth` obligatorio, `RepaintBoundary`, `gaplessPlayback`.
   resolvió el servidor), nunca de una tabla de código de ítem en el cliente
   (verificado por mutación: una capa de otra ranura no debe contar como
   arma).
+- **`caminante.dart` (widget):** hecho — `caminante_test.dart`, 8 pruebas.
+  Verificado por mutación que el fotograma en marcha sale de la distancia
+  recorrida y no de la fase del reloj; ancla en los pies y espejo por
+  dirección, ambos probados montando el widget de verdad.
 - **Manual, en dispositivo real — el único juez que importa en cada parada de
   gasto:** Fase C, D, E, F. Ya quedó demostrado en este mismo plan que el
   veredicto en el teléfono real puede contradecir la teoría de diseño previa;
