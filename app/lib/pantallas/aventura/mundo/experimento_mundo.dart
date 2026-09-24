@@ -99,8 +99,6 @@ class _PantallaExperimentoMundoState extends State<PantallaExperimentoMundo>
   @override
   Widget build(BuildContext context) {
     final AteneaPalette p = context.paleta;
-    final Senda senda = Senda.desdeDetalle(_detalle, ancho: 360);
-    final Offset enReposo = senda.centroDeParada(_paradaActual) ?? Offset.zero;
     // Con la animación ya terminada (o sin haber arrancado nunca), el
     // caminante descansa en el punto real de la parada — nunca se queda
     // congelado en el último fotograma del tramo que ya recorrió.
@@ -131,23 +129,37 @@ class _PantallaExperimentoMundoState extends State<PantallaExperimentoMundo>
               child: Text(_aviso!, style: context.textos.bodySmall),
             ),
           Expanded(
-            child: senda.estaVacia
-                ? const Center(child: Text('Sin módulos de ejemplo'))
-                : _Mundo(
-                    senda: senda,
-                    origen: enMovimiento ? (_origen ?? enReposo) : enReposo,
-                    destino: enMovimiento ? (_destino ?? enReposo) : enReposo,
-                    avance: _avance,
-                    alTocarParada: _tocarParada,
-                  ),
+            // `LayoutBuilder`, no un ancho fijo a mano: la pantalla no limita
+            // el ancho de lectura (`limitarAnchoLectura: false`) ni pone
+            // padding, así que el mundo real mide el ancho del dispositivo,
+            // no 360 — con un trazo de 6px la diferencia era invisible, pero
+            // el terreno ilustrado necesita el ancho real para no
+            // desalinearse del sendero.
+            child: LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints c) {
+                final Senda senda = Senda.desdeDetalle(_detalle, ancho: c.maxWidth);
+                final Offset enReposo = senda.centroDeParada(_paradaActual) ?? Offset.zero;
+                return senda.estaVacia
+                    ? const Center(child: Text('Sin módulos de ejemplo'))
+                    : _Mundo(
+                        senda: senda,
+                        origen: enMovimiento ? (_origen ?? enReposo) : enReposo,
+                        destino: enMovimiento ? (_destino ?? enReposo) : enReposo,
+                        avance: _avance,
+                        alTocarParada: (int indice) => _tocarParada(indice, senda),
+                      );
+              },
+            ),
           ),
         ],
       ),
     );
   }
 
-  void _tocarParada(int indice) {
-    final Senda senda = Senda.desdeDetalle(_detalle, ancho: 360);
+  // `senda` la pasa quien la dibujó (`LayoutBuilder` en `build()`), no se
+  // reconstruye acá con un ancho a mano — dos fuentes de verdad sobre el
+  // mismo ancho son exactamente el bug que esto reemplaza.
+  void _tocarParada(int indice, Senda senda) {
     ParadaSenda? destino;
     for (final ParadaSenda p in senda.paradas) {
       if (p.indice == indice) {

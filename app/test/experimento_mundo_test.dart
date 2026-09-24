@@ -13,6 +13,7 @@ library;
 import 'package:atenea/design/theme.dart';
 import 'package:atenea/design/tokens.dart';
 import 'package:atenea/pantallas/aventura/mundo/experimento_mundo.dart';
+import 'package:atenea/pantallas/aventura/mundo/senda.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -42,6 +43,30 @@ Future<void> _montar(WidgetTester tester) async {
 
 void main() {
   setUp(prepararTipografias);
+
+  testWidgets(
+      'el sendero usa el ancho real de la pantalla, no un ancho fijo a mano',
+      (WidgetTester tester) async {
+    // Bug real, encontrado antes de meter terreno ilustrado (Parte A): la
+    // pantalla no limita el ancho de lectura ni pone padding, así que el
+    // mundo mide el ancho real de la superficie (412dp en esta prueba), no
+    // los 360 que `Senda.desdeDetalle` recibía a mano. Con un trazo de 6px
+    // era invisible; con arte que llena el ancho, se nota.
+    //
+    // Módulo 2 (índice 1), no Módulo 1: la parada 0 cae exactamente en el
+    // centro horizontal (`sin(0) == 0` en `puntoEnY`) — un `Column` con
+    // `crossAxisAlignment` por defecto centra el mundo (más angosto que la
+    // pantalla) dentro del ancho real, y esa segunda centrada cancela por
+    // coincidencia el error justo en el punto medio. La parada 1 cae en el
+    // extremo de la serpentina (`sin(π/2) == 1`), donde el error de verdad
+    // se nota — confirmado reintroduciendo el bug a mano: con `ancho: 360`
+    // esta parada aterriza en x≈290,5 en vez de x≈307,1.
+    await _montar(tester);
+
+    final double xEsperado = puntoEnY(yDeParada(1), 412).dx;
+    final double xReal = tester.getCenter(find.bySemanticsLabel('Módulo 2')).dx;
+    expect(xReal, closeTo(xEsperado, 0.5));
+  });
 
   testWidgets('las 6 paradas de ejemplo y el tesoro existen, con su nombre',
       (WidgetTester tester) async {
