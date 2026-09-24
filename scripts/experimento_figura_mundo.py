@@ -31,6 +31,7 @@ falta una base fija que editar.
     python scripts/experimento_figura_mundo.py                    # nada, valida el entorno
     python scripts/experimento_figura_mundo.py --aplicar           # marcha, cuesta céntimos
     python scripts/experimento_figura_mundo.py --aplicar --pose reposo
+    python scripts/experimento_figura_mundo.py --completar-marcha  # espejo, gratis, sin llamar al modelo
 
 Ojo: `--pose marcha --aplicar` vuelve a escribir sobre `marcha_00/01.webp`
 —los ya aprobados—, no se corre dos veces por accidente.
@@ -185,6 +186,33 @@ def recortar_casillas(lamina: Image.Image, cantidad: int, *, escala_independient
     return casillas
 
 
+def completar_marcha_por_espejo() -> None:
+    """`marcha_02`/`marcha_03` como espejo horizontal de `marcha_00`/`01`.
+
+    Rodrigo, viendo el piloto de 2 poses duplicadas sin más (`02`=`00`,
+    `03`=`01` tal cual): "el paso [...] se lee, pero tosco" — confirmado
+    con `AskUserQuestion` que SÍ lee como caminar, solo falta que las piernas
+    alternen. Duplicar sin espejar repetía la MISMA pierna adelante dos veces
+    seguidas en vez de alternar izquierda/derecha, que es media zancada real.
+
+    Espejar en vez de generar de nuevo: la figura es simétrica de frente (sin
+    arma horneada en el cuerpo — eso es un prop aparte, ver el plan), así que
+    un espejo horizontal de "contacto, pierna izquierda adelante" ES,
+    literalmente, "contacto, pierna derecha adelante". Costo: US$0. El
+    espejo de `Caminante` por dirección (`miraDerecha`) compone limpio con
+    este —ver su comentario en `caminante.dart`—, así que no hace falta
+    tocar nada del lado Flutter.
+    """
+    for base, espejo in (("marcha_00", "marcha_02"), ("marcha_01", "marcha_03")):
+        origen = ASSETS / f"{base}.webp"
+        if not origen.exists():
+            raise SystemExit(f"Falta {origen} — corré --pose marcha --aplicar primero.")
+        imagen = Image.open(origen).convert("RGBA")
+        destino = ASSETS / f"{espejo}.webp"
+        imagen.transpose(Image.FLIP_LEFT_RIGHT).save(destino, "WEBP", lossless=False, quality=90)
+        print(f"{origen.name} espejado -> {destino}")
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--aplicar", action="store_true", help="Llama al modelo. Cuesta dinero.")
@@ -194,7 +222,16 @@ def main(argv: list[str] | None = None) -> int:
         default="marcha",
         help="Qué lámina pedir y procesar.",
     )
+    p.add_argument(
+        "--completar-marcha",
+        action="store_true",
+        help="Genera marcha_02/03 espejando 00/01 (gratis, sin llamar al modelo) y termina.",
+    )
     args = p.parse_args(argv)
+
+    if args.completar_marcha:
+        completar_marcha_por_espejo()
+        return 0
 
     prompt = PROMPT if args.pose == "marcha" else PROMPT_REPOSO
     nombre_lamina = f"lamina_{args.pose}_acero_masculino.png"

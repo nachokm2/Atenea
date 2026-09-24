@@ -237,11 +237,41 @@ atlas), `cacheWidth` obligatorio, `RepaintBoundary`, `gaplessPlayback`.
    también pinta la imagen real"); `experimento_mundo_test.dart` se reescribió
    para leer marcha/reposo de la ruta real de la `Image` (`contains('marcha_')`
    / `contains('reposo_')`) en vez de depender del pintor de mentira, que ya
-   no aparece nunca para esta combinación. **Pendiente: el segundo APK a
-   Rodrigo y su veredicto** — pregunta única: ¿2 fotogramas de marcha + 2 de
-   reposo ya se leen como un personaje que camina y descansa? Si no, ni 6 ni
-   48 lo arreglan — se para acá, antes de generar la lámina completa (Fase
-   E).
+   no aparece nunca para esta combinación.
+
+   **Segundo veredicto: "se ve muy pequeño el personaje."** Diagnosticado con
+   capturas reales, sin suposición: `Caminante` envolvía el `Image.asset` en
+   una caja angosta (`alto*0.6` de ancho, `alto` de alto), pero el lienzo
+   maestro del arte real es cuadrado (1024×1024, misma convención que las
+   capas del avatar). `BoxFit.contain` encogía el cuadrado al lado corto —el
+   ancho— y la figura terminaba a un ~60 % del alto pedido, con espacio vacío
+   arriba y abajo. Arreglado en `caminante.dart`: la caja pasa a ser cuadrada
+   (`alto`×`alto`) tanto en `Caminante` como en el ancho de anclaje de
+   `CaminanteEnSenda`, para que el anclaje de los pies siga coincidiendo con
+   la caja que en verdad se pinta. Nueva prueba de regresión
+   ("la caja es cuadrada, no un rectángulo angosto") verificada por mutación.
+   Confirmado en el teléfono con capturas reales: el personaje se para y
+   camina con buen tamaño, proporcionado contra las paradas.
+
+   **Tercer veredicto, con `AskUserQuestion` para no adivinar:** "el paso" se
+   veía raro. Aclarado — sí lee como que camina, pero tosco, esperable con
+   solo contacto+paso. Causa real, no solo "faltan poses": `marcha_02`/`03`
+   eran duplicados literales de `marcha_00`/`01` (no espejados), así que el
+   ciclo mostraba la MISMA pierna adelante dos veces seguidas en vez de
+   alternar izquierda/derecha — ni siquiera una media zancada real.
+   Arreglado gratis, sin llamar al modelo: la figura es simétrica de frente
+   (sin arma horneada en el cuerpo, eso es un prop aparte), así que un espejo
+   horizontal de "contacto, pierna izquierda adelante" ES "contacto, pierna
+   derecha adelante". `scripts/experimento_figura_mundo.py --completar-marcha`
+   genera `marcha_02`/`03` espejando `00`/`01` con `Image.transpose`. Compone
+   limpio con el espejo por dirección que ya hace `Caminante`
+   (`miraDerecha`), sin tocar Flutter. **Pendiente: el veredicto de Rodrigo
+   sobre la alternancia de piernas** — si ahora se lee como una zancada real,
+   Fase D queda cerrada con verdadero éxito y se pasa a la Fase E (la lámina
+   completa, con poses realmente nuevas en vez de espejadas, y pulido
+   general). Si sigue sin convencer, no hay más margen gratis que probar
+   antes de decidir si vale la pena generar las 2 poses de marcha que faltan
+   de cero.
 6. **Fase E — la lámina completa** de esa combinación + `scripts/laminar.py`.
 7. **Fase F — los props** + anclas de mano medidas en Python.
 8. **Fase G — las 7 láminas restantes**, editadas sobre la primera aprobada.

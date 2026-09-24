@@ -77,7 +77,13 @@ class _CaminanteState extends State<Caminante> with SingleTickerProviderStateMix
   @override
   Widget build(BuildContext context) {
     final Animation<double>? avance = widget.avance;
-    final Size medida = Size(widget.alto * 0.6, widget.alto);
+    // Cuadrado, no un rectángulo angosto: el lienzo maestro del arte real es
+    // 1024×1024 (misma convención que las capas del avatar detallado), y con
+    // una caja más angosta que alta, `BoxFit.contain` la encoge al ancho —el
+    // lado corto— y sobra alto vacío arriba y abajo: la figura terminaba
+    // pintada a un 60 % del alto pedido. Con la caja cuadrada, el lienzo
+    // entra exacto y la figura usa el alto completo.
+    final Size medida = Size(widget.alto, widget.alto);
     return Semantics(
       label: widget.semantica,
       child: Transform.flip(
@@ -146,7 +152,10 @@ class CaminanteEnSenda extends StatelessWidget {
     // El arte es de frente; espejo horizontal según hacia dónde se avanza.
     // `>= `, no `>`: un tramo vertical puro (misma x) no gira de espaldas.
     final bool miraDerecha = destino.dx >= origen.dx;
-    final double ancho = alto * 0.6;
+    // Mismo ancho que `Caminante` usa por dentro (cuadrado, `alto` × `alto`)
+    // — si no coincide, el anclaje de los pies queda centrado sobre una caja
+    // que no es la que en verdad se pinta.
+    final double ancho = alto;
 
     // Origen y destino iguales (nada que recorrer, típicamente al llegar a
     // una parada y quedarse): `Caminante` con `avance` no nulo y longitud

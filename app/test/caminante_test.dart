@@ -32,6 +32,27 @@ PintorDeCaminanteDeMentira _pintorDe(WidgetTester tester) {
 }
 
 void main() {
+  group('tamaño', () {
+    testWidgets('la caja es cuadrada (alto × alto), no un rectángulo angosto',
+        (WidgetTester tester) async {
+      // El lienzo maestro del arte real es 1024×1024. Con una caja más
+      // angosta que alta, `BoxFit.contain` la encoge al ancho —el lado
+      // corto— y la figura se pinta muy por debajo del alto pedido: el bug
+      // real que Rodrigo vio como "se ve muy pequeño el personaje".
+      // `Center`, no `home:` a secas: una ruta sin `Scaffold` le da a su
+      // contenido restricciones AJUSTADAS al tamaño de pantalla completo —
+      // `SizedBox` no puede elegir su propio tamaño contra eso—, y con
+      // `Center` de por medio las restricciones vuelven a ser sueltas, como
+      // las que `CaminanteEnSenda` ya le da dentro de un `Stack`/`Positioned`.
+      await tester.pumpWidget(
+        MaterialApp(home: Center(child: Caminante(ciclo: CicloDeMarcha(_figura), alto: 100))),
+      );
+      await tester.pump();
+
+      expect(tester.getSize(find.byType(Caminante)), const Size(100, 100));
+    });
+  });
+
   group('en reposo (avance nulo)', () {
     testWidgets('corre varios ciclos de reloj sin lanzar', (WidgetTester tester) async {
       await tester.pumpWidget(
