@@ -19,7 +19,7 @@ import 'package:flutter/material.dart';
 import '../../../datos/dtos.dart';
 import '../../../design/components.dart';
 import '../../../design/tokens.dart';
-import '../widgets/nodos_mapa.dart' show colorDeNodo, iconoDeNodo;
+import '../widgets/nodos_mapa.dart' show EstiloNodo, colorDeNodo;
 import 'caminante.dart';
 import 'ciclo_marcha.dart';
 import 'figura_del_mundo.dart';
@@ -335,7 +335,7 @@ class _ParadaSpike extends StatelessWidget {
           child: Icon(
             parada.tipo == TipoParada.tesoro
                 ? Icons.emoji_events_rounded
-                : iconoDeNodo(parada.estilo),
+                : _iconoDeReino(parada.estilo),
             color: color,
           ),
         ),
@@ -343,6 +343,20 @@ class _ParadaSpike extends StatelessWidget {
     );
   }
 }
+
+/// Íconos más "de reino" que los genéricos de producción
+/// (`nodos_mapa.dart.iconoDeNodo`: un check, una flecha de "jugar", un
+/// candado) — solo para este spike descartable, a pedido de Rodrigo: "el
+/// camino son solo flechas, podemos hacerlo más un reino". No toca el mapa
+/// real — los aprendices de verdad siguen viendo los íconos de producción
+/// hasta que esto se apruebe y se decida si vale la pena llevarlo allá.
+IconData _iconoDeReino(EstiloNodo estilo) => switch (estilo) {
+      EstiloNodo.completado => Icons.auto_stories_rounded, // un tomo ya conquistado
+      EstiloNodo.actual => Icons.hiking_rounded, // acá estás, listo para seguir camino
+      EstiloNodo.disponible => Icons.explore_rounded, // un sendero abierto por explorar
+      EstiloNodo.bloqueado => Icons.castle_rounded, // el portón del reino, cerrado
+      EstiloNodo.enConstruccion => Icons.local_fire_department_rounded, // la forja, aún trabajando
+    };
 
 /// Una Ruta de ejemplo con `n` módulos, variando su estilo a propósito: el
 /// primero completado, uno "actual", uno bloqueado a la mitad, para que el

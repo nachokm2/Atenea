@@ -265,13 +265,39 @@ atlas), `cacheWidth` obligatorio, `RepaintBoundary`, `gaplessPlayback`.
    derecha adelante". `scripts/experimento_figura_mundo.py --completar-marcha`
    genera `marcha_02`/`03` espejando `00`/`01` con `Image.transpose`. Compone
    limpio con el espejo por dirección que ya hace `Caminante`
-   (`miraDerecha`), sin tocar Flutter. **Pendiente: el veredicto de Rodrigo
-   sobre la alternancia de piernas** — si ahora se lee como una zancada real,
-   Fase D queda cerrada con verdadero éxito y se pasa a la Fase E (la lámina
-   completa, con poses realmente nuevas en vez de espejadas, y pulido
-   general). Si sigue sin convencer, no hay más margen gratis que probar
-   antes de decidir si vale la pena generar las 2 poses de marcha que faltan
-   de cero.
+   (`miraDerecha`), sin tocar Flutter.
+
+   **Cuarto veredicto: "ahora si se ve más fluido pero no entiendo por que se
+   agacha".** El "paso" ya convenció (piernas alternando). Lo que confundía
+   era el bob de reposo (`reposo_01`, "al exhalar") — intencional, pero el
+   ciclo de 1400ms (700ms parado, 700ms agachado, para siempre) se leía como
+   un agache mecánico, no como respirar. Con `AskUserQuestion`: entre
+   ralentizarlo, quitarlo o dejarlo, eligió ralentizarlo. Ciclo de reposo en
+   `caminante.dart` de 1400ms a 4200ms (~14 respiraciones por minuto), sin
+   tocar el arte. Prueba de widget actualizada a la nueva mitad de ciclo
+   (2100ms).
+
+   **Quinto veredicto, ya con velocidad corregida: "ahora si me parece."**
+   Fase D cerrada con verdadero éxito (24-09-2026) — 2 fotogramas de marcha
+   (espejados a 4), 2 de reposo, tamaño real, velocidad a distancia
+   constante y bob de reposo lento convencen en el teléfono real. Desbloquea
+   la Fase E.
+
+   *(Entre el tercer y el cuarto veredicto, un fallo aparte, no del arte:
+   "muy rapido aun" — el `AnimationController` del spike animaba CUALQUIER
+   tramo en la misma duración fija de 250ms (`Movimiento.corta`), pensada
+   para el salto de color arbitrario de la Fase 0a, no para un ciclo de
+   marcha real. `_duracionDelTramo` en `experimento_mundo.dart` calcula la
+   duración según la distancia real (200dp/s, piso 300ms, techo 4s),
+   recalculada en cada toque. Dos pruebas comparan un tramo de una parada
+   contra uno de dos — verificado por mutación, reintroduciendo la duración
+   fija y confirmando que la prueba del tramo largo reenrojece.)*
+
+   **Aparte, ya con el personaje aprobado, Rodrigo abrió un tema distinto —
+   Parte A, no Parte B:** "el camino son solo flechas, podemos hacerlo más
+   un reino" — el trazo de `pintor_senda.dart` (línea + flechas de
+   dirección) se siente utilitario, no temático. Sin alcance definido
+   todavía — pendiente aclarar qué cambiar antes de tocar nada.
 6. **Fase E — la lámina completa** de esa combinación + `scripts/laminar.py`.
 7. **Fase F — los props** + anclas de mano medidas en Python.
 8. **Fase G — las 7 láminas restantes**, editadas sobre la primera aprobada.
