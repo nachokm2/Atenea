@@ -324,28 +324,42 @@ class _MundoState extends State<_Mundo> {
   }
 }
 
-/// Ancho y alto de la estructura ilustrada que se compone DETRÁS del círculo
-/// (Fase E, a pedido de Rodrigo viendo el terreno ya wireado: "me agrada el
-/// fondo, podemos agregar castillos o algo donde llega el personaje?").
+/// Lado de la caja cuadrada donde se compone la estructura ilustrada,
+/// DETRÁS del círculo (Fase E, a pedido de Rodrigo viendo el terreno ya
+/// wireado: "me agrada el fondo, podemos agregar castillos o algo donde
+/// llega el personaje?").
 ///
-/// 140dp de alto es el techo que ya validamos contra `pasoDeParada` (240dp,
-/// `senda.dart`): dos estructuras consecutivas, ancladas cada una por su
-/// BASE en su propia parada (igual que `CaminanteEnSenda` ancla en los
-/// pies, no en el centro), quedan con 100dp de aire entre la base de la de
-/// arriba y el techo de la de abajo (240 − 140) — aun en el peor caso, sin
-/// aprovechar el serpenteo horizontal del sendero (`puntoEnY`), que en la
-/// práctica separa aún más a la mayoría de los pares consecutivos. Más
-/// angosta que alta (112dp) para no acercarse al borde del mundo cuando la
-/// pantalla es tan angosta como `_anchoMinimo` (320dp, `senda.dart`).
+/// Cuadrada, no angosta — Rodrigo, en el teléfono, sobre la primera versión
+/// (112×140): "el personaje se ve más grande que las estructuras, se ve
+/// raro que sea más grande que un castillo". Mismo bug que ya se encontró y
+/// arregló para `Caminante` (ver su comentario en `caminante.dart`): el
+/// lienzo maestro del arte es cuadrado (1024×1024,
+/// `experimento_estructuras_mundo.py.LIENZO`), y una caja más angosta que
+/// alta hace que `BoxFit.contain` encoja el cuadrado al lado corto —el
+/// ancho—, dejando la estructura muy por debajo del alto que la caja
+/// sugería. Con una caja cuadrada, el lienzo entra exacto y la estructura
+/// usa el alto real que su propia silueta ocupa dentro de él.
 ///
-/// Nota para la Fase de arte real: `margenSenda` (96dp, `senda.dart`) es
-/// MENOR que este alto — la estructura de la parada 0 se recorta ~44dp
-/// contra el borde superior del mundo. Inocuo por ahora (ese borde no se ve:
-/// la cámara arranca centrada en la parada actual, no en el tope del
-/// mundo) pero si se nota al pulir, la corrección es `margenSenda` ≥
-/// `_altoEstructura`, no achicar la estructura de todas las demás paradas.
-const double _anchoEstructura = 112;
-const double _altoEstructura = 140;
+/// El alto EFECTIVO que se ve en pantalla no es este lado sino
+/// `_ladoEstructura / 1024 * alto_de_la_silueta_en_el_lienzo` — con
+/// `_ladoEstructura = 260`: `completado` (la más alta de las 5,
+/// `ALTO_ESTRUCTURA_MAYOR = 460` en el script) sale a ~117dp, el tesoro
+/// (`ALTO_TESORO = 760`) a ~193dp — las dos claramente más altas que el
+/// caminante (~73dp, `caminante.dart`) y el tesoro claramente el más
+/// grande de todos, que es la lectura que se buscaba.
+///
+/// Margen contra `pasoDeParada` (240dp, `senda.dart`), el caso más
+/// ajustado: el tesoro (~193dp) deja ~47dp de aire hasta la parada
+/// anterior (ancladas cada una por su BASE, igual que `CaminanteEnSenda`
+/// ancla en los pies) — el tesoro además es siempre la ÚLTIMA parada, así
+/// que nunca tiene una estructura propia inmediatamente encima compitiendo
+/// por ese aire.
+///
+/// Nota para pulido futuro: `margenSenda` (96dp, `senda.dart`) sigue siendo
+/// menor que ~117-193dp, así que la estructura de la parada 0 se recorta
+/// contra el borde superior del mundo — inocuo (ese borde no se ve: la
+/// cámara arranca centrada en la parada actual, no en el tope del mundo).
+const double _ladoEstructura = 260;
 
 /// Qué archivo de estructura ilustrada le corresponde a cada `EstiloNodo` —
 /// mismo patrón que `_iconoDeReino`, y a propósito un `switch` sobre el
@@ -426,13 +440,13 @@ class _ParadaSpike extends StatelessWidget {
           // toque siga siendo el círculo de abajo — nunca dos áreas
           // tocables ambiguas para la misma parada.
           Positioned(
-            left: (56 - _anchoEstructura) / 2,
+            left: (56 - _ladoEstructura) / 2,
             bottom: 28,
             child: IgnorePointer(
               child: ExcludeSemantics(
                 child: SizedBox(
-                  width: _anchoEstructura,
-                  height: _altoEstructura,
+                  width: _ladoEstructura,
+                  height: _ladoEstructura,
                   child: Image.asset(
                     rutaEstructura,
                     fit: BoxFit.contain,

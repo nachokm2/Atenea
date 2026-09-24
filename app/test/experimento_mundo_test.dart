@@ -213,11 +213,36 @@ void main() {
           '`EstiloNodo.bloqueado`',
     );
 
-    // Sin arte real todavía: las seis `Image.asset` fallan a resolver y caen
-    // a su `errorBuilder` — y eso no debe filtrarse como una excepción de
-    // prueba (la Fase de scaffolding tiene que verse igual de "sana" que
-    // cuando el arte exista).
+    // Con arte real ya wireado, las seis `Image.asset` resuelven — y aunque
+    // no resolvieran (una combinación futura sin arte), el `errorBuilder`
+    // nunca debe filtrarse como una excepción de prueba.
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'la caja de la estructura es cuadrada, no un rectángulo angosto',
+      (WidgetTester tester) async {
+    // Rodrigo, en el teléfono: "el personaje se ve más grande que las
+    // estructuras, se ve raro que sea más grande que un castillo". Mismo
+    // bug que ya se encontró y arregló para `Caminante`
+    // (`caminante_test.dart`, "la caja es cuadrada..."): el lienzo maestro
+    // del arte es cuadrado (1024×1024), y una caja de despliegue más
+    // angosta que alta hace que `BoxFit.contain` la encoja al lado corto.
+    await _montar(tester);
+
+    final Finder estructura = find.descendant(
+      of: find.byKey(const ValueKey<String>('parada-0')),
+      matching: find.byType(SizedBox),
+    );
+    // Dos `SizedBox` bajo la parada 0: el de layout (56×56, el círculo) y el
+    // de la estructura — el de la estructura es el que no mide 56×56.
+    final SizedBox caja = tester
+        .widgetList<SizedBox>(estructura)
+        .firstWhere((SizedBox s) => s.width != 56);
+
+    expect(caja.width, caja.height,
+        reason: 'la caja de la estructura tiene que ser cuadrada, para que '
+            'BoxFit.contain no encoja el lienzo 1024×1024 al lado corto');
   });
 
   group('velocidad constante, no duración fija', () {
