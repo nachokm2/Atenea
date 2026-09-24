@@ -324,6 +324,66 @@ class _MundoState extends State<_Mundo> {
   }
 }
 
+/// Ancho y alto de la estructura ilustrada que se compone DETRÁS del círculo
+/// (Fase E, a pedido de Rodrigo viendo el terreno ya wireado: "me agrada el
+/// fondo, podemos agregar castillos o algo donde llega el personaje?").
+///
+/// 140dp de alto es el techo que ya validamos contra `pasoDeParada` (240dp,
+/// `senda.dart`): dos estructuras consecutivas, ancladas cada una por su
+/// BASE en su propia parada (igual que `CaminanteEnSenda` ancla en los
+/// pies, no en el centro), quedan con 100dp de aire entre la base de la de
+/// arriba y el techo de la de abajo (240 − 140) — aun en el peor caso, sin
+/// aprovechar el serpenteo horizontal del sendero (`puntoEnY`), que en la
+/// práctica separa aún más a la mayoría de los pares consecutivos. Más
+/// angosta que alta (112dp) para no acercarse al borde del mundo cuando la
+/// pantalla es tan angosta como `_anchoMinimo` (320dp, `senda.dart`).
+///
+/// Nota para la Fase de arte real: `margenSenda` (96dp, `senda.dart`) es
+/// MENOR que este alto — la estructura de la parada 0 se recorta ~44dp
+/// contra el borde superior del mundo. Inocuo por ahora (ese borde no se ve:
+/// la cámara arranca centrada en la parada actual, no en el tope del
+/// mundo) pero si se nota al pulir, la corrección es `margenSenda` ≥
+/// `_altoEstructura`, no achicar la estructura de todas las demás paradas.
+const double _anchoEstructura = 112;
+const double _altoEstructura = 140;
+
+/// Qué archivo de estructura ilustrada le corresponde a cada `EstiloNodo` —
+/// mismo patrón que `_iconoDeReino`, y a propósito un `switch` sobre el
+/// enum y no un `Map<EstiloNodo, String>`: con el `switch`, si mañana se
+/// agrega un caso a `EstiloNodo` y esta función no se actualiza, el
+/// análisis estático de Dart lo marca como error de compilación — con un
+/// `Map` esa omisión compila igual y el estado nuevo se queda sin arte en
+/// silencio hasta que alguien lo note a ojo. El tesoro no es un caso más de
+/// este switch: es un `TipoParada` aparte, resuelto en `_ParadaSpike` con
+/// `_rutaDeEstructuraDelTesoro`, igual que ya hace `_iconoDeReino` con
+/// `Icons.emoji_events_rounded` en vez de leer este switch para el tesoro.
+///
+/// Sin arte real todavía (fase de scaffolding, antes de gastar en arte):
+/// estos seis archivos (los 5 de acá + el del tesoro) no existen ni están
+/// declarados en `pubspec.yaml`, así que las seis paradas caen solas, vía
+/// el `errorBuilder` de `Image.asset`, a `SizedBox.shrink()` — a diferencia
+/// de `Caminante`/`TerrenoDelMundo`, acá la caída no necesita pintar un
+/// placeholder propio: el círculo con su ícono, detrás del cual se compone
+/// esta estructura, ya es la vista completa.
+String _rutaDeEstructura(EstiloNodo estilo) => switch (estilo) {
+      EstiloNodo.completado => 'assets/arte/mundo/estructuras/completado.webp',
+      EstiloNodo.actual => 'assets/arte/mundo/estructuras/actual.webp',
+      EstiloNodo.disponible => 'assets/arte/mundo/estructuras/disponible.webp',
+      EstiloNodo.bloqueado => 'assets/arte/mundo/estructuras/bloqueado.webp',
+      EstiloNodo.enConstruccion =>
+        'assets/arte/mundo/estructuras/en_construccion.webp',
+    };
+
+/// La estructura del tesoro final — deliberadamente su propio archivo, no
+/// el de `EstiloNodo.bloqueado`/`completado` que el tesoro también podría
+/// tener (ver `Senda.desdeDetalle`: el tesoro usa esos mismos dos estilos
+/// para SU color, mientras la Ruta no está completa/completa). Un cofre o
+/// portón final se lee distinto de un castillo bloqueado a mitad de camino,
+/// igual que el tesoro ya usa `Icons.emoji_events_rounded` en vez de
+/// `_iconoDeReino(estilo)`.
+const String _rutaDeEstructuraDelTesoro =
+    'assets/arte/mundo/estructuras/tesoro.webp';
+
 class _ParadaSpike extends StatelessWidget {
   const _ParadaSpike({required this.parada, required this.onTap, super.key});
 
@@ -333,29 +393,84 @@ class _ParadaSpike extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final Color color = colorDeNodo(context, parada.estilo);
-    return Semantics(
-      button: true,
-      label: parada.tipo == TipoParada.tesoro
-          ? 'Tesoro final'
-          : (parada.modulo?.nombreVisible ?? 'Módulo ${parada.indice + 1}'),
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 56,
-          height: 56,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: color.withValues(alpha: 0.18),
-            border: Border.all(color: color, width: 2),
+    final String rutaEstructura = parada.tipo == TipoParada.tesoro
+        ? _rutaDeEstructuraDelTesoro
+        : _rutaDeEstructura(parada.estilo);
+
+    // La caja de layout sigue siendo 56×56: el `Positioned` que la ubica en
+    // `_MundoState.build()` (`parada.centro - 28`) no cambia una línea, así
+    // que el círculo tocable tampoco se mueve un pixel — sigue siendo
+    // exactamente el mismo punto donde el usuario ya espera tocar. La
+    // estructura se compone DETRÁS del círculo y se pinta POR FUERA de esta
+    // caja (`Stack.clipBehavior: Clip.none`); agrandar la caja misma, en vez
+    // de dejarla desbordar, movería ese punto de anclaje del toque.
+    return SizedBox(
+      width: 56,
+      height: 56,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          // Detrás y más grande: ancla su BASE en el mismo punto de sendero
+          // que el círculo — igual que el caminante ancla en los pies, no
+          // en el centro (`CaminanteEnSenda`, `caminante.dart`): una
+          // estructura como un castillo "pisa" el punto del sendero con su
+          // base, no flota centrada sobre él.
+          //
+          // `bottom: 28`, no `bottom: 0`: el punto real del sendero
+          // (`parada.centro`) está a 28dp del borde inferior de esta caja de
+          // 56×56 (su mitad, `56 / 2`) — ahí es donde tiene que pisar la
+          // base de la estructura, no en el borde de la caja.
+          //
+          // Puramente decorativa: `IgnorePointer` + `ExcludeSemantics`, para
+          // que el único nodo de accesibilidad y el único que responde al
+          // toque siga siendo el círculo de abajo — nunca dos áreas
+          // tocables ambiguas para la misma parada.
+          Positioned(
+            left: (56 - _anchoEstructura) / 2,
+            bottom: 28,
+            child: IgnorePointer(
+              child: ExcludeSemantics(
+                child: SizedBox(
+                  width: _anchoEstructura,
+                  height: _altoEstructura,
+                  child: Image.asset(
+                    rutaEstructura,
+                    fit: BoxFit.contain,
+                    alignment: Alignment.bottomCenter,
+                    errorBuilder:
+                        (BuildContext context, Object error, StackTrace? pila) =>
+                            const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+            ),
           ),
-          child: Icon(
-            parada.tipo == TipoParada.tesoro
-                ? Icons.emoji_events_rounded
-                : _iconoDeReino(parada.estilo),
-            color: color,
+          Semantics(
+            button: true,
+            label: parada.tipo == TipoParada.tesoro
+                ? 'Tesoro final'
+                : (parada.modulo?.nombreVisible ?? 'Módulo ${parada.indice + 1}'),
+            child: GestureDetector(
+              onTap: onTap,
+              child: Container(
+                width: 56,
+                height: 56,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: color.withValues(alpha: 0.18),
+                  border: Border.all(color: color, width: 2),
+                ),
+                child: Icon(
+                  parada.tipo == TipoParada.tesoro
+                      ? Icons.emoji_events_rounded
+                      : _iconoDeReino(parada.estilo),
+                  color: color,
+                ),
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -375,22 +490,33 @@ IconData _iconoDeReino(EstiloNodo estilo) => switch (estilo) {
       EstiloNodo.enConstruccion => Icons.local_fire_department_rounded, // la forja, aún trabajando
     };
 
-/// Una Ruta de ejemplo con `n` módulos, variando su estilo a propósito: el
-/// primero completado, uno "actual", uno bloqueado a la mitad, para que el
-/// experimento muestre los tres colores del trazo (recorrido, pendiente,
-/// más allá del candado) sin depender de datos reales.
+/// Una Ruta de ejemplo con `n` módulos, variando su estilo a propósito: los
+/// cinco `EstiloNodo` de una vez (índices 0 a 4: completado, actual,
+/// enConstruccion, disponible, bloqueado), y de ahí en más todo bloqueado —
+/// para que el experimento muestre los tres colores del trazo (recorrido,
+/// pendiente, más allá del candado) Y las seis estructuras ilustradas (Fase
+/// E, `_rutaDeEstructura`) sin depender de datos reales.
+///
+/// El índice 1 llega solo a `EstiloNodo.actual`: `status: 'in_progress'` lo
+/// vuelve el primer módulo con `EstadoModulo.enProgreso`, y
+/// `DetalleRuta.moduloActual` (`dtos.dart`) devuelve exactamente ese —
+/// ningún campo aparte que fijar a mano.
 DetalleRuta _detalleDeEjemplo(int n) {
   final List<Map<String, dynamic>> modulos = <Map<String, dynamic>>[];
   for (int i = 0; i < n; i++) {
     final String estado = i == 0
         ? 'completed'
-        : (i == 1 ? 'in_progress' : (i <= 2 ? 'available' : 'locked'));
+        : (i == 1 ? 'in_progress' : (i <= 3 ? 'available' : 'locked'));
     modulos.add(<String, dynamic>{
       'module_id': 'mod-$i',
       'title': 'Módulo ${i + 1}',
       'position': i + 1,
       'status': estado,
-      'content_status': 'ready',
+      // Índice 2: "disponible" en `status` (no bloqueado, sigue siendo
+      // alcanzable) pero con contenido todavía escribiéndose — la única
+      // combinación real que produce `EstiloNodo.enConstruccion`
+      // (`estiloDeModulo` la resuelve ANTES que "actual"/"disponible").
+      'content_status': i == 2 ? 'generating' : 'ready',
       'lessons_total': 2,
       'lessons_completed': i == 0 ? 2 : 0,
       'mastery': i == 0 ? 82.0 : 0.0,
@@ -408,7 +534,7 @@ DetalleRuta _detalleDeEjemplo(int n) {
         'can_start': i <= 1,
         'cooldown_until': null,
       },
-      'locked_reason': i > 2 ? 'Completa el módulo $i para desbloquear' : null,
+      'locked_reason': i > 3 ? 'Completa el módulo $i para desbloquear' : null,
       'topics': <Map<String, dynamic>>[
         <String, dynamic>{
           'topic_id': 'tema-$i',

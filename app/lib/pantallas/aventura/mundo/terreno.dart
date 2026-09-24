@@ -44,11 +44,11 @@ const List<String> tramosDeTerreno = <String>[
   'assets/arte/mundo/terreno/tramo_00.webp',
 ];
 
-/// Color plano dominante del arte (a medir sobre la lámina real cuando
-/// exista, no elegido a ojo) — pintado debajo de las bandas para que un
-/// fotograma sin resolver, o una variante que falte, nunca abran un agujero
-/// al fondo de la app.
-const Color colorDeSuelo = Color(0xFF3B4A2F);
+/// Color plano dominante del arte — medido con Pillow sobre la esquina de
+/// `tramo_00.webp` (`#829835`), no elegido a ojo. Pintado debajo de las
+/// bandas para que un fotograma sin resolver, o una variante que falte,
+/// nunca abran un agujero al fondo de la app.
+const Color colorDeSuelo = Color(0xFF829835);
 
 /// El fondo ilustrado del mundo, del alto de `tamano` — pensado para vivir
 /// como el primer hijo del `Stack` de `_MundoState`, detrás del trazo, las

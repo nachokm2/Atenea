@@ -37,6 +37,23 @@ String _rutaDeLaImagen(WidgetTester tester) {
   return (imagen.image as AssetImage).assetName;
 }
 
+// Generaliza `_rutaDeLaImagen` a la estructura ilustrada de una parada: cada
+// `_ParadaSpike` lleva la clave `ValueKey('parada-$indice')`
+// (`_MundoState.build()`), y adentro de ella hay como máximo una `Image` —
+// la de la estructura; el círculo pinta un `Icon`, no una `Image`. Lee la
+// ruta pedida sin que el archivo tenga que existir: `Image.asset` guarda su
+// `AssetImage` de configuración aunque el `errorBuilder` haya reemplazado lo
+// que en verdad se pintó (mismo principio que ya usa `_rutaDeLaImagen`).
+String? _rutaDeEstructuraEnParada(WidgetTester tester, int indice) {
+  final Finder estructuras = find.descendant(
+    of: find.byKey(ValueKey<String>('parada-$indice')),
+    matching: find.byType(Image),
+  );
+  if (estructuras.evaluate().isEmpty) return null;
+  final Image imagen = tester.widget<Image>(estructuras);
+  return (imagen.image as AssetImage).assetName;
+}
+
 Future<void> _montar(WidgetTester tester) async {
   await tester.binding.setSurfaceSize(const Size(412, 915));
   addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -90,8 +107,10 @@ void main() {
       (WidgetTester tester) async {
     await _montar(tester);
 
-    // Módulo 3 (índice 2) es `available` en el detalle de ejemplo — la
-    // última parada realmente alcanzable.
+    // Módulo 3 (índice 2) es `EstiloNodo.enConstruccion` en el detalle de
+    // ejemplo — no bloqueada (el Reino sigue escribiendo su contenido, pero
+    // ya se puede pisar), así que sigue sin aviso aunque ya no sea la
+    // última parada alcanzable (esa es el Módulo 4, índice 3).
     await tester.tap(find.bySemanticsLabel('Módulo 3'));
     await tester.pump(Movimiento.corta);
     await tester.pump(Movimiento.corta);
@@ -105,16 +124,16 @@ void main() {
       (WidgetTester tester) async {
     await _montar(tester);
 
-    // Módulo 4 (índice 3) es el primer `locked` del detalle de ejemplo, pero
+    // Módulo 5 (índice 4) es el primer `locked` del detalle de ejemplo, pero
     // cae fuera del viewport inicial — hay que desplazar la cámara primero.
-    await tester.ensureVisible(find.bySemanticsLabel('Módulo 4'));
+    await tester.ensureVisible(find.bySemanticsLabel('Módulo 5'));
     await tester.pump();
-    await tester.tap(find.bySemanticsLabel('Módulo 4'));
+    await tester.tap(find.bySemanticsLabel('Módulo 5'));
     await tester.pump(Movimiento.corta);
     await tester.pump(Movimiento.corta);
 
     expect(
-      find.text('Completa el módulo 3 para desbloquear'),
+      find.text('Completa el módulo 4 para desbloquear'),
       findsOneWidget,
       reason: 'el aviso debe repetir el `locked_reason` real, no un texto '
           'genérico inventado en el spike',
@@ -146,6 +165,59 @@ void main() {
     await tester.pump();
     expect(_rutaDeLaImagen(tester), contains('reposo_'),
         reason: 'llegado el destino, tiene que volver a reposo');
+  });
+
+  testWidgets(
+      'cada EstiloNodo (y el tesoro) piden un archivo de estructura propio y '
+      'distinto — protege el mapeo de `_rutaDeEstructura` de un caso que se '
+      'cae del switch o de dos estados que colapsan al mismo archivo',
+      (WidgetTester tester) async {
+    await _montar(tester);
+    // Módulo 5 (índice 4, bloqueado — ver `_detalleDeEjemplo`) cae fuera del
+    // viewport inicial. `find.byKey` no necesita que el widget esté visible
+    // en pantalla (`SingleChildScrollView` monta su único hijo entero), pero
+    // desplazar igual documenta por qué esta prueba no es frágil ante ese
+    // detalle.
+    await tester.ensureVisible(find.bySemanticsLabel('Módulo 5'));
+    await tester.pump();
+
+    // Índices 0 a 4: completado, actual, enConstruccion, disponible,
+    // bloqueado — los cinco `EstiloNodo`, uno por índice, tal como los arma
+    // `_detalleDeEjemplo`.
+    final Map<int, String> rutaPorIndice = <int, String>{
+      for (final int i in <int>[0, 1, 2, 3, 4])
+        i: _rutaDeEstructuraEnParada(tester, i) ??
+            (throw StateError(
+              'la parada $i no pinta ninguna Image de estructura — '
+              '¿_ParadaSpike dejó de componerla?',
+            )),
+    };
+
+    expect(
+      rutaPorIndice.values.toSet().length,
+      5,
+      reason: 'dos EstiloNodo distintos están pidiendo el mismo archivo de '
+          'estructura: $rutaPorIndice',
+    );
+
+    // El tesoro (índice 6 con los 6 módulos por defecto) no es un caso más
+    // del switch de `EstiloNodo` — tiene su propio archivo aunque, como acá,
+    // su `EstiloNodo` subyacente (bloqueado, la Ruta no está completa)
+    // coincida con el de otra parada.
+    final String? rutaTesoro = _rutaDeEstructuraEnParada(tester, 6);
+    expect(rutaTesoro, isNotNull);
+    expect(
+      rutaPorIndice.values.contains(rutaTesoro),
+      isFalse,
+      reason: 'el tesoro debe pedir su propio archivo, no el de '
+          '`EstiloNodo.bloqueado`',
+    );
+
+    // Sin arte real todavía: las seis `Image.asset` fallan a resolver y caen
+    // a su `errorBuilder` — y eso no debe filtrarse como una excepción de
+    // prueba (la Fase de scaffolding tiene que verse igual de "sana" que
+    // cuando el arte exista).
+    expect(tester.takeException(), isNull);
   });
 
   group('velocidad constante, no duración fija', () {

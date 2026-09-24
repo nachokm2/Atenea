@@ -64,14 +64,18 @@ no en ilustraciones detalladas como las de Atenea.
   espalda en el arte, y la figura del mundo hereda la misma limitación por
   diseño: izquierda/derecha es un espejo horizontal, nunca un giro.
 
-## 3. Parte A — El mundo caminable (sin cambios de diseño)
+## 3. Parte A — El mundo caminable (revisitada: ver §7)
 
-**Ya construido y probado**, sigue en pie sin cambios:
+**Ya construido y probado** en su geometría, sin cambios ahí:
 `app/lib/pantallas/aventura/mundo/senda.dart` (geometría pura — la posición
 de la parada `i` es función de `i` sola, nunca del total), `pintor_senda.dart`
 (el trazo y los portones) y `experimento_mundo.dart` (el spike de la Fase 0a,
 con un disco de color como caminante — sigue en el repo, gateado a
 `kDebugMode`, enlazado desde Ajustes → Herramientas del Reino).
+
+**Sí cambió el entorno visual**, a pedido de Rodrigo una vez aprobado el
+personaje (Fases T0-T4, ver §7): terreno ilustrado extensible + estructuras
+por estado de parada.
 
 **Pendiente para producción:** reemplazar `CaminoDeLaRuta` en `mapa_ruta.dart`
 por el mundo real, con el `Caminante` de la Parte B en vez del disco.
@@ -331,3 +335,93 @@ atlas), `cacheWidth` obligatorio, `RepaintBoundary`, `gaplessPlayback`.
   Fase D (pendiente el APK), E, F. Ya quedó demostrado en este mismo plan que
   el veredicto en el teléfono real puede contradecir la teoría de diseño
   previa; ningún test automático lo reemplaza.
+
+## 7. Parte A revisitada: terreno ilustrado y estructuras (Fases T0-T4)
+
+Con el personaje ya aprobado (Fase D, §5), Rodrigo miró el resto del spike:
+"el camino son solo flechas, podemos hacerlo más un reino". Dos rondas de
+`AskUserQuestion` acotaron el pedido: no eran los íconos (ver más abajo, ya
+resuelto aparte); era el camino y el entorno — quería "arte mucho más
+inmersivo", y eligió, entre las alternativas planteadas, "todo el mundo como
+una ilustración única". Esto choca con que los módulos de una Ruta crecen de
+a uno sin total fijo (`senda.dart`); la salida —discutida y elegida por
+Rodrigo— es la misma que usan mapas de nivel tipo Candy Crush/Clash Royale:
+terreno ilustrado que se repite sin límite, con el camino y las paradas
+dibujándose encima por código, en sus posiciones reales. Plan completo en
+`C:\Users\Msi chile\.claude\plans\synthetic-sauteeing-reef.md`.
+
+1. **Fase T0 — el sendero usaba un ancho fijo (360) en vez del ancho real de
+   la pantalla. ✅ Hecho (24-09-2026), US$0.** Bug real encontrado
+   planificando el terreno, antes de tocar arte: invisible con un trazo de
+   6px, se habría notado con terreno que llena el ancho. `LayoutBuilder`
+   alrededor del `Expanded`, `Senda` construida una sola vez.
+   `_tocarParada` pasa a recibirla en vez de reconstruirla con el mismo
+   literal. Prueba de regresión verificada por mutación — la parada 0 no
+   sirve para esta prueba (cae justo en el centro, donde el centrado del
+   `Column` cancela el error por coincidencia); la parada 1, en el extremo
+   de la serpentina, sí lo detecta.
+2. **Fase T1 — `TerrenoDelMundo`, sin arte real todavía. ✅ Hecho
+   (24-09-2026), US$0.** Un `Stack` de bandas cuadradas ancladas en
+   `top: i * alto` — no `Image.asset(repeat: ImageRepeat.repeatY)`, que
+   ancla la fase del mosaico al `alignment` del `Image` (centrado por
+   defecto) y se correría bajo el sendero cada vez que `Senda.tamano.height`
+   crece. La variante de cada banda es función de su índice solo, igual que
+   `senda.dart` ya aplica a las paradas. `errorBuilder` cae a un color de
+   suelo plano. Verificado con un agente de Plan contra el SDK de Flutter
+   instalado (3.38.2) antes de escribir el widget.
+3. **Fase T2 — una lámina real de terreno. ✅ Hecho (24-09-2026), ~US$0,10.**
+   `scripts/experimento_terreno_mundo.py`: pradera vista desde arriba, sin
+   camino ni objeto grande y discreto (desentonaría al repetirse), pensada
+   para repetirse verticalmente — medido con Pillow que el borde superior y
+   el inferior difieren en menos de 1 punto de RGB. **Veredicto de Rodrigo,
+   en el teléfono: "me agrada el fondo."**
+4. **Fase T4 — estructuras ilustradas por estado de parada. ✅ Hecho
+   (24-09-2026), ~US$0,20.** A pedido de Rodrigo viendo el terreno ya
+   wireado: "podemos agregar castillos o algo donde llega el personaje?".
+   Aclarado con `AskUserQuestion`: las estructuras varían **según el estado
+   de la parada** (`EstiloNodo`), reforzando lo que ya hacía un cambio de
+   íconos previo (`_iconoDeReino`, con íconos Material) pero con
+   ilustración real.
+
+   Diseñado con un workflow de dos agentes en paralelo (arte + composición
+   Flutter) — **uno de los dos se excedió del encargo y además de diseñar
+   implementó código real**, sin pedirlo. Revisado todo el diff a fondo
+   antes de aceptar nada (no confiar en el "38/38 tests" que el propio
+   agente reportó): `flutter analyze` limpio y la suite completa verificados
+   de nuevo por mi cuenta, más una mutación propia sobre el mapeo
+   estado→archivo (confirmado que reenrojece si dos estados colapsan al
+   mismo archivo). El diseño en sí resultó sólido — reusa el ancla por base
+   de `CaminanteEnSenda`, compone la estructura DETRÁS del círculo tocable
+   existente sin moverle un pixel al área de toque (`IgnorePointer` +
+   `ExcludeSemantics` sobre la ilustración, para que el círculo siga siendo
+   el único nodo de accesibilidad), y un `switch` (no un `Map`) para que el
+   analizador de Dart marque en rojo cualquier `EstiloNodo` nuevo que se
+   quede sin una estructura asignada.
+
+   Seis ilustraciones (`scripts/experimento_estructuras_mundo.py`, pipeline
+   del personaje —fondo transparente, un objeto discreto— no el del
+   terreno): torre en ruinas con niebla (bloqueado), torre con andamios y
+   fragua (enConstrucción), puesto de avanzada modesto (disponible), un
+   asta con estandarte y brasero —sin edificio, para no competir con el
+   caminante real (actual)—, torre completa con bandera desplegada
+   (completado), y un castillo grande de al menos tres torres (el tesoro,
+   en llamada aparte, a otra escala).
+
+   **Bug real encontrado y corregido antes de mostrarlo, no a ojo sino
+   midiendo el canal alfa con Pillow:** 4 de las 5 estructuras de la lámina
+   de estados salían con un rectángulo magenta opaco detrás en vez de fondo
+   transparente. Causa: `vestir.solo_fondo()` decide su método comparando
+   el área de magenta contra el 10% de un lienzo de referencia 1024×1024;
+   al pasarle una celda de grilla mucho más chica con una estructura grande
+   que deja menos del 10% de ESA celda en magenta (aunque sobre de sobra,
+   proporcionalmente), cae a su rama de respaldo —píxeles oscuros pegados
+   al borde—, que no reconoce un fondo magenta en absoluto. Arreglado
+   separando el fondo **una sola vez sobre la lámina entera** (1024×1024,
+   donde el umbral sí aplica como está pensado) antes de partir en celdas.
+   Reprocesado desde el PNG crudo ya descargado, sin llamar de nuevo al
+   modelo.
+
+   **Pendiente: el APK a Rodrigo y su veredicto.**
+5. **Fase T3 (si hiciera falta) — más variantes de terreno.** Solo si T2
+   se sintió repetitivo — no fue el caso ("me agrada el fondo"), así que
+   queda en espera.
