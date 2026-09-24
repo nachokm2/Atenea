@@ -12,6 +12,7 @@ library;
 
 import 'package:atenea/design/theme.dart';
 import 'package:atenea/design/tokens.dart';
+import 'package:atenea/pantallas/aventura/mundo/caminante.dart';
 import 'package:atenea/pantallas/aventura/mundo/experimento_mundo.dart';
 import 'package:atenea/pantallas/aventura/mundo/senda.dart';
 import 'package:flutter/material.dart';
@@ -24,8 +25,15 @@ import 'ayudas.dart';
 // reposo ni marcha caen nunca al pintor de mentira para esta combinación, así
 // que "¿está en marcha o en reposo?" se lee de qué fotograma pidió la
 // `Image` real, no de `PintorDeCaminanteDeMentira`.
+//
+// `find.descendant(of: Caminante, ...)`, no `find.byType(Image).first`: el
+// terreno (Parte A, `terreno.dart`) también pinta `Image`s, detrás de todo
+// en el `Stack` pero antes en el árbol — `.first` dejó de ser el caminante
+// en cuanto el terreno entró.
 String _rutaDeLaImagen(WidgetTester tester) {
-  final Image imagen = tester.widget<Image>(find.byType(Image).first);
+  final Image imagen = tester.widget<Image>(
+    find.descendant(of: find.byType(Caminante), matching: find.byType(Image)),
+  );
   return (imagen.image as AssetImage).assetName;
 }
 

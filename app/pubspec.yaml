@@ -129,6 +129,10 @@ flutter:
     # ciclo repite las mismas dos). Una carpeta por Orden, misma razón que
     # arriba: las entradas de directorio no son recursivas.
     - assets/arte/mundo/masculino/acero/
+    # El terreno ilustrado del mundo caminable (Parte A, `terreno.dart`) va
+    # acá, `assets/arte/mundo/terreno/` — se agrega a esta lista recién en la
+    # Fase T2, junto con la primera lámina real: una carpeta declarada sin
+    # contenido es una advertencia de `flutter analyze`.
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

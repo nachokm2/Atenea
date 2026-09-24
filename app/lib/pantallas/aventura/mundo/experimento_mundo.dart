@@ -25,6 +25,7 @@ import 'ciclo_marcha.dart';
 import 'figura_del_mundo.dart';
 import 'pintor_senda.dart';
 import 'senda.dart';
+import 'terreno.dart';
 
 /// Figura de ejemplo para el spike — no hay avatar real que leer aquí, igual
 /// que `_detalleDeEjemplo` fabrica una Ruta de ejemplo más abajo.
@@ -291,6 +292,10 @@ class _MundoState extends State<_Mundo> {
         height: senda.tamano.height,
         child: Stack(
           children: <Widget>[
+            // Detrás de todo: el terreno ilustrado (Parte A, "el camino son
+            // solo flechas, podemos hacerlo más un reino"). Sin arte real
+            // todavía (Fase T1) — cae sola a `colorDeSuelo` vía `errorBuilder`.
+            Positioned.fill(child: TerrenoDelMundo(tamano: senda.tamano)),
             Positioned.fill(
               child: CustomPaint(painter: pintorDeSenda(context, senda)),
             ),
