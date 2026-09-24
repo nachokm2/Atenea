@@ -342,24 +342,29 @@ class _MundoState extends State<_Mundo> {
 ///
 /// El alto EFECTIVO que se ve en pantalla no es este lado sino
 /// `_ladoEstructura / 1024 * alto_de_la_silueta_en_el_lienzo` — con
-/// `_ladoEstructura = 260`: `completado` (la más alta de las 5,
-/// `ALTO_ESTRUCTURA_MAYOR = 460` en el script) sale a ~117dp, el tesoro
-/// (`ALTO_TESORO = 760`) a ~193dp — las dos claramente más altas que el
-/// caminante (~73dp, `caminante.dart`) y el tesoro claramente el más
-/// grande de todos, que es la lectura que se buscaba.
+/// `_ladoEstructura = 300` (subido de 260 a pedido de Rodrigo, viendo ya la
+/// caja cuadrada: "aun es un poco pequeño... le aumentaria un poco más"):
+/// `completado` (la más alta de las 5, `ALTO_ESTRUCTURA_MAYOR = 460` en el
+/// script) sale a ~135dp, el tesoro (`ALTO_TESORO = 760`) a ~223dp — las dos
+/// claramente más altas que el caminante (~73dp, `caminante.dart`) y el
+/// tesoro claramente el más grande de todos, que es la lectura que se
+/// buscaba.
 ///
 /// Margen contra `pasoDeParada` (240dp, `senda.dart`), el caso más
-/// ajustado: el tesoro (~193dp) deja ~47dp de aire hasta la parada
-/// anterior (ancladas cada una por su BASE, igual que `CaminanteEnSenda`
-/// ancla en los pies) — el tesoro además es siempre la ÚLTIMA parada, así
-/// que nunca tiene una estructura propia inmediatamente encima compitiendo
-/// por ese aire.
+/// ajustado: el tesoro (~223dp) deja ~17dp de aire hasta la parada anterior
+/// (ancladas cada una por su BASE, igual que `CaminanteEnSenda` ancla en
+/// los pies) — ajustado pero real: nada más ocupa ese aire desde abajo (la
+/// parada anterior solo extiende SU PROPIA estructura hacia arriba, nunca
+/// hacia este tramo), y el tesoro además es siempre la ÚLTIMA parada, así
+/// que nunca compite con una estructura propia inmediatamente encima. Si
+/// en el teléfono se ve apretado, el techo seguro (~30dp de aire) es
+/// `_ladoEstructura ≈ 283`, no más.
 ///
 /// Nota para pulido futuro: `margenSenda` (96dp, `senda.dart`) sigue siendo
-/// menor que ~117-193dp, así que la estructura de la parada 0 se recorta
+/// menor que ~135-223dp, así que la estructura de la parada 0 se recorta
 /// contra el borde superior del mundo — inocuo (ese borde no se ve: la
 /// cámara arranca centrada en la parada actual, no en el tope del mundo).
-const double _ladoEstructura = 260;
+const double _ladoEstructura = 300;
 
 /// Qué archivo de estructura ilustrada le corresponde a cada `EstiloNodo` —
 /// mismo patrón que `_iconoDeReino`, y a propósito un `switch` sobre el
