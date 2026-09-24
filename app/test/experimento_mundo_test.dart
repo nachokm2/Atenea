@@ -248,34 +248,35 @@ void main() {
   group('velocidad constante, no duración fija', () {
     // Rodrigo, en el teléfono, sobre la duración fija anterior (250ms para
     // CUALQUIER tramo): "muy rapido aun". La comparación que de verdad prueba
-    // "a velocidad constante" es esta: un tramo de una parada (~254dp, ~1,27s
-    // a 200dp/s) y uno de dos (~480dp, ~2,4s) tienen que tardar cosas
-    // distintas — con una duración fija, tardarían lo mismo, sea cual sea.
-    // 1,8s cae entre las dos duraciones reales (calculado con la geometría
-    // real de `senda.dart`, no a ojo), así que a esa espera el tramo corto ya
-    // llegó y el largo todavía no.
-    testWidgets('un tramo de una parada ya llegó cuando pasan 1,8s',
+    // "a velocidad constante" es esta: un tramo de una parada (~254dp, ~2,2s
+    // a ~115dp/s — velocidad bajada de nuevo, ver el comentario de
+    // `_msPorFotogramaDeMarcha`) y uno de dos (~480dp, ~4,16s) tienen que
+    // tardar cosas distintas — con una duración fija, tardarían lo mismo,
+    // sea cual sea. 3s cae entre las dos duraciones reales (calculado con
+    // la geometría real de `senda.dart`, no a ojo), así que a esa espera el
+    // tramo corto ya llegó y el largo todavía no.
+    testWidgets('un tramo de una parada ya llegó cuando pasan 3s',
         (WidgetTester tester) async {
       await _montar(tester);
       await tester.tap(find.bySemanticsLabel('Módulo 2'));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 1800));
+      await tester.pump(const Duration(seconds: 3));
       await tester.pump();
 
       expect(_rutaDeLaImagen(tester), contains('reposo_'),
-          reason: 'un tramo de una parada (~1,27s) ya debería haber llegado a los 1,8s');
+          reason: 'un tramo de una parada (~2,2s) ya debería haber llegado a los 3s');
     });
 
-    testWidgets('un tramo de dos paradas sigue en marcha cuando pasan 1,8s',
+    testWidgets('un tramo de dos paradas sigue en marcha cuando pasan 3s',
         (WidgetTester tester) async {
       await _montar(tester);
       await tester.tap(find.bySemanticsLabel('Módulo 3'));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 1800));
+      await tester.pump(const Duration(seconds: 3));
 
       expect(_rutaDeLaImagen(tester), contains('marcha_'),
-          reason: 'un tramo de dos paradas (~2,4s) no debería haber llegado todavía a '
-              'los 1,8s — si tarda lo mismo que el de una parada, la duración es fija, '
+          reason: 'un tramo de dos paradas (~4,16s) no debería haber llegado todavía a '
+              'los 3s — si tarda lo mismo que el de una parada, la duración es fija, '
               'no depende de la distancia');
     });
   });

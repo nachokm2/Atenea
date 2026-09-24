@@ -37,12 +37,21 @@ const FiguraDelMundo _figuraDeEjemplo =
 // fija, pensada para un salto de color arbitrario en la Fase 0a, no para un
 // personaje con un ciclo de marcha real. A velocidad constante en vez de
 // duración fija: cada fotograma de marcha dura lo mismo en pantalla sin
-// importar cuánto mida el tramo, y con 250ms ni un tramo corto alcanzaba a
-// mostrar cada pose el tiempo suficiente para leerse como zancada.
-const double _msPorFotogramaDeMarcha = 150;
+// importar cuánto mida el tramo.
+//
+// 150ms por fotograma (200dp/s) todavía no alcanzaba: con el terreno y las
+// estructuras ya wireados, Rodrigo, en el teléfono: "es muy rara la
+// caminata, es demasiado rapida". 260ms (~115dp/s) — más lento a propósito,
+// no un ajuste chico: bajar la velocidad general baja la cadencia de piernas
+// en la misma proporción (`fotogramaPorDistancia` cuenta por `dp`
+// recorridos, no por tiempo), así que un solo número arregla las dos quejas
+// a la vez. El techo (`_duracionMaximaMs`) sube en la misma proporción para
+// que un tramo largo siga topando a la misma DISTANCIA que antes (~800dp,
+// no a una duración menor que ahora sería demasiado poco tiempo real).
+const double _msPorFotogramaDeMarcha = 260;
 const double _dpPorSegundo = dpPorFotogramaDeMarcha / _msPorFotogramaDeMarcha * 1000;
 const int _duracionMinimaMs = 300;
-const int _duracionMaximaMs = 4000;
+const int _duracionMaximaMs = 7000;
 
 /// Pantalla del experimento: monta un sendero de ejemplo y deja caminar.
 class PantallaExperimentoMundo extends StatefulWidget {
