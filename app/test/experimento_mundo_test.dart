@@ -279,6 +279,30 @@ void main() {
               'los 3s — si tarda lo mismo que el de una parada, la duración es fija, '
               'no depende de la distancia');
     });
+
+    testWidgets(
+        'arranca a velocidad plena — el primer fotograma de marcha no es '
+        'el de contacto', (WidgetTester tester) async {
+      // Rodrigo, en el teléfono, sobre el arranque de cada tramo: "al
+      // comenzar a caminar flota". Causa real: `Curves.easeInOutCubic`
+      // arranca con velocidad casi nula (∝ t³) — a un 10 % de la duración
+      // del tramo, la DISTANCIA recorrida (la que mueve las piernas) era
+      // ~0,4 % del tramo, muy por debajo de un fotograma entero: las
+      // piernas seguían en contacto (fotograma 0) mientras el cuerpo ya se
+      // había desplazado, y eso se lee como deslizarse, no caminar.
+      // `Curves.easeOutCubic` arranca a velocidad plena: al mismo 10 % de
+      // la duración, la distancia recorrida ya es ~27 % del tramo — de
+      // sobra para haber pasado el primer fotograma.
+      await _montar(tester);
+      await tester.tap(find.bySemanticsLabel('Módulo 2'));
+      await tester.pump();
+      // ~10 % de los ~2,2s que tarda este tramo (ver el grupo de arriba).
+      await tester.pump(const Duration(milliseconds: 220));
+
+      expect(_rutaDeLaImagen(tester), isNot(contains('marcha_00')),
+          reason: 'con un arranque a velocidad plena, a los 220ms ya '
+              'debería haber pasado el fotograma de contacto (marcha_00)');
+    });
   });
 
   testWidgets('el slider cambia la cantidad de módulos de ejemplo',

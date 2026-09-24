@@ -99,11 +99,19 @@ class _PantallaExperimentoMundoState extends State<PantallaExperimentoMundo>
 
   DetalleRuta get _detalle => _detalleDeEjemplo(_cantidadDeModulos);
 
-  // La misma curva que ya usaba la animación de posición: el cuerpo frena al
-  // llegar, y por eso `CicloDeMarcha.fotogramaPorDistancia` —que lee este
-  // mismo progreso— nunca puede leer la fase lineal del reloj.
+  // `easeOutCubic`, no `easeInOutCubic`: Rodrigo, en el teléfono, sobre el
+  // arranque de cada tramo: "al comenzar a caminar flota". La razón real:
+  // `easeInOutCubic` empieza con velocidad casi nula (arranque en `t³`), así
+  // que durante el primer tramo del reloj la posición avanza pero la
+  // DISTANCIA recorrida —la que de verdad mueve las piernas,
+  // `fotogramaPorDistancia`— casi no cambia: el cuerpo se desliza hacia
+  // adelante con las piernas todavía en el fotograma de contacto, que se lee
+  // como flotar en vez de dar el primer paso. `easeOutCubic` arranca a
+  // velocidad plena (las piernas alternan desde el primer instante) y solo
+  // frena cerca de la llegada, que es donde de verdad se quiere una
+  // desaceleración natural.
   Animation<double> get _avance =>
-      CurvedAnimation(parent: _control, curve: Curves.easeInOutCubic);
+      CurvedAnimation(parent: _control, curve: Curves.easeOutCubic);
 
   @override
   Widget build(BuildContext context) {
