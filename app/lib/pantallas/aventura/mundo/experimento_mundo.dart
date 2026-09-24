@@ -23,7 +23,6 @@ import '../widgets/nodos_mapa.dart' show EstiloNodo, colorDeNodo;
 import 'caminante.dart';
 import 'ciclo_marcha.dart';
 import 'figura_del_mundo.dart';
-import 'pintor_senda.dart';
 import 'senda.dart';
 import 'terreno.dart';
 
@@ -296,9 +295,11 @@ class _MundoState extends State<_Mundo> {
             // solo flechas, podemos hacerlo más un reino"). Sin arte real
             // todavía (Fase T1) — cae sola a `colorDeSuelo` vía `errorBuilder`.
             Positioned.fill(child: TerrenoDelMundo(tamano: senda.tamano)),
-            Positioned.fill(
-              child: CustomPaint(painter: pintorDeSenda(context, senda)),
-            ),
+            // Sin el trazo del sendero (Fase E, a pedido de Rodrigo: "quitaria
+            // las lineas"): el terreno y las estructuras por estado
+            // (`_ParadaSpike`) ya marcan el camino y qué tramos están
+            // bloqueados —la torre en ruinas de `bloqueado` es su propia
+            // señal— sin que una línea trazada por código compita encima.
             for (final ParadaSenda parada in senda.paradas)
               Positioned(
                 left: parada.centro.dx - 28,

@@ -92,36 +92,85 @@ class _CaminanteState extends State<Caminante> with SingleTickerProviderStateMix
     final Size medida = Size(widget.alto, widget.alto);
     return Semantics(
       label: widget.semantica,
-      child: Transform.flip(
-        flipX: !widget.miraDerecha,
-        child: AnimatedBuilder(
-          animation: avance ?? _reposo,
-          builder: (BuildContext context, Widget? child) {
-            final bool enMarcha = avance != null;
-            final int fotograma = enMarcha
-                ? widget.ciclo.fotogramaPorDistancia(avance.value * widget.longitudDelTramo)
-                : widget.ciclo.fotogramaDeReposoPorFase(_reposo.value);
-            final String ruta = enMarcha
-                ? widget.ciclo.rutaDeMarcha(fotograma)
-                : widget.ciclo.rutaDeReposo(fotograma);
-            return SizedBox(
-              width: medida.width,
-              height: medida.height,
-              child: Image.asset(
-                ruta,
-                height: medida.height,
-                fit: BoxFit.contain,
-                errorBuilder: (BuildContext context, Object error, StackTrace? pila) {
-                  return CustomPaint(
-                    size: medida,
-                    painter: PintorDeCaminanteDeMentira(enMarcha: enMarcha, fotograma: fotograma),
+      child: SizedBox(
+        width: medida.width,
+        height: medida.height,
+        child: Stack(
+          alignment: Alignment.bottomCenter,
+          children: <Widget>[
+            // Rodrigo, en el teléfono: "la caminata aun se ve media rara" —
+            // aclarado con `AskUserQuestion`: el terreno y las estructuras
+            // (`terreno.dart`, Fase T2/E) están vistos algo elevados, como
+            // un mapa de nivel; el personaje se dibujó de frente, a la
+            // altura de los ojos. Sin nada que lo ancle al suelo, se lee
+            // como un recorte de papel parado sobre una foto. Una sombra
+            // elíptica simple, sin arte nuevo, es el truco más barato de
+            // 2D para sugerir que pisa el terreno en vez de flotar sobre
+            // él — fuera del `Transform.flip` a propósito: una elipse
+            // simétrica se ve igual espejada o no.
+            const _Sombra(),
+            Transform.flip(
+              flipX: !widget.miraDerecha,
+              child: AnimatedBuilder(
+                animation: avance ?? _reposo,
+                builder: (BuildContext context, Widget? child) {
+                  final bool enMarcha = avance != null;
+                  final int fotograma = enMarcha
+                      ? widget.ciclo.fotogramaPorDistancia(avance.value * widget.longitudDelTramo)
+                      : widget.ciclo.fotogramaDeReposoPorFase(_reposo.value);
+                  final String ruta = enMarcha
+                      ? widget.ciclo.rutaDeMarcha(fotograma)
+                      : widget.ciclo.rutaDeReposo(fotograma);
+                  return SizedBox(
+                    width: medida.width,
+                    height: medida.height,
+                    child: Image.asset(
+                      ruta,
+                      height: medida.height,
+                      fit: BoxFit.contain,
+                      errorBuilder: (BuildContext context, Object error, StackTrace? pila) {
+                        return CustomPaint(
+                          size: medida,
+                          painter: PintorDeCaminanteDeMentira(enMarcha: enMarcha, fotograma: fotograma),
+                        );
+                      },
+                    ),
                   );
                 },
               ),
-            );
-          },
+            ),
+          ],
         ),
       ),
+    );
+  }
+}
+
+/// Sombra elíptica, plana y semitransparente, bajo los pies del caminante.
+/// Fracciones de `medida.width` de `Caminante` (80dp por defecto en el
+/// spike): ancho y alto fijos en dp harían que la sombra se sintiera
+/// desproporcionada si `alto` cambia — ver el comentario en el uso.
+class _Sombra extends StatelessWidget {
+  const _Sombra();
+
+  static const double _fraccionAncho = 0.42;
+  static const double _fraccionAlto = 0.11;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (BuildContext context, BoxConstraints c) {
+        final double ancho = c.maxWidth * _fraccionAncho;
+        final double alto = c.maxWidth * _fraccionAlto;
+        return Container(
+          width: ancho,
+          height: alto,
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: 0.32),
+            borderRadius: BorderRadius.all(Radius.elliptical(ancho / 2, alto / 2)),
+          ),
+        );
+      },
     );
   }
 }
