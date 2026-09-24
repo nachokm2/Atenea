@@ -101,15 +101,53 @@ void main() {
     expect(_rutaDeLaImagen(tester), contains('marcha_'),
         reason: 'a mitad de camino tiene que estar en marcha, o no se prueba nada');
 
-    // Un poco más que `Movimiento.corta`, no justo — a la duración exacta el
-    // controlador puede seguir en `forward` hasta el próximo tick.
-    await tester.pump(Movimiento.corta + const Duration(milliseconds: 50));
+    // La duración real depende de la distancia del tramo (a velocidad
+    // constante, no a duración fija — ver `_duracionDelTramo`), así que acá
+    // no hay un número exacto que pumpear: se pumpea de sobra (el tramo más
+    // largo posible no pasa de 4 segundos) para no acoplar la prueba a la
+    // fórmula de velocidad.
+    await tester.pump(const Duration(seconds: 5));
     // Un pump más: recién acá `Caminante` vuelve a pedir `rutaDeReposo`, y la
     // `Image` real se resuelve async — no dentro del mismo pump que completa
     // la animación.
     await tester.pump();
     expect(_rutaDeLaImagen(tester), contains('reposo_'),
         reason: 'llegado el destino, tiene que volver a reposo');
+  });
+
+  group('velocidad constante, no duración fija', () {
+    // Rodrigo, en el teléfono, sobre la duración fija anterior (250ms para
+    // CUALQUIER tramo): "muy rapido aun". La comparación que de verdad prueba
+    // "a velocidad constante" es esta: un tramo de una parada (~254dp, ~1,27s
+    // a 200dp/s) y uno de dos (~480dp, ~2,4s) tienen que tardar cosas
+    // distintas — con una duración fija, tardarían lo mismo, sea cual sea.
+    // 1,8s cae entre las dos duraciones reales (calculado con la geometría
+    // real de `senda.dart`, no a ojo), así que a esa espera el tramo corto ya
+    // llegó y el largo todavía no.
+    testWidgets('un tramo de una parada ya llegó cuando pasan 1,8s',
+        (WidgetTester tester) async {
+      await _montar(tester);
+      await tester.tap(find.bySemanticsLabel('Módulo 2'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1800));
+      await tester.pump();
+
+      expect(_rutaDeLaImagen(tester), contains('reposo_'),
+          reason: 'un tramo de una parada (~1,27s) ya debería haber llegado a los 1,8s');
+    });
+
+    testWidgets('un tramo de dos paradas sigue en marcha cuando pasan 1,8s',
+        (WidgetTester tester) async {
+      await _montar(tester);
+      await tester.tap(find.bySemanticsLabel('Módulo 3'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 1800));
+
+      expect(_rutaDeLaImagen(tester), contains('marcha_'),
+          reason: 'un tramo de dos paradas (~2,4s) no debería haber llegado todavía a '
+              'los 1,8s — si tarda lo mismo que el de una parada, la duración es fija, '
+              'no depende de la distancia');
+    });
   });
 
   testWidgets('el slider cambia la cantidad de módulos de ejemplo',

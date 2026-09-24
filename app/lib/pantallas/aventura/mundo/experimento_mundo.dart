@@ -31,6 +31,19 @@ import 'senda.dart';
 const FiguraDelMundo _figuraDeEjemplo =
     FiguraDelMundo(familia: 'masculino', arquetipo: Arquetipo.acero);
 
+// Rodrigo, en el teléfono, sobre el arreglo de las piernas: "muy rapido aun".
+// La causa real no era el espejo de piernas: `_control` animaba CUALQUIER
+// tramo —uno corto o uno larguísimo— en la misma `Movimiento.corta` (250ms)
+// fija, pensada para un salto de color arbitrario en la Fase 0a, no para un
+// personaje con un ciclo de marcha real. A velocidad constante en vez de
+// duración fija: cada fotograma de marcha dura lo mismo en pantalla sin
+// importar cuánto mida el tramo, y con 250ms ni un tramo corto alcanzaba a
+// mostrar cada pose el tiempo suficiente para leerse como zancada.
+const double _msPorFotogramaDeMarcha = 150;
+const double _dpPorSegundo = dpPorFotogramaDeMarcha / _msPorFotogramaDeMarcha * 1000;
+const int _duracionMinimaMs = 300;
+const int _duracionMaximaMs = 4000;
+
 /// Pantalla del experimento: monta un sendero de ejemplo y deja caminar.
 class PantallaExperimentoMundo extends StatefulWidget {
   const PantallaExperimentoMundo({super.key});
@@ -56,7 +69,9 @@ class _PantallaExperimentoMundoState extends State<PantallaExperimentoMundo>
   @override
   void initState() {
     super.initState();
-    _control = AnimationController(vsync: this, duration: Movimiento.corta);
+    // La duración real se recalcula en cada toque, según la distancia
+    // (`_duracionDelTramo`) — este valor inicial nunca se usa para animar.
+    _control = AnimationController(vsync: this, duration: const Duration(milliseconds: _duracionMinimaMs));
     // Sin esto, al llegar el caminante queda congelado en el último
     // fotograma de marcha para siempre: nada más fuerza una reconstrucción
     // de esta pantalla solo porque el controlador terminó de animar, y
@@ -161,8 +176,17 @@ class _PantallaExperimentoMundoState extends State<PantallaExperimentoMundo>
       _paradaActual = alcanzable ? indice : _paradaActual;
     });
     _control
+      ..duration = _duracionDelTramo(origen, fin)
       ..reset()
       ..forward();
+  }
+
+  /// A velocidad constante, no a duración fija: un tramo largo tarda más que
+  /// uno corto, o el personaje "teletransporta" en vez de caminar.
+  static Duration _duracionDelTramo(Offset origen, Offset destino) {
+    final double distancia = (destino - origen).distance;
+    final int ms = (distancia / _dpPorSegundo * 1000).round();
+    return Duration(milliseconds: ms.clamp(_duracionMinimaMs, _duracionMaximaMs));
   }
 }
 
