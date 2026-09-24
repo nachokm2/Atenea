@@ -62,9 +62,15 @@ class _CaminanteState extends State<Caminante> with SingleTickerProviderStateMix
   @override
   void initState() {
     super.initState();
+    // Rodrigo, en el teléfono: "no entiendo por qué se agacha" — a 1400ms el
+    // ciclo completo (700ms de pie, 700ms en la pose más baja) se leía como
+    // un agache mecánico y repentino, no como la respiración relajada que
+    // `fotogramaDeReposoPorFase`/`reposo_01` querían sugerir. Un ciclo mucho
+    // más largo (~14 respiraciones por minuto, un ritmo real en reposo) lo
+    // vuelve sutil sin tocar el arte.
     _reposo = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1400),
+      duration: const Duration(milliseconds: 4200),
     )..repeat();
   }
 

@@ -84,14 +84,16 @@ void main() {
       await tester.pump();
       final int primero = _pintorDe(tester).fotograma;
 
-      // A mitad del período del loop de reposo (1400ms), tiene que haber
-      // cambiado al otro de los dos fotogramas.
-      await tester.pump(const Duration(milliseconds: 700));
+      // A mitad del período del loop de reposo (4200ms — lento a propósito,
+      // para que se lea como respirar y no como un agache repentino: ver el
+      // comentario en `_CaminanteState.initState`), tiene que haber cambiado
+      // al otro de los dos fotogramas.
+      await tester.pump(const Duration(milliseconds: 2100));
       expect(_pintorDe(tester).fotograma, isNot(primero));
 
       // Y a la otra mitad —una vuelta completa desde el inicio—, vuelve al
-      // mismo: 700 + 700 = 1400, el período entero del loop.
-      await tester.pump(const Duration(milliseconds: 700));
+      // mismo: 2100 + 2100 = 4200, el período entero del loop.
+      await tester.pump(const Duration(milliseconds: 2100));
       expect(_pintorDe(tester).fotograma, primero);
     });
   });
